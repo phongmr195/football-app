@@ -1,0 +1,4 @@
+aws_region          = "ap-southeast-1"
+project             = "football-app"
+environment         = "dev"
+db_master_password  = "changeme-dung-secrets-manager-o-production"
