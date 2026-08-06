@@ -1,0 +1,812 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== User Module ====================
+
+model User {
+  id        String   @id @default(cuid())
+  cognitoSub String  @unique
+  email      String  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  profile              UserProfile?
+  favoriteTeams        FavoriteTeam[]
+  favoritePlayers      FavoritePlayer[]
+  notificationSetting  NotificationSetting?
+  devices              Device[]
+  notifications        Notification[]
+  chatHistories        ChatHistory[]
+  searchHistories      SearchHistory[]
+  aiUsageLogs          AiUsageLog[]
+  subscriptions        Subscription[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String?
+  avatarUrl   String?
+  locale      String  @default("vi")
+
+  @@map("user_profiles")
+}
+
+model FavoriteTeam {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@map("favorite_teams")
+}
+
+model FavoritePlayer {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, playerId])
+  @@map("favorite_players")
+}
+
+model NotificationSetting {
+  id                String  @id @default(cuid())
+  userId            String  @unique
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalAlerts        Boolean @default(true)
+  matchStartAlerts  Boolean @default(true)
+  newsAlerts        Boolean @default(false)
+
+  @@map("notification_settings")
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+}
+
+model Device {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fcmToken    String         @unique
+  platform    DevicePlatform
+  lastActiveAt DateTime      @default(now())
+  createdAt   DateTime       @default(now())
+
+  @@map("devices")
+}
+
+// ==================== Competition Module ====================
+
+enum CompetitionType {
+  LEAGUE
+  CUP
+  INTERNATIONAL
+}
+
+model Competition {
+  id          String          @id @default(cuid())
+  name        String
+  type        CompetitionType
+  countryCode String?
+  logoUrl     String?
+  externalRef Json?
+
+  seasons Season[]
+  matches Match[]
+
+  @@map("competitions")
+}
+
+model Season {
+  id            String   @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  name          String   // ví dụ "2025/2026"
+  startDate     DateTime
+  endDate       DateTime
+  isCurrent     Boolean  @default(false)
+
+  rounds             Round[]
+  stages             Stage[]
+  matches            Match[]
+  standings          Standing[]
+  teamStatistics     TeamStatistics[]
+  teamRankings       TeamRanking[]
+  playerStatistics   PlayerStatistics[]
+  topScorers         TopScorer[]
+  topAssists         TopAssist[]
+  cleanSheets        CleanSheet[]
+
+  @@unique([competitionId, name])
+  @@map("seasons")
+}
+
+model Round {
+  id          String   @id @default(cuid())
+  seasonId    String
+  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name        String
+  roundNumber Int?
+  startDate   DateTime?
+  endDate     DateTime?
+
+  matches Match[]
+
+  @@map("rounds")
+}
+
+model Stage {
+  id         String @id @default(cuid())
+  seasonId   String
+  season     Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name       String
+  stageOrder Int    @default(0)
+
+  matches Match[]
+
+  @@map("stages")
+}
+
+// ==================== Team Module ====================
+
+model Team {
+  id          String  @id @default(cuid())
+  name        String
+  shortName   String?
+  logoUrl     String?
+  countryCode String?
+  founded     Int?
+  stadiumId   String?
+  stadium     Stadium? @relation(fields: [stadiumId], references: [id])
+  externalRef Json?
+
+  logos            TeamLogo[]
+  coaches          Coach[]
+  homeMatches      Match[]          @relation("HomeTeam")
+  awayMatches      Match[]          @relation("AwayTeam")
+  favoritedBy      FavoriteTeam[]
+  statistics       TeamStatistics[]
+  rankings         TeamRanking[]
+  standings        Standing[]
+  players          Player[]
+  matchStatistics  MatchStatistic[]
+  matchEvents      MatchEvent[]
+  matchLineups     MatchLineup[]
+  formations       Formation[]
+  teamRatings      TeamRating[]
+  playerTransfersFrom PlayerTransfer[] @relation("TransferFromTeam")
+  playerTransfersTo   PlayerTransfer[] @relation("TransferToTeam")
+  playerCareers    PlayerCareer[]
+  playerContracts  PlayerContract[]
+  cleanSheets      CleanSheet[]
+
+  @@map("teams")
+}
+
+model TeamLogo {
+  id        String  @id @default(cuid())
+  teamId    String
+  team      Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  url       String
+  season    String?
+  isCurrent Boolean @default(false)
+
+  @@map("team_logos")
+}
+
+model Stadium {
+  id          String  @id @default(cuid())
+  name        String
+  city        String?
+  countryCode String?
+  capacity    Int?
+
+  teams Team[]
+
+  @@map("stadiums")
+}
+
+model Coach {
+  id          String    @id @default(cuid())
+  name        String
+  nationality String?
+  birthDate   DateTime?
+  teamId      String?
+  team        Team?     @relation(fields: [teamId], references: [id])
+
+  @@map("coaches")
+}
+
+model TeamStatistics {
+  id            String  @id @default(cuid())
+  teamId        String
+  team          Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  seasonId      String
+  season        Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  wins          Int     @default(0)
+  draws         Int     @default(0)
+  losses        Int     @default(0)
+  goalsFor      Int     @default(0)
+  goalsAgainst  Int     @default(0)
+  cleanSheets   Int     @default(0)
+  raw           Json?
+
+  @@unique([teamId, seasonId])
+  @@map("team_statistics")
+}
+
+model TeamRanking {
+  id          String @id @default(cuid())
+  teamId      String
+  team        Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  seasonId    String
+  season      Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  rankingType String // ví dụ "domestic", "world"
+  rank        Int
+  points      Float?
+
+  @@map("team_rankings")
+}
+
+// ==================== Player Module ====================
+
+model Player {
+  id          String    @id @default(cuid())
+  name        String
+  dateOfBirth DateTime?
+  nationality String?
+  position    String?
+  heightCm    Int?
+  teamId      String?
+  team        Team?     @relation(fields: [teamId], references: [id])
+  externalRef Json?
+
+  favoritedBy       FavoritePlayer[]
+  statistics        PlayerStatistics[]
+  awards            PlayerAward[]
+  transfers         PlayerTransfer[]
+  careers           PlayerCareer[]
+  injuries          PlayerInjury[]
+  contracts         PlayerContract[]
+  matchEvents       MatchEvent[]      @relation("EventPlayer")
+  relatedMatchEvents MatchEvent[]     @relation("EventRelatedPlayer")
+  matchLineups      MatchLineup[]
+  ratings           PlayerRating[]
+  aiSummaries       AiPlayerSummary[]
+  topScorerEntries  TopScorer[]
+  topAssistEntries  TopAssist[]
+
+  @@map("players")
+}
+
+model PlayerStatistics {
+  id             String  @id @default(cuid())
+  playerId       String
+  player         Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  seasonId       String
+  season         Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  appearances    Int     @default(0)
+  goals          Int     @default(0)
+  assists        Int     @default(0)
+  yellowCards    Int     @default(0)
+  redCards       Int     @default(0)
+  minutesPlayed  Int     @default(0)
+  raw            Json?
+
+  @@unique([playerId, seasonId])
+  @@map("player_statistics")
+}
+
+model PlayerAward {
+  id            String   @id @default(cuid())
+  playerId      String
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  title         String
+  season        String?
+  competitionId String?
+
+  @@map("player_awards")
+}
+
+enum TransferType {
+  PERMANENT
+  LOAN
+  FREE
+}
+
+model PlayerTransfer {
+  id           String       @id @default(cuid())
+  playerId     String
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  fromTeamId   String?
+  fromTeam     Team?        @relation("TransferFromTeam", fields: [fromTeamId], references: [id])
+  toTeamId     String?
+  toTeam       Team?        @relation("TransferToTeam", fields: [toTeamId], references: [id])
+  transferDate DateTime
+  fee          Float?
+  type         TransferType
+
+  @@map("player_transfers")
+}
+
+model PlayerCareer {
+  id           String    @id @default(cuid())
+  playerId     String
+  player       Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  startDate    DateTime
+  endDate      DateTime?
+  appearances  Int       @default(0)
+  goals        Int       @default(0)
+
+  @@map("player_careers")
+}
+
+enum InjuryStatus {
+  ACTIVE
+  RECOVERED
+}
+
+model PlayerInjury {
+  id             String       @id @default(cuid())
+  playerId       String
+  player         Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  type           String
+  startDate      DateTime
+  expectedReturn DateTime?
+  status         InjuryStatus @default(ACTIVE)
+
+  @@map("player_injuries")
+}
+
+model PlayerContract {
+  id        String    @id @default(cuid())
+  playerId  String
+  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  startDate DateTime
+  endDate   DateTime?
+  salary    Float?
+  currency  String?
+
+  @@map("player_contracts")
+}
+
+// ==================== Referee ====================
+
+model Referee {
+  id          String  @id @default(cuid())
+  name        String
+  nationality String?
+  externalRef Json?
+
+  matches Match[]
+
+  @@map("referees")
+}
+
+// ==================== Match Module ====================
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  HALFTIME
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+model Match {
+  id            String      @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  seasonId      String
+  season        Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  roundId       String?
+  round         Round?      @relation(fields: [roundId], references: [id])
+  stageId       String?
+  stage         Stage?      @relation(fields: [stageId], references: [id])
+
+  homeTeamId String
+  homeTeam   Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId String
+  awayTeam   Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
+
+  stadiumId String?
+  refereeId String?
+  referee   Referee? @relation(fields: [refereeId], references: [id])
+
+  kickoffAt   DateTime
+  status      MatchStatus @default(SCHEDULED)
+  homeScore   Int?
+  awayScore   Int?
+  externalRef Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  liveState     LiveMatchState?
+  statistics    MatchStatistic[]
+  events        MatchEvent[]
+  lineups       MatchLineup[]
+  formations    Formation[]
+  playerRatings PlayerRating[]
+  teamRatings   TeamRating[]
+  commentaries  Commentary[]
+  aiSummary     AiMatchSummary?
+
+  @@index([status, kickoffAt])
+  @@map("matches")
+}
+
+// Denormalized, đọc nhanh cho REST live snapshot + nguồn cache Redis.
+// Xem docs/architecture/data-provider-and-realtime-plan.md § 3.1
+model LiveMatchState {
+  matchId      String      @id
+  match        Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  status       MatchStatus
+  minute       Int?
+  homeScore    Int         @default(0)
+  awayScore    Int         @default(0)
+  lastEventSeq Int         @default(0)
+  updatedAt    DateTime    @updatedAt
+
+  @@map("live_match_state")
+}
+
+model MatchStatistic {
+  id     String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId  String
+  team    Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  shotsOnGoal  Int?
+  shotsOffGoal Int?
+  possession   Float?
+  corners      Int?
+  fouls        Int?
+  offsides     Int?
+  raw          Json?
+
+  @@unique([matchId, teamId])
+  @@map("match_statistics")
+}
+
+enum MatchEventType {
+  GOAL
+  OWN_GOAL
+  PENALTY
+  YELLOW_CARD
+  RED_CARD
+  SUBSTITUTION
+  VAR
+}
+
+// seq tăng dần theo matchId — dùng để dedup & catch-up khi client reconnect WebSocket
+model MatchEvent {
+  id       String         @id @default(cuid())
+  matchId  String
+  match    Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  seq      Int
+  minute   Int
+  type     MatchEventType
+  teamId   String?
+  team     Team?          @relation(fields: [teamId], references: [id])
+  playerId String?
+  player   Player?        @relation("EventPlayer", fields: [playerId], references: [id])
+
+  relatedPlayerId String? // vd: người kiến tạo, hoặc cầu thủ vào sân khi thay người
+  relatedPlayer   Player? @relation("EventRelatedPlayer", fields: [relatedPlayerId], references: [id])
+
+  detail Json?
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, seq])
+  @@map("match_events")
+}
+
+model MatchLineup {
+  id          String  @id @default(cuid())
+  matchId     String
+  match       Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId      String
+  team        Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  position    String?
+  shirtNumber Int?
+  isStarting  Boolean @default(true)
+
+  @@unique([matchId, playerId])
+  @@map("match_lineups")
+}
+
+model Formation {
+  id        String @id @default(cuid())
+  matchId   String
+  match     Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  formation String // ví dụ "4-3-3"
+  positions Json?
+
+  @@unique([matchId, teamId])
+  @@map("formations")
+}
+
+model PlayerRating {
+  id       String @id @default(cuid())
+  matchId  String
+  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  rating   Float
+
+  @@unique([matchId, playerId])
+  @@map("player_ratings")
+}
+
+model TeamRating {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId  String
+  team    Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  rating  Float
+
+  @@unique([matchId, teamId])
+  @@map("team_ratings")
+}
+
+model Commentary {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  minute  Int
+  seq     Int
+  text    String
+
+  @@unique([matchId, seq])
+  @@map("commentaries")
+}
+
+// ==================== Standing Module ====================
+
+model Standing {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  position Int
+  played   Int   @default(0)
+  win      Int   @default(0)
+  draw     Int   @default(0)
+  loss     Int   @default(0)
+  gf       Int   @default(0)
+  ga       Int   @default(0)
+  gd       Int   @default(0)
+  points   Int   @default(0)
+  form     Json?
+
+  @@unique([seasonId, teamId])
+  @@map("standings")
+}
+
+model TopScorer {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  goals    Int
+  rank     Int
+
+  @@unique([seasonId, playerId])
+  @@map("top_scorers")
+}
+
+model TopAssist {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  assists  Int
+  rank     Int
+
+  @@unique([seasonId, playerId])
+  @@map("top_assists")
+}
+
+model CleanSheet {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  count    Int
+  rank     Int
+
+  @@unique([seasonId, teamId])
+  @@map("clean_sheets")
+}
+
+// ==================== AI Module ====================
+// Embedding/vector column sẽ thêm ở Phase 4 khi wiring pgvector thật
+// (xem docs/architecture/PROJECT_PLAN.md § 7.1)
+
+model AiMatchSummary {
+  id        String   @id @default(cuid())
+  matchId   String   @unique
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  content   String
+  model     String
+  createdAt DateTime @default(now())
+
+  @@map("ai_match_summary")
+}
+
+model AiPlayerSummary {
+  id        String   @id @default(cuid())
+  playerId  String
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  content   String
+  model     String
+  createdAt DateTime @default(now())
+
+  @@map("ai_player_summary")
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model ChatHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  role      ChatRole
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, sessionId])
+  @@map("chat_history")
+}
+
+model PromptTemplate {
+  id       String @id @default(cuid())
+  key      String @unique
+  template String
+  version  Int    @default(1)
+
+  @@map("prompt_templates")
+}
+
+model Embedding {
+  id         String   @id @default(cuid())
+  sourceType String   // ví dụ "match_summary", "commentary"
+  sourceId   String
+  content    String
+  model      String
+  createdAt  DateTime @default(now())
+
+  @@index([sourceType, sourceId])
+  @@map("embeddings")
+}
+
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature      String   // ví dụ "chat", "match_summary", "player_compare"
+  tokensInput  Int      @default(0)
+  tokensOutput Int      @default(0)
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("ai_usage_logs")
+}
+
+// ==================== Notification Module ====================
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  logs NotificationLog[]
+
+  @@map("notifications")
+}
+
+enum NotificationChannel {
+  FCM
+  EMAIL
+}
+
+enum NotificationLogStatus {
+  SENT
+  FAILED
+}
+
+model NotificationLog {
+  id             String                 @id @default(cuid())
+  notificationId String
+  notification   Notification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  channel        NotificationChannel
+  status         NotificationLogStatus
+  error          String?
+  sentAt         DateTime               @default(now())
+
+  @@map("notification_logs")
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     String   // ví dụ "team:123", "match:456"
+  createdAt DateTime @default(now())
+
+  @@unique([userId, topic])
+  @@map("subscriptions")
+}
+
+// ==================== Search ====================
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query     String
+  createdAt DateTime @default(now())
+
+  @@map("search_history")
+}
+
+// ==================== Platform / Ops Module ====================
+
+model AppConfig {
+  key         String   @id
+  value       Json
+  description String?
+  isEnabled   Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+
+  @@map("app_config")
+}
