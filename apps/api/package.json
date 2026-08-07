@@ -15,7 +15,7 @@
     "@football-app/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@hono/zod-validator": "^0.4.0",
-    "aws-jwt-verify": "^4.0.1",
+    "firebase-admin": "^13.0.0",
     "hono": "^4.6.0",
     "zod": "^3.24.0"
   },

@@ -1,9 +1,11 @@
 ---
 name: add-mobile-feature
-description: Scaffold a new Flutter feature folder trong apps/mobile/lib/features/ (Riverpod provider gọi API qua Dio + screen) theo đúng convention của football-app, và wire route vào GoRouter. Dùng khi cần thêm màn hình/feature mới cho mobile app.
+description: Scaffold a new Flutter feature folder trong apps/mobile/lib/features/ (Riverpod provider gọi API qua Dio + screen) theo đúng convention của football-app, và wire route vào GoRouter. NOTE — apps/mobile đang tạm pause (pivot Web 2026-08-07); chỉ dùng skill này khi user yêu cầu rõ ràng làm mobile, mặc định feature mới nên dùng add-web-page.
 ---
 
 # Add Mobile Feature
+
+> **apps/mobile tạm pause** (xem CLAUDE.md/ROADMAP.md) — chỉ chạy skill này khi user yêu cầu rõ ràng resume/sửa mobile.
 
 Scaffold 1 feature mới cho `apps/mobile`, theo mẫu `lib/features/health/` — provider tách riêng khỏi UI, gọi API qua `dioProvider` chung.
 

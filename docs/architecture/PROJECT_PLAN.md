@@ -1,12 +1,20 @@
-# Football Mobile App — Master Plan (Tổng thể)
+# Football App — Master Plan (Tổng thể)
 
-Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + các sửa đổi đã thống nhất (data provider, real-time). Đây là tài liệu tham chiếu chính; chi tiết real-time xem thêm [data-provider-and-realtime-plan.md](./data-provider-and-realtime-plan.md).
+Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + các sửa đổi đã thống nhất (data provider, real-time, pivot Web). Đây là tài liệu tham chiếu chính.
 
 ---
 
 ## 1. Vision & Scope
 
-**Sản phẩm:** App mobile theo dõi bóng đá thời gian thực, thống kê chuyên sâu, có AI hỗ trợ phân tích — định vị giữa Sofascore/FotMob/OneFootball, khác biệt bằng AI.
+**Sản phẩm:** App theo dõi bóng đá thời gian thực, thống kê chuyên sâu, có AI hỗ trợ phân tích — định vị giữa Sofascore/FotMob/OneFootball, khác biệt bằng AI.
+
+### Pivot: Web trước, Mobile tạm pause (2026-08-07)
+
+**Chốt:** chuyển client chính sang **Web (Next.js)**, tạm pause phát triển `apps/mobile` (Flutter). Backend/data/AI không đổi — mọi client (web, mobile sau này) dùng chung 1 API.
+
+- `apps/mobile` đã hoàn thành xong phần lớn Phase 0 (Flutter skeleton, Riverpod, GoRouter, Dio, Firebase Auth với Google + Phone provider đã enable và verify chạy được trên iOS Simulator) — **giữ nguyên code, không xoá**, resume sau khi web ổn định. Xem trạng thái chi tiết ở [ROADMAP.md § Mobile — tạm pause](./ROADMAP.md#mobile--tạm-pause-trạng-thái-t%E1%BA%A1i-th%E1%BB%9Di-%C4%91i%E1%BB%83m-pause).
+- Từ Phase 1 trở đi, phần UI trong roadmap ghi **Web** thay vì **Mobile** — đây là track chủ lực hiện tại.
+- `packages/ui` (design system) chuyển từ "dùng nếu admin cần" (plan gốc) sang **dùng thật ngay từ đầu** cho `apps/web`.
 
 **Phạm vi MVP (giới hạn để kiểm soát chi phí data provider):**
 - Chỉ cover **top ~10-15 giải đấu** phổ biến (Premier League, La Liga, Serie A, Bundesliga, Ligue 1, Champions League, V-League, World Cup/Euro khi diễn ra...) — KHÔNG cố cover toàn bộ giải như Sofascore ngay từ đầu
@@ -22,7 +30,18 @@ Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + c
 
 ## 2. Tech Stack (final)
 
-### Mobile
+### Web (client chính hiện tại)
+| Component | Technology |
+|---|---|
+| Framework | Next.js (React) |
+| Rendering | SSR/ISR cho trang public (SEO — điểm khác biệt so với Flutter Web) |
+| Styling | Tailwind (hoặc tương đương — chốt khi scaffold) |
+| Networking | `fetch`/API client gọi trực tiếp `apps/api` (Hono) |
+| Real-time | WebSocket API của browser (kết nối API Gateway WebSocket) |
+| Authentication | **Firebase Authentication** (Google, Facebook, Phone number) — dùng Firebase JS SDK |
+| Design system | `packages/ui` (dùng chung với `apps/admin` sau này nếu có) |
+
+### Mobile — tạm pause (2026-08-07, xem § 1 Pivot)
 | Component | Technology |
 |---|---|
 | Framework | Flutter |
@@ -31,7 +50,7 @@ Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + c
 | Local Database | Hive |
 | Networking | Dio |
 | Real-time | `web_socket_channel` (kết nối WebSocket API Gateway) |
-| Authentication | AWS Cognito |
+| Authentication | **Firebase Authentication** (Google, Facebook, Phone number) — đã setup + verify xong trước khi pause |
 | Push Notification | Firebase Cloud Messaging |
 | Crash Analytics | Firebase Crashlytics |
 
@@ -43,7 +62,7 @@ Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + c
 | Language | TypeScript |
 | Validation | Zod |
 | ORM | Prisma |
-| Authentication | Cognito JWT (verify trực tiếp, không thêm lớp JWT riêng trừ khi có nhu cầu cụ thể cho guest/anonymous access) |
+| Authentication | **Firebase Admin SDK** (`verifyIdToken`), verify trực tiếp token từ Firebase Auth — không thêm lớp JWT riêng trừ khi có nhu cầu cụ thể cho guest/anonymous access |
 | Scheduler (định kỳ, không real-time) | EventBridge + Lambda |
 | Scheduler (real-time, adaptive) | EventBridge Scheduler (one-off) + Step Functions |
 | API | REST (WebSocket riêng cho live; GraphQL không đưa vào roadmap gần) |
@@ -73,14 +92,32 @@ Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + c
 | Isolation | Adapter pattern — `packages/data-provider` với canonical model nội bộ |
 | Upgrade path | Sportradar / StatsPerform (Opta) khi có doanh thu, không đổi schema/API |
 
-Chi tiết lý do & thiết kế: [data-provider-and-realtime-plan.md § 1](./data-provider-and-realtime-plan.md#1-data-provider--quyết-định)
+### Authentication — quyết định đổi từ Cognito sang Firebase Auth (2026-08-06)
+
+**Chốt: Firebase Authentication**, thay AWS Cognito như plan gốc. Lý do:
+- Scope auth thực tế chỉ cần **Google / Facebook / Phone number** — Firebase Auth hỗ trợ cả 3 built-in, không cần cấu hình federated identity provider phức tạp như Cognito.
+- Dự án đang **chỉ dev/test local, chưa deploy AWS** — Cognito không có emulator local đáng tin cậy, phải có AWS thật mới test được. Firebase có **Auth Emulator** (`firebase emulators:start`) test được đăng nhập hoàn toàn ở local, không cần project thật lúc đầu.
+- Firebase đã có trong stack sẵn cho FCM (push) và Crashlytics — dùng luôn Firebase Auth không phát sinh thêm vendor mới.
+- Đánh đổi: mất khả năng dùng chung 1 hệ IAM với các AWS service khác (Aurora, S3...) qua Cognito — nhưng ở scope hiện tại (chỉ cần login), điều này không quan trọng.
+
+**Đã xong** (project `jankara-e2e-test`, dùng chung với vài project khác của chủ repo — không phải project riêng cho football-app):
+1. Tạo/chọn Firebase project qua `firebase login` + `firebase projects:list`
+2. Bật Google + Phone provider trong Firebase Console → Authentication → Sign-in method
+3. `flutterfire configure` trong `apps/mobile` → sinh `firebase_options.dart` + `google-services.json`/`GoogleService-Info.plist` + thêm `GIDClientID`/URL scheme vào `Info.plist` (bước riêng, `flutterfire configure` không tự làm)
+4. Verify: đăng nhập Google chạy thật trên iOS Simulator
+
+**Còn cần làm cho Web** (client chính hiện tại):
+1. Đăng ký Web app trong Firebase Console (project `jankara-e2e-test`) → lấy Firebase JS SDK config
+2. Thêm Firebase JS SDK vào `apps/web`, khởi tạo tương tự `Firebase.initializeApp()` bên mobile
+3. Backend không đổi gì thêm: `apps/api` verify token qua `firebase-admin` — dùng chung cho cả web và mobile, không phân biệt client
+4. Facebook provider: chưa bật (cần thêm App ID/Secret từ [developers.facebook.com](https://developers.facebook.com)) — thêm khi có nhu cầu thật
 
 ---
 
 ## 3. System Architecture (tổng hợp)
 
 ```
-                        Flutter App
+                    Web App (Next.js) — client chính
                      │              │
                 (REST)              (WebSocket)
                      ▼              ▼
@@ -166,8 +203,6 @@ Giữ nguyên các module gốc: `/auth`, `/users`, `/teams`, `/players`, `/matc
 - `GET /matches/{id}/events?since_seq=N` — catch-up events
 - `WS wss://api.<domain>/live` — subscribe/unsubscribe theo matchId, nhận push `match.snapshot` / `match.event` / `match.status_change`
 
-Chi tiết protocol: [data-provider-and-realtime-plan.md § 4](./data-provider-and-realtime-plan.md#4-thay-đổi-api)
-
 ---
 
 ## 6. Monorepo Structure (đã cập nhật)
@@ -176,7 +211,8 @@ Chi tiết protocol: [data-provider-and-realtime-plan.md § 4](./data-provider-a
 football-app/
 │
 ├── apps/
-│   ├── mobile/          # Flutter (quản lý bằng Melos nếu tách nhiều package sau)
+│   ├── web/              # (mới) Next.js — client chính, xem § 1 Pivot
+│   ├── mobile/          # Flutter — TẠM PAUSE (2026-08-07), giữ code, resume sau
 │   ├── api/              # Hono API
 │   ├── admin/            # Web quản trị — xem mục 8, đẩy sớm hơn dự kiến ban đầu
 │   └── sync-worker/      # Ingestion: data-provider adapter + Step Functions handlers
@@ -184,10 +220,10 @@ football-app/
 ├── packages/
 │   ├── database/         # Prisma schema + migrations
 │   ├── shared/            # Types/constants dùng chung TS
-│   ├── sdk/                # Client SDK gọi API (dùng bởi admin/mobile-codegen nếu cần)
-│   ├── ui/                 # Design system components (nếu admin dùng React)
-│   ├── data-provider/    # (mới) Adapter pattern — canonical model + adapter API-Football
-│   └── config/             # (mới) eslint/tsconfig/prettier chung cho toàn bộ TS packages
+│   ├── sdk/                # Client SDK gọi API (dùng bởi web/admin nếu cần)
+│   ├── ui/                 # Design system components — dùng thật cho apps/web từ đầu
+│   ├── data-provider/    # Adapter pattern — canonical model + adapter API-Football
+│   └── config/             # eslint/tsconfig/prettier chung cho toàn bộ TS packages
 │
 ├── infrastructure/
 │   ├── terraform/
@@ -199,8 +235,8 @@ football-app/
 ```
 
 **Tooling điều phối build:**
-- **Turborepo** cho `apps/api`, `apps/admin`, `apps/sync-worker`, `packages/*` (TS ecosystem)
-- **Melos** riêng cho Flutter nếu `apps/mobile` tách thành nhiều package (không bắt buộc ở MVP, 1 package Flutter là đủ)
+- **Turborepo** cho `apps/web`, `apps/api`, `apps/admin`, `apps/sync-worker`, `packages/*` (TS ecosystem)
+- **Melos** riêng cho Flutter nếu `apps/mobile` tách thành nhiều package — không ưu tiên trong lúc pause
 
 ---
 
@@ -215,22 +251,23 @@ Không dựng toàn bộ Aurora + Redis + OpenSearch + Bedrock cùng lúc từ �
 
 ### 7.2. Observability
 - CloudWatch Logs/Metrics cho toàn bộ Lambda + API
-- Sentry (hoặc CloudWatch + X-Ray) cho error tracking backend
-- Firebase Crashlytics cho mobile (đã có trong stack gốc)
+- Sentry (hoặc CloudWatch + X-Ray) cho error tracking backend + web
+- Firebase Crashlytics cho mobile — giữ khi resume, không cần cho web (Sentry đủ)
 - Dashboard riêng cho chi phí Bedrock/API-Football theo ngày (tránh bị "đốt tiền" âm thầm)
 
 ### 7.3. Security
 - WAF trên API Gateway (rate limiting theo IP, chống scrape ngược)
-- Cognito cho auth, không tự chế session token trừ khi có ca cụ thể
+- Firebase Auth cho auth (Google/Facebook/Phone), không tự chế session token trừ khi có ca cụ thể
 - Secrets qua AWS Secrets Manager, không hardcode API key provider
 
 ### 7.4. Testing
 - Backend: unit test cho business logic (Vitest/Jest), integration test cho API routes (test DB riêng)
-- Mobile: `integration_test` package cho golden path (xem live match, favorite team, chat AI)
+- Web: Vitest/React Testing Library cho component, Playwright cho golden path E2E (xem live match, favorite team, chat AI)
+- Mobile (khi resume): `integration_test` package cho golden path tương tự
 - CI chạy test + lint trên mọi PR (`infrastructure/github-actions`)
 
 ### 7.5. i18n
-- MVP: tiếng Việt + English, dùng key-based translation (Flutter: `easy_localization` hoặc tương đương)
+- MVP: tiếng Việt + English, dùng key-based translation (Next.js: `next-intl` hoặc tương đương; Flutter khi resume: `easy_localization`)
 - Chưa cần bảng `translations` trong DB ở MVP — dùng file JSON tĩnh; chỉ đưa vào DB nếu cần quản trị nội dung động sau này
 
 ---
@@ -241,7 +278,7 @@ Plan gốc để admin là "tùy chọn". Thực tế nên có **admin tool tố
 - Dữ liệu từ API-Football có thể sai/thiếu (tên cầu thủ, logo...) — cần cách sửa tay nhanh, không phải sửa trực tiếp DB
 - Cần nơi quản lý `feature_flags`/`app_config` mà không phải chạy SQL tay
 
-Có thể bắt đầu bằng 1 CLI script hoặc trang admin cực đơn giản (list + edit form), nâng cấp thành app đầy đủ ở phase sau nếu cần.
+Có thể bắt đầu bằng 1 CLI script hoặc trang admin cực đơn giản (list + edit form), nâng cấp thành app đầy đủ ở phase sau nếu cần. Từ khi có `apps/web`, `apps/admin` có thể dùng chung `packages/ui` để đỡ công design system riêng.
 
 ---
 
