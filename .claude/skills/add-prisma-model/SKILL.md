@@ -15,7 +15,7 @@ Thêm model mới hoặc sửa model có sẵn trong `packages/database/prisma/s
 - Relation 1-n: FK field tên `<entity>Id String` + relation field cùng tên entity, có `onDelete: Cascade` khi con phụ thuộc hoàn toàn vào cha (ví dụ MatchEvent phụ thuộc Match).
 - Bảng cần unique composite (ví dụ 1 user chỉ favorite 1 team 1 lần): `@@unique([fieldA, fieldB])`.
 - Field JSON tự do cho dữ liệu chưa chuẩn hoá / dữ liệu thô từ provider: đặt tên `raw Json?`, không lẫn với các field đã typed.
-- KHÔNG thêm bảng cho state ephemeral thay đổi liên tục (ví dụ connection tracking cho WebSocket) — loại đó dùng DynamoDB, xem `docs/architecture/data-provider-and-realtime-plan.md` § 2.4, không phải Prisma/Aurora.
+- KHÔNG thêm bảng cho state ephemeral thay đổi liên tục (ví dụ connection tracking cho WebSocket) — loại đó dùng DynamoDB (`ws_connections`), không phải Prisma/Aurora, xem `docs/architecture/PROJECT_PLAN.md` § 4 (Platform/Ops Module).
 
 ## Bước thực hiện
 
