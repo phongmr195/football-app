@@ -27,7 +27,32 @@ pnpm db:generate
 pnpm dev
 ```
 
-Kiểm tra nhanh: `curl http://localhost:3000/health`.
+Kiểm tra nhanh: `curl http://localhost:3000/health`. Cần Postgres/Redis thật — dùng Docker (xem dưới) hoặc cài local, miễn khớp `DATABASE_URL` trong `.env`.
+
+## Docker
+
+Stack đầy đủ cho local dev: data (Postgres + Redis), log (Dozzle), test (Postgres riêng + test runner), deploy (Dockerfile production cho `apps/api`/`apps/sync-worker`).
+
+```bash
+pnpm docker:up       # postgres + redis + dozzle + api (build từ apps/api/Dockerfile)
+pnpm db:migrate      # chạy migration vào postgres trong docker (từ máy host, DATABASE_URL trỏ localhost:5432)
+pnpm docker:logs     # mở Dozzle (http://localhost:8080) — xem log tất cả container
+pnpm docker:worker   # chạy sync-worker 1 lượt rồi exit (profile "worker", không tự chạy cùng docker:up)
+pnpm docker:down     # dừng + xoá container (giữ volume data)
+```
+
+Chạy test suite cô lập (Postgres riêng, ephemeral, không đụng data dev):
+
+```bash
+pnpm docker:test
+```
+
+Build image production thật (dùng khi deploy lên ECR/ECS — chưa wire vào CI, xem ROADMAP):
+
+```bash
+docker build -f apps/api/Dockerfile -t football-app-api .
+docker build -f apps/sync-worker/Dockerfile -t football-app-sync-worker .
+```
 
 ## apps/web
 

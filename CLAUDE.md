@@ -14,6 +14,7 @@ Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architectu
 - **AI**: Amazon Bedrock (Claude, Titan embedding) — chưa implement, xem ROADMAP Phase 4
 - **Data provider**: API-Football qua adapter pattern (`packages/data-provider`)
 - **Infra**: Terraform (`infrastructure/terraform`, chưa apply), Turborepo + pnpm workspaces
+- **Docker**: `docker-compose.yml` (data: Postgres+Redis, log: Dozzle, app: api+sync-worker) cho local dev; `docker-compose.test.yml` cho test cô lập; `apps/api/Dockerfile` + `apps/sync-worker/Dockerfile` multi-stage production-ready (dùng `pnpm deploy`)
 
 ## Cấu trúc monorepo
 
@@ -48,6 +49,14 @@ flutter analyze && flutter test
 flutter run -d "iPhone 17"    # cần ANDROID_HOME/JAVA_HOME nếu build Android, xem "Mobile toolchain" dưới
 ```
 
+```bash
+# Docker (data/log/test/deploy) — xem "### Docker" dưới để biết convention
+pnpm docker:up      # postgres + redis + dozzle + api
+pnpm docker:worker  # sync-worker 1 lượt (profile "worker", không tự chạy cùng docker:up)
+pnpm docker:test    # test suite trong container, Postgres riêng ephemeral
+pnpm docker:down
+```
+
 ## Quy ước bắt buộc theo (đọc kỹ trước khi thêm code mới)
 
 ### Backend (`apps/api`)
@@ -66,6 +75,13 @@ flutter run -d "iPhone 17"    # cần ANDROID_HOME/JAVA_HOME nếu build Android
 ### Data provider (`packages/data-provider`)
 - KHÔNG để downstream code (sync-worker, api) biết hình dạng JSON thật của provider — luôn map qua canonical model trong `src/types.ts` trước.
 - Provider mới → thêm adapter trong `src/adapters/`, implement `DataProviderAdapter` interface, KHÔNG sửa canonical model để khớp provider mới (ngược lại).
+
+### Docker
+- `docker-compose.yml` (root) = data/log/app cho local dev: `postgres`, `redis`, `dozzle` (log viewer, http://localhost:8080), `api`, `sync-worker` (profile `worker`, không tự chạy).
+- `docker-compose.test.yml` = test cô lập: `postgres-test` riêng (tmpfs, ephemeral) + `test-runner` build từ `Dockerfile.test` (KHÔNG dùng `apps/*/Dockerfile` cho test vì file đó đã prune xuống 1 app + prod deps qua `pnpm deploy`, không đủ để chạy toàn bộ test suite monorepo).
+- `apps/api/Dockerfile`, `apps/sync-worker/Dockerfile` = production image, dùng `pnpm --filter=<pkg> --prod deploy /deploy/<name>` để tách app + deps thật ra khỏi monorepo (không symlink) — đây là pattern chuẩn của pnpm cho Docker, không copy nguyên `node_modules` của workspace.
+- Thêm app/package mới cần Dockerfile riêng → copy đúng pattern 2 file trên (base alpine + libc6-compat/openssl cho Prisma, build stage chạy `db:generate` + `turbo run build --filter=<pkg>...` + `pnpm deploy`, runtime stage chỉ copy `/deploy/<name>`).
+- Postgres trong Docker dùng đúng port/user/pass khớp `packages/database/.env.example` (`postgres:postgres@localhost:5432/football_app`) — sửa 1 chỗ phải sửa chỗ kia theo, đừng để lệch.
 
 ### Web (`apps/web`) — client chính, chưa scaffold
 - Khi scaffold: Next.js + `packages/ui`, gọi `apps/api` trực tiếp (REST), Firebase JS SDK cho auth (đăng ký Web app riêng trong Firebase project `jankara-e2e-test` trước).
