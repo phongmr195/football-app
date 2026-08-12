@@ -102,6 +102,7 @@ pnpm docker:down
 - Backend verify token qua `requireAuth` middleware (`apps/api/src/middleware/auth.ts`) dùng `firebase-admin` — set `FIREBASE_AUTH_EMULATOR_HOST` khi test local (không cần project thật), set `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` khi có project thật. Dùng chung cho web + mobile.
 - Facebook login: chưa thêm (cần tạo Facebook App trước tại developers.facebook.com), thêm khi có nhu cầu thật.
 - `firebase-tools` CLI (đã cài global) dùng cho `flutterfire configure`/`firebase emulators:start`/`firebase login`.
+- `google-services.json`, `GoogleService-Info.plist`, `lib/firebase_options.dart` **đã gitignore** (2026-08-07, sau khi bị secret scanner flag do repo public) — không phải secret nhạy cảm kiểu AWS key (Firebase client API key an toàn để public theo thiết kế của Google), nhưng project `jankara-e2e-test` dùng chung với app khác nên không commit. Máy mới clone repo phải tự chạy `flutterfire configure -p jankara-e2e-test --platforms=ios,android -y` trong `apps/mobile` để sinh lại 3 file này trước khi build.
 
 ## Mobile toolchain (máy dev hiện tại — cần khi resume mobile)
 

@@ -64,6 +64,7 @@ Chưa scaffold — client chính hiện tại, xem [ROADMAP.md Phase 1](docs/arc
 
 ```bash
 cd apps/mobile
+flutterfire configure -p jankara-e2e-test --platforms=ios,android -y  # sinh google-services.json/GoogleService-Info.plist/firebase_options.dart (gitignored, xem CLAUDE.md § Authentication)
 flutter pub get
 flutter analyze && flutter test
 flutter run -d "iPhone 17"   # hoặc thiết bị/simulator khác đang có
