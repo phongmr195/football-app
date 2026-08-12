@@ -7,7 +7,7 @@ WORKDIR /repo
 # ---- build: install full workspace, generate prisma client, compile ----
 FROM base AS build
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm --filter @football-app/database db:generate
 RUN pnpm turbo run build --filter=@football-app/sync-worker...
 RUN pnpm --filter=@football-app/sync-worker --prod deploy --legacy /deploy/sync-worker

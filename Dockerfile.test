@@ -6,6 +6,6 @@ RUN apk add --no-cache libc6-compat openssl
 RUN corepack enable
 WORKDIR /repo
 COPY . .
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm --filter @football-app/database db:generate
 CMD ["pnpm", "test"]
