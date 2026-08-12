@@ -27,7 +27,38 @@ pnpm db:generate
 pnpm dev
 ```
 
-Kiểm tra nhanh: `curl http://localhost:3000/health`.
+Kiểm tra nhanh: `curl http://localhost:3000/health`. Cần Postgres/Redis thật — dùng Docker (xem dưới) hoặc cài local, miễn khớp `DATABASE_URL` trong `.env`.
+
+## Docker
+
+Stack đầy đủ cho local dev: data (Postgres + Redis), log (Dozzle), auth (Firebase Auth Emulator), test (Postgres riêng + test runner), deploy (Dockerfile production cho `apps/api`/`apps/sync-worker`).
+
+```bash
+cp .env.example .env   # optional — chỉ cần khi muốn set API_FOOTBALL_KEY hoặc verify Firebase project thật
+pnpm docker:up       # postgres + redis + dozzle + firebase-emulator + api
+pnpm db:migrate      # chạy migration vào postgres trong docker (từ máy host, DATABASE_URL trỏ localhost:5432)
+pnpm docker:logs     # mở Dozzle (http://localhost:8080) — xem log tất cả container
+pnpm docker:auth-ui  # mở Firebase Emulator UI (http://localhost:4000) — xem/tạo test user
+pnpm docker:worker   # chạy sync-worker 1 lượt rồi exit (profile "worker", không tự chạy cùng docker:up)
+pnpm docker:down     # dừng + xoá container (giữ volume data)
+```
+
+`api` khi chạy qua Docker tự dùng Firebase Auth Emulator (project giả `demo-football-app`) để verify token — không cần Firebase project thật để test đăng nhập local.
+
+**Lưu ý:** nếu máy có Postgres native khác (ví dụ Postgres.app) đang chạy, nó có thể chiếm port 5432 và khiến lệnh chạy từ host (như `pnpm db:migrate`) vào nhầm DB đó thay vì Docker — tắt Postgres native nếu không dùng, hoặc `lsof -i :5432` kiểm tra trước khi debug.
+
+Chạy test suite cô lập (Postgres riêng, ephemeral, không đụng data dev):
+
+```bash
+pnpm docker:test
+```
+
+Build image production thật (dùng khi deploy lên ECR/ECS — chưa wire vào CI, xem ROADMAP):
+
+```bash
+docker build -f apps/api/Dockerfile -t football-app-api .
+docker build -f apps/sync-worker/Dockerfile -t football-app-sync-worker .
+```
 
 ## apps/web
 

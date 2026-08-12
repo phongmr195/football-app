@@ -14,7 +14,8 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 
 **Deliverables:**
 - [x] Monorepo setup: Turborepo config, `packages/config` (eslint/tsconfig chung)
-- [x] `packages/database`: Prisma schema baseline (toàn bộ bảng ở [PROJECT_PLAN.md § 4](./PROJECT_PLAN.md#4-database-design-theo-module-đã-cập-nhật)) — **chưa** có migration đầu tiên (chưa có Postgres thật để migrate vào, mới `db:generate`)
+- [x] `packages/database`: Prisma schema baseline (toàn bộ bảng ở [PROJECT_PLAN.md § 4](./PROJECT_PLAN.md#4-database-design-theo-module-đã-cập-nhật)) — **migration đầu tiên đã tạo + apply thật** (`20260807032808_init`) vào Postgres chạy qua Docker (2026-08-07)
+- [x] **(mới)** Docker: `docker-compose.yml` (data: Postgres+Redis, log: Dozzle, api, sync-worker) + `docker-compose.test.yml` (test cô lập) + Dockerfile production cho `apps/api`/`apps/sync-worker` — verify thật: build image, migration chạy vào container, health-check qua container, test suite pass trong container, sync-worker chạy đúng tới bước gọi API-Football (thiếu key thật)
 - [x] `apps/api`: Hono skeleton, health-check endpoint, Firebase Admin auth middleware (code xong, verify health-check thật; middleware chưa test với Firebase project thật)
 - [x] `apps/mobile` (tạm pause sau bước này): Flutter skeleton, GoRouter, Riverpod, Dio, Firebase Auth (Google+Phone) — verify thật trên iOS Simulator + Android build. Xem chi tiết ở mục Mobile pause cuối file.
 - [x] Firebase project (`jankara-e2e-test`, dùng chung với project khác): tạo/login, bật Google+Phone provider, `flutterfire configure` cho mobile — **Web app chưa đăng ký trong Firebase project** (cần làm ở Phase 1 Web)
