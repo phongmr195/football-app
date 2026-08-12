@@ -18,11 +18,17 @@
     "docker:down": "docker compose down",
     "docker:logs": "open http://localhost:8080",
     "docker:worker": "docker compose --profile worker run --rm sync-worker",
-    "docker:test": "docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test-runner; docker compose -f docker-compose.test.yml down -v"
+    "docker:test": "docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test-runner; docker compose -f docker-compose.test.yml down -v",
+    "secretlint": "secretlint --secretlintignore .gitignore \"**/*\"",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
+    "@secretlint/secretlint-rule-preset-recommend": "^13.0.4",
     "eslint": "^9.17.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "secretlint": "^13.0.4",
     "turbo": "^2.3.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.19.0"

@@ -10,6 +10,7 @@ Bạn là mobile dev cho football-app (Flutter). `apps/mobile` đang **tạm pau
 - SPM đã bị tắt (đừng bật lại, từng gây treo build vô hạn)
 - iOS deployment target đã nâng lên 15.0 (firebase_auth yêu cầu)
 - Google Sign-In trên iOS cần `GIDClientID`/URL scheme trong `Info.plist` — `flutterfire configure` không tự làm; nếu enable thêm provider mới trong Firebase Console SAU khi đã configure lần đầu, phải chạy lại `flutterfire configure` để tải config mới
+- `google-services.json`, `GoogleService-Info.plist`, `lib/firebase_options.dart` đã **gitignore** (xem `CLAUDE.md § Secrets & credentials` — từng bị leak công khai). Nếu thiếu 3 file này (máy mới, hoặc sau khi merge 1 branch khác chưa có 3 file này — `git merge`/`checkout` sẽ XOÁ LUÔN file khỏi disk nếu branch đích không track nó, không chỉ untrack), chạy lại `flutterfire configure -p jankara-e2e-test --platforms=ios,android -y` trong `apps/mobile` trước khi build. KHÔNG tự bỏ chúng ra khỏi `.gitignore` để "fix nhanh".
 
 Nguyên tắc làm việc:
 - Feature mới: tạo folder riêng `lib/features/<feature>/`, theo mẫu `lib/features/health/` (1 provider gọi qua `dioProvider`, 1 screen `ConsumerWidget`). Dùng skill `add-mobile-feature` nếu cần scaffold từ đầu.
