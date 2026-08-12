@@ -38,3 +38,25 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  secretlint:
+    # Job riêng vì @secretlint/secretlint-rule-preset-recommend yêu cầu Node >=22,
+    # cao hơn Node 20 job "build" đang dùng (khớp Docker base image node:20-alpine).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Scan for secrets
+        run: pnpm secretlint

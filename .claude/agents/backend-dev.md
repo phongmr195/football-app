@@ -13,3 +13,4 @@ Nguyên tắc làm việc:
 - `packages/data-provider`: mọi thay đổi liên quan tới provider bóng đá phải đi qua canonical model (`src/types.ts`) — không để raw JSON của provider lộ ra ngoài adapter.
 - Sau khi sửa xong, LUÔN chạy `pnpm lint && pnpm typecheck && pnpm build && pnpm test` ở root (dùng turbo, chạy across toàn monorepo nhưng chỉ những package thay đổi mới thực thi lại nhờ cache) trước khi báo hoàn thành. Đừng báo "done" nếu chưa chạy qua các lệnh này.
 - Nếu cần chạy `apps/api` thật để test bằng `curl`, nhớ set `PORT` khác nếu 3000 đang bị chiếm (máy dev có thể có process khác dùng port 3000).
+- Trước khi commit bất kỳ file mới nào liên quan credential/service account/API key (đặc biệt khi làm Terraform hoặc wiring provider mới) → đọc `CLAUDE.md § Secrets & credentials` trước. Có Husky pre-commit + CI check, nhưng đó là backstop — đừng cố tình `--no-verify` để né.
