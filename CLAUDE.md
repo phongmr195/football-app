@@ -83,10 +83,13 @@ pnpm docker:down
 - Model mới trong `schema.prisma`: id dùng `String @id @default(cuid())`, tên bảng snake_case qua `@@map("...")`, thêm `external_ref Json?` nếu entity map với data provider.
 - Sau khi sửa schema: `pnpm db:generate`, rồi migration khi có DB thật (`pnpm db:migrate`).
 - Dùng skill `add-prisma-model` khi thêm model mới.
+- Sửa tay data sai từ provider (Phase 1, chưa có `apps/admin`) → `pnpm db:studio` (Prisma Studio, đã verify chạy thật) — không viết tool riêng trừ khi Prisma Studio thật sự không đủ.
 
 ### Data provider (`packages/data-provider`)
 - KHÔNG để downstream code (sync-worker, api) biết hình dạng JSON thật của provider — luôn map qua canonical model trong `src/types.ts` trước.
 - Provider mới → thêm adapter trong `src/adapters/`, implement `DataProviderAdapter` interface, KHÔNG sửa canonical model để khớp provider mới (ngược lại).
+- `ApiFootballAdapter` tự throttle qua `rate-limiter.ts` (sliding-window, mặc định 8 request/phút — Free plan API-Football giới hạn cứng 10/phút VÀ 100/ngày, xem ROADMAP Phase 1). Adapter mới cho provider khác PHẢI tự cân nhắc rate limit tương tự, không giả định provider không giới hạn.
+- API-Football Free plan: full sync 1 giải ~20 team tốn ~70-80 request (phân trang squad) — chỉ đủ ngân sách ~1 giải/ngày. Đừng set nhiều ID trong `SYNC_COMPETITION_IDS` cùng lúc nếu chưa nâng plan.
 
 ### Docker
 - `docker-compose.yml` (root) = data/log/auth/app cho local dev: `postgres`, `redis`, `dozzle` (log viewer, http://localhost:8080), `firebase-emulator` (Auth Emulator, project giả `demo-football-app` — KHÔNG đụng project thật `jankara-e2e-test`; API :9099, UI :4000), `api`, `sync-worker` (profile `worker`, không tự chạy). Tất cả service dài hạn có `restart: unless-stopped`; `postgres`/`redis`/`firebase-emulator`/`api` có HEALTHCHECK, `api` depends_on cả 3 với `condition: service_healthy`.
