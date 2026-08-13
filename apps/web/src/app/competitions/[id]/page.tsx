@@ -65,6 +65,12 @@ export default async function CompetitionDetailPage({
               </span>
             ) : null}
           </div>
+          <Link
+            href={`/matches?competitionId=${competition.id}`}
+            className="text-sm text-zinc-700 hover:underline dark:text-zinc-300"
+          >
+            Xem lịch thi đấu &rarr;
+          </Link>
         </div>
       </Card>
 
