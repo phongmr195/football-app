@@ -88,6 +88,11 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/football_app?schema=public
       API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
+      DATA_PROVIDER: ${DATA_PROVIDER:-football-data}
+      SYNC_MODE: ${SYNC_MODE:-}
+      SYNC_COMPETITION_IDS: ${SYNC_COMPETITION_IDS:-}
+      SYNC_SEASON_YEAR: ${SYNC_SEASON_YEAR:-}
     depends_on:
       postgres:
         condition: service_healthy

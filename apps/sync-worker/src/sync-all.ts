@@ -1,15 +1,14 @@
-import { ApiFootballAdapter } from "@football-app/data-provider";
+import { createAdapter } from "./provider";
 import { syncCompetitionSeason, syncCompetitions, syncSeasons } from "./sync-catalog";
 
 // Job "cron đơn giản" cho Phase 1 (ROADMAP) — chạy 1 lượt đồng bộ toàn bộ danh mục cho các
 // giải đấu đã cấu hình. CHƯA cần Step Functions/adaptive polling (đó là việc của Phase 2).
 //
-// SYNC_COMPETITION_IDS: danh sách external ID (theo API-Football) của các giải cần đồng bộ,
-// phân tách bằng dấu phẩy — ví dụ "39,140" (Premier League, La Liga). Chưa hardcode ID thật
-// vào code vì chưa verify với API key thật (xem ROADMAP Phase 0 — API-Football key còn pending).
+// SYNC_COMPETITION_IDS: danh sách external ID (theo provider đang chọn qua DATA_PROVIDER, xem
+// ./provider.ts) của các giải cần đồng bộ, phân tách bằng dấu phẩy — ví dụ "2021,2014"
+// (Premier League, La Liga theo football-data.org) hoặc "39,140" (theo api-football).
 // SYNC_SEASON_YEAR: năm season cần đồng bộ, ví dụ "2024".
 export async function syncAll() {
-  const apiKey = process.env.API_FOOTBALL_KEY ?? "";
   const competitionIds = (process.env.SYNC_COMPETITION_IDS ?? "")
     .split(",")
     .map((id) => id.trim())
@@ -18,11 +17,11 @@ export async function syncAll() {
 
   if (competitionIds.length === 0) {
     throw new Error(
-      "SYNC_COMPETITION_IDS chưa set — cần ít nhất 1 external competition ID (API-Football) để sync",
+      "SYNC_COMPETITION_IDS chưa set — cần ít nhất 1 external competition ID (theo provider đang chọn qua DATA_PROVIDER) để sync",
     );
   }
 
-  const adapter = new ApiFootballAdapter({ apiKey });
+  const adapter = createAdapter();
 
   const competitionsResult = await syncCompetitions(adapter);
   console.log(`synced ${competitionsResult.syncedCount} competitions (toàn bộ danh mục provider)`);

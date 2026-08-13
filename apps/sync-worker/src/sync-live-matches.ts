@@ -1,8 +1,8 @@
-import { ApiFootballAdapter } from "@football-app/data-provider";
 import { prisma } from "@football-app/database";
+import { createAdapter } from "./provider";
 
 export async function syncLiveMatches() {
-  const adapter = new ApiFootballAdapter({ apiKey: process.env.API_FOOTBALL_KEY ?? "" });
+  const adapter = createAdapter();
   const matches = await adapter.fetchLiveMatches();
 
   for (const match of matches) {
