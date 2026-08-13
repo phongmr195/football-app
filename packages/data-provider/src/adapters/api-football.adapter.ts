@@ -1,4 +1,5 @@
 import type { DataProviderAdapter } from "../provider.interface";
+import { RateLimiter } from "../rate-limiter";
 import type {
   CanonicalCompetition,
   CanonicalMatch,
@@ -13,6 +14,13 @@ import type {
 
 const PROVIDER_NAME = "api-football";
 const BASE_URL = "https://v3.football.api-sports.io";
+
+// Xác nhận qua header response thật (2026-08): x-ratelimit-limit: 10 (request/phút, Free
+// plan) — để margin an toàn còn 8/phút, tránh sát biên do request tính giờ lệch nhẹ.
+// x-ratelimit-requests-limit: 100 (request/ngày) — KHÔNG throttle ở đây, để caller
+// (sync-worker) tự quyết định phạm vi sync theo ngân sách ngày, xem ROADMAP Phase 1.
+const REQUESTS_PER_MINUTE = 8;
+const RATE_LIMIT_WINDOW_MS = 60_000;
 
 // Đã verify với response thật (2026-08, Premier League id=39, season=2023, team=33):
 // mapCompetition/mapSeason/mapTeam/mapPlayer/mapMatch/mapStandingRow + STATUS_MAP["FT"].
@@ -35,6 +43,7 @@ function toExternalRef(id: string | number): ExternalRef {
 export interface ApiFootballAdapterOptions {
   apiKey: string;
   fetchImpl?: typeof fetch;
+  rateLimiter?: RateLimiter;
 }
 
 export class ApiFootballAdapter implements DataProviderAdapter {
@@ -42,20 +51,48 @@ export class ApiFootballAdapter implements DataProviderAdapter {
 
   private readonly apiKey: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly rateLimiter: RateLimiter;
 
   constructor(options: ApiFootballAdapterOptions) {
     this.apiKey = options.apiKey;
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.rateLimiter =
+      options.rateLimiter ??
+      new RateLimiter({ maxRequests: REQUESTS_PER_MINUTE, windowMs: RATE_LIMIT_WINDOW_MS });
   }
 
-  private async request<T>(path: string): Promise<T> {
+  private async request<T>(path: string, attempt = 1): Promise<T> {
+    await this.rateLimiter.acquire();
     const res = await this.fetchImpl(`${BASE_URL}${path}`, {
       headers: { "x-apisports-key": this.apiKey },
     });
+
+    if (res.status === 429) {
+      // Vẫn có thể dính 429 dù đã throttle (ví dụ có process khác dùng chung key) — retry
+      // có backoff, tối đa 3 lần, tôn trọng header Retry-After nếu provider trả về.
+      if (attempt > 3) {
+        throw new Error(`api-football request failed: 429 (đã retry ${attempt - 1} lần) ${path}`);
+      }
+      const retryAfterHeader = res.headers.get("retry-after");
+      const retryAfterMs = retryAfterHeader ? Number(retryAfterHeader) * 1000 : 10_000 * attempt;
+      await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
+      return this.request<T>(path, attempt + 1);
+    }
+
     if (!res.ok) {
       throw new Error(`api-football request failed: ${res.status} ${path}`);
     }
-    return res.json() as Promise<T>;
+
+    const body = (await res.json()) as { errors?: unknown };
+    // Xác nhận thật (2026-08): API-Football báo lỗi (hết quota ngày, param sai...) bằng
+    // HTTP 200 kèm "errors" có nội dung trong body — KHÔNG phải mã lỗi HTTP. Không check
+    // field này thì mọi lỗi loại này bị coi là "thành công" với response rỗng (bug thật đã
+    // gặp: hết quota ngày → fetchMatches trả về 0 match một cách âm thầm, không throw).
+    if (body.errors && (Array.isArray(body.errors) ? body.errors.length > 0 : Object.keys(body.errors).length > 0)) {
+      throw new Error(`api-football request failed: ${JSON.stringify(body.errors)} ${path}`);
+    }
+
+    return body as T;
   }
 
   async fetchCompetitions(): Promise<CanonicalCompetition[]> {
