@@ -55,3 +55,33 @@ export function formatKickoffAt(kickoffAt: string): string {
   });
   return `${timePart}, ${datePart}`;
 }
+
+/** vi-VN formatted date, e.g. "17/09/1998" — used for a player's date of birth. */
+export function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+/** Vietnamese label + Badge variant for a Player's position, seeded values from API-Football. */
+export function playerPositionMeta(position: string | null): {
+  label: string;
+  variant: BadgeVariant;
+} {
+  switch (position) {
+    case "Goalkeeper":
+      return { label: "Thủ môn", variant: "warning" };
+    case "Defender":
+      return { label: "Hậu vệ", variant: "info" };
+    case "Midfielder":
+      return { label: "Tiền vệ", variant: "success" };
+    case "Forward":
+      return { label: "Tiền đạo", variant: "danger" };
+    case "Attacker":
+      return { label: "Tiền đạo", variant: "danger" };
+    default:
+      return { label: position ?? "Chưa rõ", variant: "default" };
+  }
+}

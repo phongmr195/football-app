@@ -114,69 +114,82 @@ export default async function MatchesPage({
             const hasScore = match.homeScore !== null && match.awayScore !== null;
             return (
               <li key={match.id}>
-                <Link href={`/matches/${match.id}`}>
-                  <Card className="flex flex-col gap-3 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
-                    <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
-                      <div className="flex items-center gap-2">
-                        {match.competition.logoUrl ? (
-                          <Image
-                            src={match.competition.logoUrl}
-                            alt={match.competition.name}
-                            width={16}
-                            height={16}
-                            className="h-4 w-4 object-contain"
-                          />
-                        ) : null}
-                        <span>{match.competition.name}</span>
-                      </div>
-                      <span>{formatKickoffAt(match.kickoffAt)}</span>
+                {/* Note: team name/logo below link to /teams/[id], so the match link can't
+                    wrap the whole card (that would nest <a> inside <a>). Instead the
+                    competition/kickoff row, score, and status badge link to the match. */}
+                <Card className="flex flex-col gap-3 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
+                  <Link
+                    href={`/matches/${match.id}`}
+                    className="flex items-center justify-between text-xs text-zinc-500 hover:underline dark:text-zinc-400"
+                  >
+                    <div className="flex items-center gap-2">
+                      {match.competition.logoUrl ? (
+                        <Image
+                          src={match.competition.logoUrl}
+                          alt={match.competition.name}
+                          width={16}
+                          height={16}
+                          className="h-4 w-4 object-contain"
+                        />
+                      ) : null}
+                      <span>{match.competition.name}</span>
                     </div>
+                    <span>{formatKickoffAt(match.kickoffAt)}</span>
+                  </Link>
 
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex flex-1 items-center gap-2">
-                        {match.homeTeam.logoUrl ? (
-                          <Image
-                            src={match.homeTeam.logoUrl}
-                            alt={match.homeTeam.name}
-                            width={24}
-                            height={24}
-                            className="h-6 w-6 object-contain"
-                          />
-                        ) : (
-                          <div className="h-6 w-6 rounded bg-zinc-100 dark:bg-zinc-800" />
-                        )}
-                        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                          {match.homeTeam.name}
-                        </span>
-                      </div>
-
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                        {hasScore ? `${match.homeScore} - ${match.awayScore}` : "vs"}
+                  <div className="flex items-center justify-between gap-4">
+                    <Link
+                      href={`/teams/${match.homeTeam.id}`}
+                      className="flex flex-1 items-center gap-2 hover:underline"
+                    >
+                      {match.homeTeam.logoUrl ? (
+                        <Image
+                          src={match.homeTeam.logoUrl}
+                          alt={match.homeTeam.name}
+                          width={24}
+                          height={24}
+                          className="h-6 w-6 object-contain"
+                        />
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-zinc-100 dark:bg-zinc-800" />
+                      )}
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                        {match.homeTeam.name}
                       </span>
+                    </Link>
 
-                      <div className="flex flex-1 items-center justify-end gap-2 text-right">
-                        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                          {match.awayTeam.name}
-                        </span>
-                        {match.awayTeam.logoUrl ? (
-                          <Image
-                            src={match.awayTeam.logoUrl}
-                            alt={match.awayTeam.name}
-                            width={24}
-                            height={24}
-                            className="h-6 w-6 object-contain"
-                          />
-                        ) : (
-                          <div className="h-6 w-6 rounded bg-zinc-100 dark:bg-zinc-800" />
-                        )}
-                      </div>
-                    </div>
+                    <Link
+                      href={`/matches/${match.id}`}
+                      className="text-sm font-semibold text-zinc-900 hover:underline dark:text-zinc-50"
+                    >
+                      {hasScore ? `${match.homeScore} - ${match.awayScore}` : "vs"}
+                    </Link>
 
-                    <div>
-                      <Badge variant={variant}>{label}</Badge>
-                    </div>
-                  </Card>
-                </Link>
+                    <Link
+                      href={`/teams/${match.awayTeam.id}`}
+                      className="flex flex-1 items-center justify-end gap-2 text-right hover:underline"
+                    >
+                      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                        {match.awayTeam.name}
+                      </span>
+                      {match.awayTeam.logoUrl ? (
+                        <Image
+                          src={match.awayTeam.logoUrl}
+                          alt={match.awayTeam.name}
+                          width={24}
+                          height={24}
+                          className="h-6 w-6 object-contain"
+                        />
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-zinc-100 dark:bg-zinc-800" />
+                      )}
+                    </Link>
+                  </div>
+
+                  <Link href={`/matches/${match.id}`} className="self-start">
+                    <Badge variant={variant}>{label}</Badge>
+                  </Link>
+                </Card>
               </li>
             );
           })}

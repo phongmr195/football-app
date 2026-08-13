@@ -56,7 +56,10 @@ export default async function MatchDetailPage({
         </div>
 
         <div className="flex w-full items-center justify-around gap-4">
-          <div className="flex flex-1 flex-col items-center gap-3 text-center">
+          <Link
+            href={`/teams/${match.homeTeam.id}`}
+            className="flex flex-1 flex-col items-center gap-3 text-center hover:underline"
+          >
             {match.homeTeam.logoUrl ? (
               <Image
                 src={match.homeTeam.logoUrl}
@@ -71,13 +74,16 @@ export default async function MatchDetailPage({
             <span className="font-semibold text-zinc-900 dark:text-zinc-50">
               {match.homeTeam.name}
             </span>
-          </div>
+          </Link>
 
           <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
             {hasScore ? `${match.homeScore} - ${match.awayScore}` : "vs"}
           </div>
 
-          <div className="flex flex-1 flex-col items-center gap-3 text-center">
+          <Link
+            href={`/teams/${match.awayTeam.id}`}
+            className="flex flex-1 flex-col items-center gap-3 text-center hover:underline"
+          >
             {match.awayTeam.logoUrl ? (
               <Image
                 src={match.awayTeam.logoUrl}
@@ -92,7 +98,7 @@ export default async function MatchDetailPage({
             <span className="font-semibold text-zinc-900 dark:text-zinc-50">
               {match.awayTeam.name}
             </span>
-          </div>
+          </Link>
         </div>
 
         <p className="text-sm text-zinc-500 dark:text-zinc-400">

@@ -86,6 +86,44 @@ export interface MatchDetail extends Match {
   liveState: LiveMatchState | null;
 }
 
+export interface Stadium {
+  id: string;
+  name: string;
+  city: string | null;
+  countryCode: string | null;
+  capacity: number | null;
+}
+
+export interface Team {
+  id: string;
+  name: string;
+  shortName: string | null;
+  logoUrl: string | null;
+  countryCode: string | null;
+  founded: number | null;
+  stadiumId: string | null;
+  externalRef: unknown;
+}
+
+export interface TeamDetail extends Team {
+  stadium: Stadium | null;
+}
+
+export interface Player {
+  id: string;
+  name: string;
+  dateOfBirth: string | null;
+  nationality: string | null;
+  position: string | null;
+  heightCm: number | null;
+  teamId: string | null;
+  externalRef: unknown;
+}
+
+export interface PlayerDetail extends Player {
+  team: Team | null;
+}
+
 export interface Standing {
   id: string;
   seasonId: string;
