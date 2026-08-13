@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Tailwind v4's automatic content detection only scans within apps/web — it doesn't
+ * follow the pnpm workspace symlink out to sibling packages, so classes used inside
+ * packages/ui components would otherwise be missing from the generated CSS. */
+@source "../../../../packages/ui/src";
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
