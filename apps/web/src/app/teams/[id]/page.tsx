@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet, type ApiListResponse } from "@/lib/api-client";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { playerPositionMeta } from "@/lib/format";
 import type { Player, TeamDetail } from "@/lib/types";
 
@@ -64,6 +65,9 @@ export default async function TeamDetailPage({
             {team.countryCode ? <span>&middot; {team.countryCode}</span> : null}
             {team.founded ? <span>&middot; Thành lập {team.founded}</span> : null}
           </div>
+        </div>
+        <div className="sm:ml-auto">
+          <FavoriteButton kind="team" id={team.id} />
         </div>
       </Card>
 

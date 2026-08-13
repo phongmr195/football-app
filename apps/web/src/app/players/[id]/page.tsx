@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
+import { FavoriteButton } from "@/components/FavoriteButton";
 import { formatDate, playerPositionMeta } from "@/lib/format";
 import type { PlayerDetail } from "@/lib/types";
 
@@ -49,6 +50,9 @@ export default async function PlayerDetailPage({
               </span>
             ) : null}
           </div>
+        </div>
+        <div className="sm:ml-auto">
+          <FavoriteButton kind="player" id={player.id} />
         </div>
       </Card>
 
