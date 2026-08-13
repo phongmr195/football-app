@@ -14,9 +14,10 @@ import type {
 const PROVIDER_NAME = "api-football";
 const BASE_URL = "https://v3.football.api-sports.io";
 
-// TODO: xác nhận lại chính xác field name theo response thật khi có API key test
-// (docs API-Football có thể thay đổi theo thời gian) — mapping dưới đây là khung sườn,
-// chưa verify với response thật.
+// Đã verify với response thật (2026-08, Premier League id=39, season=2023, team=33):
+// mapCompetition/mapSeason/mapTeam/mapPlayer/mapMatch/mapStandingRow + STATUS_MAP["FT"].
+// mapMatchEvent (/fixtures/events) CHƯA verify — chưa có trận nào để test lúc đó.
+// API-Football có thể đổi shape theo thời gian, re-verify nếu sync-worker báo lỗi map lạ.
 const STATUS_MAP: Record<string, CanonicalMatchStatus> = {
   NS: "SCHEDULED",
   "1H": "LIVE",
@@ -88,12 +89,21 @@ export class ApiFootballAdapter implements DataProviderAdapter {
     teamExternalRef: ExternalRef,
     seasonExternalRef: ExternalRef,
   ): Promise<CanonicalPlayer[]> {
-    // TODO: /players trả về phân trang (paging.total) — mới lấy trang 1, đủ cho squad
-    // thông thường (~20-30 người/trang); cần lặp trang khi squad dài hơn 1 trang.
-    const data = await this.request<{ response: unknown[] }>(
-      `/players?team=${teamExternalRef.id}&season=${seasonExternalRef.id}`,
-    );
-    return data.response.map((raw) => this.mapPlayer(raw, teamExternalRef));
+    // Verify với response thật (2026-08): 1 trang ~20 người, squad đầy đủ thường 3-4 trang
+    // (paging.total) — lặp hết trang để lấy đủ squad, không chỉ trang 1.
+    const players = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const data = await this.request<{
+        response: unknown[];
+        paging: { current: number; total: number };
+      }>(`/players?team=${teamExternalRef.id}&season=${seasonExternalRef.id}&page=${page}`);
+      players.push(...data.response.map((raw) => this.mapPlayer(raw, teamExternalRef)));
+      totalPages = data.paging.total;
+      page++;
+    } while (page <= totalPages);
+    return players;
   }
 
   async fetchMatches(
@@ -130,9 +140,13 @@ export class ApiFootballAdapter implements DataProviderAdapter {
     const data = await this.request<{ response: unknown[] }>(
       `/standings?league=${competitionExternalRef.id}&season=${seasonExternalRef.id}`,
     );
-    // TODO: shape thật của /standings lồng nhau sâu hơn (response[0].league.standings[0] là mảng
-    // hàng thật) — cần map lại khi test với response thật.
-    return data.response.map((raw) => this.mapStandingRow(raw, seasonExternalRef));
+    // Verify với response thật (2026-08): response[0].league.standings là mảng CÁC NHÓM
+    // (thường 1 nhóm cho giải vô địch quốc gia, nhiều nhóm cho giải có bảng như World Cup) —
+    // mỗi nhóm là 1 mảng hàng xếp hạng. flat() để lấy hết hàng của mọi nhóm.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- shape thật của api-football chưa verify hết, xem TODO ở đầu file
+    const league = (data.response[0] as any)?.league;
+    const rows: unknown[] = (league?.standings ?? []).flat();
+    return rows.map((raw) => this.mapStandingRow(raw, seasonExternalRef));
   }
 
   // ---- mapping: JSON thô của api-football -> canonical model ----
