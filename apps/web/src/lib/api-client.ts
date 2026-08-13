@@ -1,16 +1,24 @@
 /**
- * Minimal typed fetch helper for calling apps/api (Hono REST backend).
+ * Typed fetch helpers for calling apps/api (Hono REST backend).
  *
- * Base URL comes from `API_URL`, a server-only env var (see .env.example) — this matches
- * the convention already documented in .claude/skills/add-web-page/SKILL.md, which fetches
- * directly from Server Components via `process.env.API_URL`. There is no
- * `NEXT_PUBLIC_API_URL` yet: keep calls to this module in Server Components / server-side
- * code (route handlers, generateStaticParams, etc.) until a Client Component actually needs
- * to hit the API directly, at which point add that env var deliberately.
+ * Two families of helpers, on purpose:
  *
- * Auth: apps/api's read endpoints (competitions/teams/players/matches/standings/statistics)
- * don't require auth today. Once Firebase Auth is wired on the web client, add an
- * `Authorization: Bearer <idToken>` header in `buildHeaders` below.
+ * - `apiGet` (server-only): base URL from `API_URL` (see .env.example), used by Server
+ *   Components for the public browse pages (competitions/teams/players/matches/standings).
+ *   None of those endpoints require auth today, so `apiGet` stays unauthenticated and unaware
+ *   of client auth state — it must keep working regardless of sign-in state, since it's called
+ *   during SSR/ISR where there's no browser and no Firebase Auth session to read.
+ * - `apiGetClient`/`apiMutateClient` (client-only): for Client Components that need to call
+ *   apps/api directly from the browser and attach a Firebase ID token — e.g. piece 6
+ *   (favorites), the first feature needing `requireAuth` (apps/api/src/middleware/auth.ts).
+ *   Get the token via `useAuth().getIdToken()` (lib/auth-context.tsx) right before the call and
+ *   pass it as `idToken`; these helpers don't read auth state themselves; they just attach
+ *   whatever token the caller passes.
+ *
+ * `apiGetClient`/`apiMutateClient` read `NEXT_PUBLIC_API_URL`, which does NOT exist yet in
+ * apps/web/.env.local/.env.example (out of scope for this piece — no client feature calls them
+ * yet). Piece 6 should add `NEXT_PUBLIC_API_URL=http://localhost:3000` (dev) there when it
+ * starts using them; until then, calling them throws a clear error rather than silently no-op.
  */
 
 export type SearchParamsInit = Record<string, string | number | boolean | undefined | null>;
@@ -49,7 +57,9 @@ function buildUrl(path: string, searchParams?: SearchParamsInit): string {
 function buildHeaders(extra?: HeadersInit): HeadersInit {
   return {
     Accept: "application/json",
-    // TODO(auth): once Firebase Auth is wired, attach `Authorization: Bearer <idToken>` here.
+    // Deliberately no Authorization header: apiGet is server-only and calls apps/api's public,
+    // unauthenticated read endpoints — see the module doc comment above for why, and
+    // apiGetClient/apiMutateClient below for the authenticated, client-side counterpart.
     ...extra,
   };
 }
@@ -88,4 +98,111 @@ export interface ApiListResponse<T> {
   page: number;
   pageSize: number;
   total: number;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Client-side helpers (Client Components only) — see module doc comment above for the
+// server-vs-client split rationale. Not used by any page yet; piece 6 (favorites) is the first
+// consumer.
+// ---------------------------------------------------------------------------------------------
+
+function getClientBaseUrl(): string {
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!baseUrl) {
+    throw new Error(
+      "NEXT_PUBLIC_API_URL env var is not set — add it to apps/web/.env.local and .env.example " +
+        "(needed for authenticated Client Component calls to apps/api, e.g. favorites)."
+    );
+  }
+  return baseUrl;
+}
+
+function buildClientUrl(baseUrl: string, path: string, searchParams?: SearchParamsInit): string {
+  const url = new URL(path, baseUrl);
+  if (searchParams) {
+    for (const [key, value] of Object.entries(searchParams)) {
+      if (value === undefined || value === null) continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url.toString();
+}
+
+function buildClientHeaders(idToken: string | null | undefined, extra?: HeadersInit): HeadersInit {
+  return {
+    Accept: "application/json",
+    ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+    ...extra,
+  };
+}
+
+export interface ApiClientRequestInit extends Omit<RequestInit, "method" | "body" | "headers"> {
+  /**
+   * Firebase ID token for `requireAuth`-protected routes. Get it via
+   * `useAuth().getIdToken()` (lib/auth-context.tsx) right before the call — tokens are
+   * short-lived and refreshed by the SDK, don't cache them yourself. Omit (or pass
+   * null/undefined) for endpoints that don't require auth.
+   */
+  idToken?: string | null;
+  headers?: HeadersInit;
+}
+
+/**
+ * GET helper for Client Components. Use this — not `apiGet` above — for calls made from the
+ * browser and/or that need a Firebase ID token attached.
+ */
+export async function apiGetClient<T>(
+  path: string,
+  searchParams?: SearchParamsInit,
+  init?: ApiClientRequestInit
+): Promise<T> {
+  const { idToken, headers, ...rest } = init ?? {};
+  const url = buildClientUrl(getClientBaseUrl(), path, searchParams);
+
+  const res = await fetch(url, {
+    ...rest,
+    method: "GET",
+    headers: buildClientHeaders(idToken, headers),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new ApiError(res.status, `GET ${path} failed with ${res.status}: ${body}`);
+  }
+
+  return (await res.json()) as T;
+}
+
+/**
+ * POST/PATCH/PUT/DELETE helper for Client Components — e.g. piece 6's "add/remove favorite".
+ * Sends `body` as JSON when provided. Returns `undefined` for 204 No Content responses.
+ */
+export async function apiMutateClient<T>(
+  path: string,
+  method: "POST" | "PATCH" | "PUT" | "DELETE",
+  body?: unknown,
+  init?: ApiClientRequestInit
+): Promise<T> {
+  const { idToken, headers, ...rest } = init ?? {};
+  const url = buildClientUrl(getClientBaseUrl(), path);
+
+  const res = await fetch(url, {
+    ...rest,
+    method,
+    headers: buildClientHeaders(idToken, {
+      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...headers,
+    }),
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new ApiError(res.status, `${method} ${path} failed with ${res.status}: ${errBody}`);
+  }
+
+  if (res.status === 204) {
+    return undefined as T;
+  }
+  return (await res.json()) as T;
 }

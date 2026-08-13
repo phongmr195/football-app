@@ -44,7 +44,7 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 
 **Web (client chính — đổi từ Mobile theo pivot):**
 - [ ] Scaffold `apps/web` (Next.js) + `packages/ui` baseline
-- [ ] Đăng ký Web app trong Firebase project, wire Firebase Auth (Google/Phone) cho web
+- [x] Đăng ký Web app trong Firebase project, wire Firebase Auth (Google/Phone) cho web — `firebase apps:create WEB` cho `jankara-e2e-test`, Firebase JS SDK (`apps/web/src/lib/firebase.ts`), `AuthProvider`/`useAuth()` (Google popup + Phone 2 bước: gửi mã → xác nhận), trang `/auth` + trạng thái đăng nhập trong NavBar. Dev local nối Auth Emulator (`connectAuthEmulator`, chỉ khi `NODE_ENV=development`) — verify thật bằng cách tự chạy Firebase SDK thật chống lại emulator (không chỉ build pass): `onAuthStateChanged` bắt đúng user, decode ID token xác nhận `aud`/`iss` khớp project giả `demo-football-app` mà `apps/api` đang dùng làm default khi verify token qua emulator → web + api tương thích khi chạy cùng Docker. Đã thêm `apiGetClient`/`apiMutateClient` (client-side, đính `Authorization: Bearer <idToken>`) trong `api-client.ts`, tách khỏi `apiGet` (server-only, không auth) — chuẩn bị cho favorites (mục tiếp theo, endpoint đầu tiên cần `requireAuth`). Chưa verify được flow đăng nhập Google/Phone thật qua browser (cần popup Google + reCAPTCHA thật, không tự động hoá được trong môi trường headless) — cần verify tay 1 lần khi có browser thật.
 - [ ] Trang: danh sách giải đấu, bảng xếp hạng, chi tiết trận đấu (đã kết thúc/sắp diễn ra), chi tiết team/player
 - [ ] `favorite_teams`/`favorite_players`: wire UI + API `/favorites`
 - [ ] Caching: dùng SSR/ISR của Next.js cho trang public + client cache (React Query hoặc tương đương) — không cần offline cache kiểu Hive như mobile
