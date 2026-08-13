@@ -6,14 +6,14 @@ Monorepo cho Football App (Web + Hono + AWS). Xem kiến trúc đầy đủ và 
 
 ## Cấu trúc
 
-- `apps/web` — Next.js, client chính (chưa scaffold, xem ROADMAP Phase 1)
+- `apps/web` — Next.js, client chính (browse giải đấu/bảng xếp hạng/lịch thi đấu/team/player + Firebase Auth + favorites, xem "## apps/web" dưới)
 - `apps/mobile` — Flutter app (Riverpod, GoRouter, Hive, Dio, Firebase Auth) — **tạm pause**
 - `apps/api` — Hono API (TypeScript)
 - `apps/sync-worker` — đồng bộ dữ liệu từ data provider
 - `packages/database` — Prisma schema + client
 - `packages/shared` — types/utils dùng chung
 - `packages/data-provider` — adapter pattern cho data provider bóng đá (chi tiết trong [PROJECT_PLAN.md § Data Provider](docs/architecture/PROJECT_PLAN.md))
-- `packages/ui` — design system cho `apps/web` (chưa scaffold)
+- `packages/ui` — design system cho `apps/web` (Button/Card/Badge/Container)
 - `packages/config` — eslint/tsconfig/prettier chung
 - `infrastructure/terraform` — hạ tầng AWS (chưa apply, cần cấu hình credentials + `terraform.tfvars`)
 
@@ -62,7 +62,29 @@ docker build -f apps/sync-worker/Dockerfile -t football-app-sync-worker .
 
 ## apps/web
 
-Chưa scaffold — client chính hiện tại, xem [ROADMAP.md Phase 1](docs/architecture/ROADMAP.md) để biết việc cần làm (Next.js + `packages/ui` + Firebase Auth cho web).
+Client chính (Next.js App Router). Cần `apps/api` + Postgres + Firebase Auth Emulator đang chạy trước (xem "## Docker" ở trên) — các trang browse gọi thẳng `apps/api`, và đăng nhập dùng Firebase Auth Emulator ở local.
+
+```bash
+pnpm docker:up                          # postgres + firebase-emulator + api (cần cho web gọi vào)
+cp apps/web/.env.example apps/web/.env.local
+```
+
+Điền `NEXT_PUBLIC_FIREBASE_*` trong `apps/web/.env.local` bằng config Web app thật (đã đăng ký sẵn trong project `jankara-e2e-test`, xem [CLAUDE.md § Authentication](CLAUDE.md#authentication-firebase-auth)):
+
+```bash
+firebase apps:list --project jankara-e2e-test              # lấy app id (platform WEB)
+firebase apps:sdkconfig WEB <app-id> --project jankara-e2e-test
+```
+
+`API_URL`/`NEXT_PUBLIC_API_URL` trong `.env.example` đã sẵn `http://localhost:3000` (khớp port `apps/api` expose qua Docker) — không cần đổi cho local dev.
+
+```bash
+pnpm --filter @football-app/web dev     # hoặc pnpm dev để chạy tất cả app qua turbo
+```
+
+Mở trình duyệt theo URL Next.js in ra — thường là `http://localhost:3001` (không phải `3000`, vì port đó đã bị `apps/api` chiếm khi chạy qua Docker cùng lúc). Các trang chính: `/competitions`, `/matches`, `/standings/[seasonId]`, `/teams/[id]`, `/players/[id]`, `/auth` (đăng nhập Google/Phone), `/favorites`.
+
+**Lưu ý:** banner đỏ "Running in emulator mode..." ở đáy trang khi đăng nhập là do chính Firebase SDK hiển thị lúc nối Auth Emulator — bình thường, chỉ xuất hiện ở dev local, không phải lỗi.
 
 ## apps/mobile (tạm pause)
 
