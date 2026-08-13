@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { Card, Container } from "@football-app/ui";
 import { apiGet } from "@/lib/api-client";
 import type { Standing } from "@/lib/types";
@@ -65,7 +66,10 @@ export default async function StandingsPage({
                     {row.position}
                   </td>
                   <td className="px-3 py-2">
-                    <div className="flex items-center gap-2">
+                    <Link
+                      href={`/teams/${row.team.id}`}
+                      className="flex items-center gap-2 hover:underline"
+                    >
                       {row.team.logoUrl ? (
                         <Image
                           src={row.team.logoUrl}
@@ -80,7 +84,7 @@ export default async function StandingsPage({
                       <span className="text-zinc-900 dark:text-zinc-50">
                         {row.team.name}
                       </span>
-                    </div>
+                    </Link>
                   </td>
                   {columns.map((col) => (
                     <td
