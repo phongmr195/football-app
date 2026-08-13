@@ -1,7 +1,11 @@
 import type {
+  CanonicalCompetition,
   CanonicalMatch,
   CanonicalMatchEvent,
+  CanonicalPlayer,
+  CanonicalSeason,
   CanonicalStandingRow,
+  CanonicalTeam,
   ExternalRef,
 } from "./types";
 
@@ -10,8 +14,25 @@ import type {
 export interface DataProviderAdapter {
   readonly providerName: string;
 
+  fetchCompetitions(): Promise<CanonicalCompetition[]>;
+  fetchSeasons(competitionExternalRef: ExternalRef): Promise<CanonicalSeason[]>;
+  fetchTeams(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalTeam[]>;
+  fetchPlayers(
+    teamExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalPlayer[]>;
+  fetchMatches(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalMatch[]>;
   fetchLiveMatches(): Promise<CanonicalMatch[]>;
   fetchMatch(externalId: string): Promise<CanonicalMatch>;
   fetchMatchEvents(externalId: string): Promise<CanonicalMatchEvent[]>;
-  fetchStandings(seasonExternalRef: ExternalRef): Promise<CanonicalStandingRow[]>;
+  fetchStandings(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalStandingRow[]>;
 }

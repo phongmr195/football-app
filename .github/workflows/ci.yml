@@ -9,6 +9,24 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    services:
+      # sync-catalog.test.ts chạy against Postgres thật (xem CLAUDE.md § Docker) — cần service
+      # tương đương ở CI, không mock Prisma.
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: football_app
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_app?schema=public
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +44,9 @@ jobs:
 
       - name: Generate Prisma client
         run: pnpm db:generate
+
+      - name: Apply migrations
+        run: pnpm --filter @football-app/database exec prisma migrate deploy
 
       - name: Lint
         run: pnpm lint

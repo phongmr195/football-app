@@ -33,10 +33,11 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 **Mục tiêu:** người dùng browse được dữ liệu bóng đá thật (không real-time, không AI) — thay thế phần "xem thông tin" cơ bản của Sofascore/FotMob.
 
 **Backend/Data:**
-- [ ] `packages/data-provider`: canonical model + adapter API-Football
-- [ ] `apps/sync-worker`: job định kỳ (cron đơn giản, CHƯA cần Step Functions) đồng bộ competitions/teams/players/matches/standings vào Aurora
-- [ ] API: `/competitions`, `/teams`, `/players`, `/matches` (list/detail), `/standings`, `/statistics` cơ bản
-- [ ] Admin tool tối giản (script hoặc trang đơn giản) để sửa tay dữ liệu sai từ provider
+- [x] `packages/data-provider`: canonical model + adapter API-Football — đã thêm `fetchCompetitions`/`fetchSeasons`/`fetchTeams`/`fetchPlayers`/`fetchMatches` (mapping field theo docs API-Football, **chưa verify với response thật** — chưa có API key, xem mục dưới)
+- [x] `apps/sync-worker`: `sync-catalog.ts` (syncCompetitions → syncSeasons → syncTeams → syncPlayers → syncStandings/syncMatches, đúng thứ tự phụ thuộc) + `sync-all.ts` orchestrator (cron đơn giản, đọc `SYNC_COMPETITION_IDS`/`SYNC_SEASON_YEAR` từ env) — verify thật bằng mock adapter + Postgres Docker (5 test pass: upsert idempotent, FK resolve, throw đúng khi thiếu dependency, skip team lạ)
+- [x] API: `/competitions`, `/teams` (+ `/teams/:id/players`), `/players`, `/matches` (list có filter `competitionId`/`status`, detail), `/standings?seasonId=`, `/statistics/teams|players/:id?seasonId=` — verify thật qua curl với data seed (không phải chỉ build pass)
+- [ ] Admin tool tối giản (script hoặc trang đơn giản) để sửa tay dữ liệu sai từ provider — chưa làm
+- [ ] **Còn blocked**: chưa có API-Football key thật → adapter mapping (field name JSON thật) chưa verify được, `sync-all.ts` chưa chạy thử với data thật
 
 **Web (client chính — đổi từ Mobile theo pivot):**
 - [ ] Scaffold `apps/web` (Next.js) + `packages/ui` baseline
