@@ -21,7 +21,7 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 - [x] Firebase project (`jankara-e2e-test`, dùng chung với project khác): tạo/login, bật Google+Phone provider, `flutterfire configure` cho mobile — **Web app chưa đăng ký trong Firebase project** (cần làm ở Phase 1 Web)
 - [x] `infrastructure/terraform`: baseline (VPC, Aurora instance nhỏ, S3 bucket) — đã bỏ Cognito (không cần AWS cho auth nữa); **vẫn thiếu resource API Gateway REST**, và toàn bộ **chưa `apply`** (thiếu AWS credentials hợp lệ)
 - [x] CI: lint + test + build chạy trên PR (`github-actions`) — verified: PR đã merge, CI xanh
-- [ ] Xác nhận giá/rate-limit thực tế của API-Football, tạo account + API key test
+- [x] Xác nhận giá/rate-limit thực tế của API-Football, tạo account + API key test — **xong**: account Free plan, **100 requests/ngày** (giới hạn thật, cần tính toán tần suất sync cho phù hợp ở Phase 2 adaptive polling), key lưu trong `.env` (gitignored, KHÔNG commit)
 - [ ] **(mới)** `apps/web`: scaffold Next.js — chưa làm, xem Phase 1
 
 **Exit criteria:** đăng ký/login từ app thật, gọi được 1 API rỗng, deploy tự động qua CI. → **Chưa đạt đầy đủ cho Web** (login/API đã verify được cho mobile trước khi pause; cần lặp lại phần Web app registration + đăng nhập thật trên web ở Phase 1). CI mới validate, chưa có bước deploy.
@@ -33,11 +33,12 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 **Mục tiêu:** người dùng browse được dữ liệu bóng đá thật (không real-time, không AI) — thay thế phần "xem thông tin" cơ bản của Sofascore/FotMob.
 
 **Backend/Data:**
-- [x] `packages/data-provider`: canonical model + adapter API-Football — đã thêm `fetchCompetitions`/`fetchSeasons`/`fetchTeams`/`fetchPlayers`/`fetchMatches` (mapping field theo docs API-Football, **chưa verify với response thật** — chưa có API key, xem mục dưới)
+- [x] `packages/data-provider`: canonical model + adapter API-Football — đã thêm `fetchCompetitions`/`fetchSeasons`/`fetchTeams`/`fetchPlayers`/`fetchMatches`, **verify thật với API key thật** (Premier League id=39, season 2023 — đối chiếu đúng bảng xếp hạng thật Man City 91đ/Arsenal 89đ). Phát hiện + fix 2 bug qua verify: (1) `/standings` lồng sâu hơn dự đoán (`response[0].league.standings` là mảng CÁC NHÓM, không phải mảng hàng trực tiếp — đã fix bằng `.flat()`), (2) `/players` phân trang thật (~3-4 trang/squad) — đã fix loop hết `paging.total`. `mapMatchEvent` (`/fixtures/events`) còn chưa verify (chưa có trận để test).
 - [x] `apps/sync-worker`: `sync-catalog.ts` (syncCompetitions → syncSeasons → syncTeams → syncPlayers → syncStandings/syncMatches, đúng thứ tự phụ thuộc) + `sync-all.ts` orchestrator (cron đơn giản, đọc `SYNC_COMPETITION_IDS`/`SYNC_SEASON_YEAR` từ env) — verify thật bằng mock adapter + Postgres Docker (5 test pass: upsert idempotent, FK resolve, throw đúng khi thiếu dependency, skip team lạ)
 - [x] API: `/competitions`, `/teams` (+ `/teams/:id/players`), `/players`, `/matches` (list có filter `competitionId`/`status`, detail), `/standings?seasonId=`, `/statistics/teams|players/:id?seasonId=` — verify thật qua curl với data seed (không phải chỉ build pass)
 - [ ] Admin tool tối giản (script hoặc trang đơn giản) để sửa tay dữ liệu sai từ provider — chưa làm
-- [ ] **Còn blocked**: chưa có API-Football key thật → adapter mapping (field name JSON thật) chưa verify được, `sync-all.ts` chưa chạy thử với data thật
+- [ ] `sync-all.ts` (orchestrator dùng `SYNC_COMPETITION_IDS`) chưa chạy thử full end-to-end với key thật — mới verify từng method adapter riêng lẻ, chưa chạy toàn bộ `syncCompetitionSeason` qua sync-worker thật
+- [ ] **Cần cân nhắc**: quota 100 request/ngày (Free plan) khá thấp cho sync nhiều giải — tính lại `SYNC_COMPETITION_IDS` nên giới hạn bao nhiêu giải/lần chạy, và tần suất cron (Phase 1 dùng cron đơn giản, chưa adaptive) để không vượt quota
 
 **Web (client chính — đổi từ Mobile theo pivot):**
 - [ ] Scaffold `apps/web` (Next.js) + `packages/ui` baseline
