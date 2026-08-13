@@ -1,9 +1,13 @@
 import type { DataProviderAdapter } from "../provider.interface";
 import type {
+  CanonicalCompetition,
   CanonicalMatch,
   CanonicalMatchEvent,
   CanonicalMatchStatus,
+  CanonicalPlayer,
+  CanonicalSeason,
   CanonicalStandingRow,
+  CanonicalTeam,
   ExternalRef,
 } from "../types";
 
@@ -53,6 +57,55 @@ export class ApiFootballAdapter implements DataProviderAdapter {
     return res.json() as Promise<T>;
   }
 
+  async fetchCompetitions(): Promise<CanonicalCompetition[]> {
+    const data = await this.request<{ response: unknown[] }>("/leagues");
+    return data.response.map((raw) => this.mapCompetition(raw));
+  }
+
+  async fetchSeasons(competitionExternalRef: ExternalRef): Promise<CanonicalSeason[]> {
+    const data = await this.request<{ response: unknown[] }>(
+      `/leagues?id=${competitionExternalRef.id}`,
+    );
+    const [raw] = data.response;
+    if (!raw) return [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- shape thật của api-football chưa verify, xem TODO ở đầu file
+    const r = raw as Record<string, any>;
+    const seasons: unknown[] = r.seasons ?? [];
+    return seasons.map((season) => this.mapSeason(season as Record<string, unknown>, competitionExternalRef));
+  }
+
+  async fetchTeams(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalTeam[]> {
+    const data = await this.request<{ response: unknown[] }>(
+      `/teams?league=${competitionExternalRef.id}&season=${seasonExternalRef.id}`,
+    );
+    return data.response.map((raw) => this.mapTeam(raw));
+  }
+
+  async fetchPlayers(
+    teamExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalPlayer[]> {
+    // TODO: /players trả về phân trang (paging.total) — mới lấy trang 1, đủ cho squad
+    // thông thường (~20-30 người/trang); cần lặp trang khi squad dài hơn 1 trang.
+    const data = await this.request<{ response: unknown[] }>(
+      `/players?team=${teamExternalRef.id}&season=${seasonExternalRef.id}`,
+    );
+    return data.response.map((raw) => this.mapPlayer(raw, teamExternalRef));
+  }
+
+  async fetchMatches(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalMatch[]> {
+    const data = await this.request<{ response: unknown[] }>(
+      `/fixtures?league=${competitionExternalRef.id}&season=${seasonExternalRef.id}`,
+    );
+    return data.response.map((raw) => this.mapMatch(raw));
+  }
+
   async fetchLiveMatches(): Promise<CanonicalMatch[]> {
     const data = await this.request<{ response: unknown[] }>("/fixtures?live=all");
     return data.response.map((raw) => this.mapMatch(raw));
@@ -70,15 +123,74 @@ export class ApiFootballAdapter implements DataProviderAdapter {
     return data.response.map((raw, index) => this.mapMatchEvent(raw, externalId, index));
   }
 
-  async fetchStandings(seasonExternalRef: ExternalRef): Promise<CanonicalStandingRow[]> {
+  async fetchStandings(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalStandingRow[]> {
     const data = await this.request<{ response: unknown[] }>(
-      `/standings?season=${seasonExternalRef.id}`,
+      `/standings?league=${competitionExternalRef.id}&season=${seasonExternalRef.id}`,
     );
-    // TODO: shape thật của /standings lồng nhau sâu hơn — cần map lại khi test với response thật
+    // TODO: shape thật của /standings lồng nhau sâu hơn (response[0].league.standings[0] là mảng
+    // hàng thật) — cần map lại khi test với response thật.
     return data.response.map((raw) => this.mapStandingRow(raw, seasonExternalRef));
   }
 
   // ---- mapping: JSON thô của api-football -> canonical model ----
+
+  private mapCompetition(raw: unknown): CanonicalCompetition {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- shape thật của api-football chưa verify, xem TODO ở đầu file
+    const r = raw as Record<string, any>;
+    const isInternational = r.country?.name === "World";
+    return {
+      externalRef: toExternalRef(r.league.id),
+      name: r.league.name,
+      type: isInternational ? "INTERNATIONAL" : r.league.type === "Cup" ? "CUP" : "LEAGUE",
+      countryCode: r.country?.code ?? undefined,
+      logoUrl: r.league.logo ?? undefined,
+    };
+  }
+
+  private mapSeason(
+    raw: Record<string, unknown>,
+    competitionExternalRef: ExternalRef,
+  ): CanonicalSeason {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- shape thật của api-football chưa verify, xem TODO ở đầu file
+    const r = raw as Record<string, any>;
+    return {
+      externalRef: toExternalRef(r.year),
+      competitionExternalRef,
+      name: String(r.year),
+      startDate: r.start,
+      endDate: r.end,
+      isCurrent: Boolean(r.current),
+    };
+  }
+
+  private mapTeam(raw: unknown): CanonicalTeam {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- shape thật của api-football chưa verify, xem TODO ở đầu file
+    const r = raw as Record<string, any>;
+    return {
+      externalRef: toExternalRef(r.team.id),
+      name: r.team.name,
+      shortName: r.team.code ?? undefined,
+      logoUrl: r.team.logo ?? undefined,
+      countryCode: r.team.country ?? undefined,
+      founded: r.team.founded ?? undefined,
+    };
+  }
+
+  private mapPlayer(raw: unknown, teamExternalRef: ExternalRef): CanonicalPlayer {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- shape thật của api-football chưa verify, xem TODO ở đầu file
+    const r = raw as Record<string, any>;
+    return {
+      externalRef: toExternalRef(r.player.id),
+      name: r.player.name,
+      dateOfBirth: r.player.birth?.date ?? undefined,
+      nationality: r.player.nationality ?? undefined,
+      position: r.statistics?.[0]?.games?.position ?? undefined,
+      teamExternalRef,
+    };
+  }
 
   private mapMatch(raw: unknown): CanonicalMatch {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- shape thật của api-football chưa verify, xem TODO ở đầu file
