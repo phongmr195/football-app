@@ -11,11 +11,11 @@ datasource db {
 // ==================== User Module ====================
 
 model User {
-  id        String   @id @default(cuid())
-  cognitoSub String  @unique
-  email      String  @unique
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  firebaseUid String   @unique
+  email       String?  @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   profile              UserProfile?
   favoriteTeams        FavoriteTeam[]
