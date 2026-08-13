@@ -124,6 +124,24 @@ export interface PlayerDetail extends Player {
   team: Team | null;
 }
 
+/**
+ * Shapes returned by apps/api's GET /favorites/teams and /favorites/players (piece 6a) — these
+ * are deliberately narrower than Team/Player above (just what favorites.ts's `teamSelect`/
+ * `playerSelect` project), not full Team/Player objects. See apps/api/src/routes/favorites.ts.
+ */
+export interface FavoriteTeamItem {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+}
+
+export interface FavoritePlayerItem {
+  id: string;
+  name: string;
+  position: string | null;
+  teamId: string | null;
+}
+
 export interface Standing {
   id: string;
   seasonId: string;

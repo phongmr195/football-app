@@ -34,6 +34,12 @@ export function NavBar() {
             >
               Lịch thi đấu
             </Link>
+            <Link
+              href="/favorites"
+              className="hover:text-zinc-900 dark:hover:text-zinc-50"
+            >
+              Yêu thích
+            </Link>
           </nav>
         </div>
         <AuthStatus />
