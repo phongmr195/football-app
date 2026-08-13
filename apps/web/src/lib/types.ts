@@ -37,6 +37,55 @@ export interface StandingTeam {
   logoUrl: string | null;
 }
 
+export type MatchStatus =
+  | "SCHEDULED"
+  | "LIVE"
+  | "HALFTIME"
+  | "FINISHED"
+  | "POSTPONED"
+  | "CANCELLED";
+
+export interface MatchTeam {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+}
+
+export interface MatchCompetition {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+}
+
+export interface Match {
+  id: string;
+  competitionId: string;
+  competition: MatchCompetition;
+  seasonId: string;
+  homeTeamId: string;
+  homeTeam: MatchTeam;
+  awayTeamId: string;
+  awayTeam: MatchTeam;
+  kickoffAt: string;
+  status: MatchStatus;
+  homeScore: number | null;
+  awayScore: number | null;
+}
+
+export interface LiveMatchState {
+  matchId: string;
+  status: MatchStatus;
+  minute: number | null;
+  homeScore: number;
+  awayScore: number;
+  lastEventSeq: number;
+  updatedAt: string;
+}
+
+export interface MatchDetail extends Match {
+  liveState: LiveMatchState | null;
+}
+
 export interface Standing {
   id: string;
   seasonId: string;

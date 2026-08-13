@@ -22,6 +22,12 @@ export function NavBar() {
           >
             Giải đấu
           </Link>
+          <Link
+            href="/matches"
+            className="hover:text-zinc-900 dark:hover:text-zinc-50"
+          >
+            Lịch thi đấu
+          </Link>
         </nav>
       </Container>
     </header>
