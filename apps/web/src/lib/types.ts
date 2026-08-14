@@ -150,6 +150,18 @@ export interface FavoritePlayerItem {
   teamId: string | null;
 }
 
+export type MatchResult = "WIN" | "DRAW" | "LOSS";
+
+export interface RecentFormEntry {
+  matchId: string;
+  result: MatchResult;
+  homeScore: number;
+  awayScore: number;
+  isHome: boolean;
+  opponent: StandingTeam;
+  kickoffAt: string;
+}
+
 export interface Standing {
   id: string;
   seasonId: string;
@@ -164,4 +176,6 @@ export interface Standing {
   gd: number;
   points: number;
   team: StandingTeam;
+  /** Last 5 FINISHED matches in this season, oldest -> newest (see apps/api/src/routes/standings.ts). */
+  recentForm: RecentFormEntry[];
 }
