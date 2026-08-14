@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
-import { competitionDisplayName, competitionTypeMeta } from "@/lib/format";
+import { competitionDisplayName, competitionTypeMeta, formatSeasonRange } from "@/lib/format";
 import type { CompetitionDetail } from "@/lib/types";
 
 // Competition + season list rarely changes — long ISR window is fine.
@@ -17,12 +17,6 @@ async function getCompetition(id: string) {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
   }
-}
-
-function formatSeasonRange(startDate: string, endDate: string): string {
-  const start = new Date(startDate).getFullYear();
-  const end = new Date(endDate).getFullYear();
-  return start === end ? `${start}` : `${start}/${end}`;
 }
 
 export default async function CompetitionDetailPage({

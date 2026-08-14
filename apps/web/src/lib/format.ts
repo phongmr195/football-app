@@ -1,5 +1,20 @@
 import type { BadgeVariant } from "@football-app/ui";
-import type { CompetitionType, ExternalRef, MatchStatus } from "@/lib/types";
+import type { CompetitionType, ExternalRef, MatchResult, MatchStatus } from "@/lib/types";
+
+/** Circle symbol + color for a MatchResult (WIN/DRAW/LOSS), used in standings "form" strips. */
+export function matchResultMeta(result: MatchResult): { symbol: string; className: string } {
+  switch (result) {
+    case "WIN":
+      return { symbol: "✓", className: "bg-emerald-500 text-white" };
+    case "DRAW":
+      return {
+        symbol: "–",
+        className: "bg-zinc-300 text-zinc-700 dark:bg-zinc-600 dark:text-zinc-100",
+      };
+    case "LOSS":
+      return { symbol: "✕", className: "bg-red-500 text-white" };
+  }
+}
 
 /**
  * Data providers sometimes use a competition's official/legal name rather than its popular
@@ -73,6 +88,13 @@ export function formatKickoffAt(kickoffAt: string): string {
     minute: "2-digit",
   });
   return `${timePart}, ${datePart}`;
+}
+
+/** Season display range from its start/end dates, e.g. "2025/2026" or "2026" if same year. */
+export function formatSeasonRange(startDate: string, endDate: string): string {
+  const start = new Date(startDate).getFullYear();
+  const end = new Date(endDate).getFullYear();
+  return start === end ? `${start}` : `${start}/${end}`;
 }
 
 /** vi-VN formatted date, e.g. "17/09/1998" — used for a player's date of birth. */
