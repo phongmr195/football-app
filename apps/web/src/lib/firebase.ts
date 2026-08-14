@@ -30,20 +30,27 @@ const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebas
 
 export const auth: Auth = getAuth(app);
 
-// Local dev only: point the client SDK at the Firebase Auth Emulator (started via
+// Local dev default: point the client SDK at the Firebase Auth Emulator (started via
 // `pnpm docker:up`, see docker-compose.yml's `firebase-emulator` service) instead of the real
 // `jankara-e2e-test` project, so signing in while developing never touches real users — this
 // mirrors apps/api's `FIREBASE_AUTH_EMULATOR_HOST` wiring in
 // apps/api/src/middleware/auth.ts. Emulator API is exposed on http://localhost:9099 (UI on
 // :4000), matching the ports docker-compose.yml publishes to the host.
 //
+// Set NEXT_PUBLIC_USE_FIREBASE_EMULATOR=false in apps/web/.env.local to opt OUT and test
+// against the real project instead (needed for real Google-account sign-in — the emulator only
+// accepts fake accounts created via its own UI, it can't talk to real Google). When doing this,
+// apps/api must also stop pointing at the emulator (drop FIREBASE_AUTH_EMULATOR_HOST, set
+// FIREBASE_PROJECT_ID=jankara-e2e-test instead) or token verification will fail — the emulator
+// issues tokens for the fake project demo-football-app, which won't match the real project's
+// aud/iss that apps/api would otherwise expect. Default stays emulator-on for everyone else so
+// routine dev never touches real users.
+//
 // Guards:
 // - `typeof window !== "undefined"`: only connect from the browser. This module also evaluates
 //   during SSR (Node), where attempting an emulator connection serves no purpose.
-// - `process.env.NODE_ENV === "development"`: simplest dev-only switch (no dedicated env var —
-//   there's currently only one local-dev setup, unlike apps/api which also supports a real
-//   `FIREBASE_SERVICE_ACCOUNT` override). Revisit if apps/web ever needs to run `next dev`
-//   against the real `jankara-e2e-test` project.
+// - `process.env.NODE_ENV === "development"`: only in dev — this module's emulator branch is
+//   inert in production builds regardless of the opt-out var above.
 // - `auth.emulatorConfig === null`: `connectAuthEmulator` throws if called twice on the same
 //   `Auth` instance. Checking the instance's own state (rather than a module-level flag) is
 //   robust across Fast Refresh re-evaluating this module, since a fresh `Auth` instance always
@@ -51,6 +58,7 @@ export const auth: Auth = getAuth(app);
 if (
   typeof window !== "undefined" &&
   process.env.NODE_ENV === "development" &&
+  process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR !== "false" &&
   auth.emulatorConfig === null
 ) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099");

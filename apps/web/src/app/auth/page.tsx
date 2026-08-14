@@ -12,7 +12,7 @@ const RECAPTCHA_CONTAINER_ID = "recaptcha-container";
  * Deliberately minimal for Phase 1 auth wiring — not a polished account settings page.
  */
 export default function AuthPage() {
-  const { user, signInWithGoogle, sendPhoneCode, confirmPhoneCode } = useAuth();
+  const { user, signInWithGoogle, signInWithFacebook, sendPhoneCode, confirmPhoneCode } = useAuth();
   const router = useRouter();
 
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -41,6 +41,19 @@ export default function AuthPage() {
       router.push("/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng nhập Google thất bại.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function handleFacebook() {
+    setError(null);
+    setPending(true);
+    try {
+      await signInWithFacebook();
+      router.push("/");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Đăng nhập Facebook thất bại.");
     } finally {
       setPending(false);
     }
@@ -81,6 +94,15 @@ export default function AuthPage() {
       <Card className="flex flex-col gap-6">
         <Button onClick={() => void handleGoogle()} disabled={pending} className="w-full">
           Đăng nhập với Google
+        </Button>
+
+        <Button
+          onClick={() => void handleFacebook()}
+          disabled={pending}
+          variant="secondary"
+          className="w-full"
+        >
+          Đăng nhập với Facebook
         </Button>
 
         <div className="flex items-center gap-3 text-xs text-zinc-400 dark:text-zinc-600">

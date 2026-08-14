@@ -6,6 +6,7 @@
  * "Đăng nhập"/"Đăng xuất" state).
  */
 import {
+  FacebookAuthProvider,
   GoogleAuthProvider,
   RecaptchaVerifier,
   onAuthStateChanged,
@@ -31,6 +32,14 @@ interface AuthContextValue {
   /** True until the first `onAuthStateChanged` callback fires (initial auth check). */
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  /**
+   * Requires the Facebook provider to be enabled in Firebase Console (Authentication ->
+   * Sign-in method -> Facebook) with a real Facebook App ID/Secret, and that Facebook App's
+   * OAuth redirect URI whitelisted to Firebase's handler — see CLAUDE.md § Authentication for
+   * the exact steps. Throws Firebase's own `auth/operation-not-allowed` error if the provider
+   * isn't enabled yet.
+   */
+  signInWithFacebook: () => Promise<void>;
   /**
    * Step 1 of phone sign-in: sends an SMS code. `recaptchaContainerId` must be the id of an
    * empty, currently-mounted DOM element (invisible reCAPTCHA renders into it) — see
@@ -72,6 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithPopup(auth, new GoogleAuthProvider());
   }, []);
 
+  const signInWithFacebook = useCallback(async () => {
+    await signInWithPopup(auth, new FacebookAuthProvider());
+  }, []);
+
   const sendPhoneCode = useCallback(async (phoneNumber: string, recaptchaContainerId: string) => {
     // Reuse a single RecaptchaVerifier per container across retries (e.g. user mistypes the
     // phone number and resubmits) — creating a new one each call without clearing the old one
@@ -110,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         signInWithGoogle,
+        signInWithFacebook,
         sendPhoneCode,
         confirmPhoneCode,
         signOut,
