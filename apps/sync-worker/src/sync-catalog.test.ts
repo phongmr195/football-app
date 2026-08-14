@@ -24,6 +24,7 @@ import {
 // việc có API key thật hay không, xem CLAUDE.md ghi chú "chưa có API key".
 
 const PROVIDER = "test-provider";
+const PROVIDER_B = "test-provider-b";
 const ref = (id: string): ExternalRef => ({ provider: PROVIDER, id });
 
 function makeMockAdapter(overrides: Partial<DataProviderAdapter> = {}): DataProviderAdapter {
@@ -83,12 +84,14 @@ const teamB: CanonicalTeam = {
 };
 
 async function cleanupTestData() {
-  await prisma.standing.deleteMany({ where: { team: { externalRef: { path: ["provider"], equals: PROVIDER } } } });
-  await prisma.match.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
-  await prisma.player.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
-  await prisma.season.deleteMany({ where: { competition: { externalRef: { path: ["provider"], equals: PROVIDER } } } });
-  await prisma.team.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
-  await prisma.competition.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
+  for (const provider of [PROVIDER, PROVIDER_B]) {
+    await prisma.standing.deleteMany({ where: { team: { externalRef: { path: ["provider"], equals: provider } } } });
+    await prisma.match.deleteMany({ where: { externalRef: { path: ["provider"], equals: provider } } });
+    await prisma.player.deleteMany({ where: { externalRef: { path: ["provider"], equals: provider } } });
+    await prisma.season.deleteMany({ where: { competition: { externalRef: { path: ["provider"], equals: provider } } } });
+    await prisma.team.deleteMany({ where: { externalRef: { path: ["provider"], equals: provider } } });
+    await prisma.competition.deleteMany({ where: { externalRef: { path: ["provider"], equals: provider } } });
+  }
 }
 
 beforeEach(cleanupTestData);
@@ -108,7 +111,12 @@ describe("syncCompetitions", () => {
     expect(second.syncedCount).toBe(1);
 
     const rows = await prisma.competition.findMany({
-      where: { externalRef: { path: ["id"], equals: COMPETITION_EXT.id } },
+      where: {
+        AND: [
+          { externalRef: { path: ["provider"], equals: PROVIDER } },
+          { externalRef: { path: ["id"], equals: COMPETITION_EXT.id } },
+        ],
+      },
     });
     expect(rows).toHaveLength(1); // không tạo trùng
     expect(rows[0]?.name).toBe("Test League Updated"); // update áp dụng
@@ -215,5 +223,54 @@ describe("syncStandings + syncMatches", () => {
     expect(dbMatch?.status).toBe("FINISHED");
     expect(dbMatch?.homeScore).toBe(2);
     expect(dbMatch?.awayScore).toBe(1);
+  });
+});
+
+describe("cross-provider id collision (regression, xem bug ghi ở CLAUDE.md § Database)", () => {
+  it("2 provider khác nhau dùng chung numeric id -> tạo 2 competition riêng biệt, không match nhầm", async () => {
+    // Cả 2 provider dùng cùng id số "collide-1" — trước khi fix, findCompetitionByExternalId chỉ
+    // filter theo `id` nên lần sync thứ 2 (provider B) sẽ nhầm match vào row của provider A và
+    // overwrite `name` của nó thay vì tạo row mới.
+    const collidingId = "collide-1";
+    const competitionA: CanonicalCompetition = {
+      externalRef: { provider: PROVIDER, id: collidingId },
+      name: "Provider A League",
+      type: "LEAGUE",
+      countryCode: "VN",
+    };
+    const competitionB: CanonicalCompetition = {
+      externalRef: { provider: PROVIDER_B, id: collidingId },
+      name: "Provider B League",
+      type: "LEAGUE",
+      countryCode: "US",
+    };
+
+    await syncCompetitions(makeMockAdapter({ providerName: PROVIDER, fetchCompetitions: async () => [competitionA] }));
+    await syncCompetitions(
+      makeMockAdapter({ providerName: PROVIDER_B, fetchCompetitions: async () => [competitionB] }),
+    );
+
+    const dbCompetitionA = await prisma.competition.findFirst({
+      where: {
+        AND: [
+          { externalRef: { path: ["provider"], equals: PROVIDER } },
+          { externalRef: { path: ["id"], equals: collidingId } },
+        ],
+      },
+    });
+    const dbCompetitionB = await prisma.competition.findFirst({
+      where: {
+        AND: [
+          { externalRef: { path: ["provider"], equals: PROVIDER_B } },
+          { externalRef: { path: ["id"], equals: collidingId } },
+        ],
+      },
+    });
+
+    expect(dbCompetitionA).not.toBeNull();
+    expect(dbCompetitionB).not.toBeNull();
+    expect(dbCompetitionA?.id).not.toBe(dbCompetitionB?.id); // 2 row riêng biệt, không phải cùng 1 row
+    expect(dbCompetitionA?.name).toBe("Provider A League"); // không bị provider B overwrite
+    expect(dbCompetitionB?.name).toBe("Provider B League");
   });
 });

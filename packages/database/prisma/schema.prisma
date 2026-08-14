@@ -110,6 +110,9 @@ model Competition {
   type        CompetitionType
   countryCode String?
   logoUrl     String?
+  // Unique expression index on (externalRef->>'provider', externalRef->>'id') — raw migration
+  // 20260814000000_add_external_ref_provider_id_unique_index, KHÔNG hiện trong schema này (Prisma
+  // DSL không hỗ trợ expression index). Xem CLAUDE.md § Database.
   externalRef Json?
 
   seasons Season[]

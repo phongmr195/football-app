@@ -5,21 +5,40 @@ import { prisma } from "@football-app/database";
 // syncStandings/syncMatches cần competition+season đã sync, syncMatches cần team đã sync.
 // Đây là "cron đơn giản" cho Phase 1 (ROADMAP) — chưa cần Step Functions/adaptive polling.
 
-async function findCompetitionByExternalId(externalId: string) {
+// Luôn filter theo CẢ provider VÀ id — 2 provider khác nhau có thể trùng id số (vd api-football
+// id "39" vs football-data.org id "39" là 2 giải khác nhau). Filter chỉ theo id có thể match nhầm
+// row của provider khác, silently corrupt/overwrite data (xem migration
+// 20260814000000_add_external_ref_provider_id_unique_index cho DB-level safety net tương ứng).
+async function findCompetitionByExternalId(provider: string, externalId: string) {
   return prisma.competition.findFirst({
-    where: { externalRef: { path: ["id"], equals: externalId } },
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: provider } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
   });
 }
 
-async function findTeamByExternalId(externalId: string) {
+async function findTeamByExternalId(provider: string, externalId: string) {
   return prisma.team.findFirst({
-    where: { externalRef: { path: ["id"], equals: externalId } },
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: provider } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
   });
 }
 
-async function findPlayerByExternalId(externalId: string) {
+async function findPlayerByExternalId(provider: string, externalId: string) {
   return prisma.player.findFirst({
-    where: { externalRef: { path: ["id"], equals: externalId } },
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: provider } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
   });
 }
 
@@ -27,7 +46,7 @@ export async function syncCompetitions(adapter: DataProviderAdapter) {
   const competitions = await adapter.fetchCompetitions();
 
   for (const c of competitions) {
-    const existing = await findCompetitionByExternalId(c.externalRef.id);
+    const existing = await findCompetitionByExternalId(adapter.providerName, c.externalRef.id);
     const data = {
       name: c.name,
       type: c.type,
@@ -46,7 +65,7 @@ export async function syncCompetitions(adapter: DataProviderAdapter) {
 }
 
 export async function syncSeasons(adapter: DataProviderAdapter, competitionExternalRef: ExternalRef) {
-  const competition = await findCompetitionByExternalId(competitionExternalRef.id);
+  const competition = await findCompetitionByExternalId(adapter.providerName, competitionExternalRef.id);
   if (!competition) {
     throw new Error(`competition chưa được sync: ${competitionExternalRef.id} — chạy syncCompetitions trước`);
   }
@@ -74,8 +93,8 @@ export async function syncSeasons(adapter: DataProviderAdapter, competitionExter
   return { syncedCount: seasons.length };
 }
 
-async function findSeason(competitionExternalRef: ExternalRef, seasonExternalRef: ExternalRef) {
-  const competition = await findCompetitionByExternalId(competitionExternalRef.id);
+async function findSeason(provider: string, competitionExternalRef: ExternalRef, seasonExternalRef: ExternalRef) {
+  const competition = await findCompetitionByExternalId(provider, competitionExternalRef.id);
   if (!competition) {
     throw new Error(`competition chưa được sync: ${competitionExternalRef.id} — chạy syncCompetitions trước`);
   }
@@ -97,7 +116,7 @@ export async function syncTeams(
   const teams = await adapter.fetchTeams(competitionExternalRef, seasonExternalRef);
 
   for (const t of teams) {
-    const existing = await findTeamByExternalId(t.externalRef.id);
+    const existing = await findTeamByExternalId(adapter.providerName, t.externalRef.id);
     const data = {
       name: t.name,
       shortName: t.shortName,
@@ -121,7 +140,7 @@ export async function syncPlayers(
   teamExternalRef: ExternalRef,
   seasonExternalRef: ExternalRef,
 ) {
-  const team = await findTeamByExternalId(teamExternalRef.id);
+  const team = await findTeamByExternalId(adapter.providerName, teamExternalRef.id);
   if (!team) {
     throw new Error(`team chưa được sync: ${teamExternalRef.id} — chạy syncTeams trước`);
   }
@@ -129,7 +148,7 @@ export async function syncPlayers(
   const players = await adapter.fetchPlayers(teamExternalRef, seasonExternalRef);
 
   for (const p of players) {
-    const existing = await findPlayerByExternalId(p.externalRef.id);
+    const existing = await findPlayerByExternalId(adapter.providerName, p.externalRef.id);
     const data = {
       name: p.name,
       dateOfBirth: p.dateOfBirth ? new Date(p.dateOfBirth) : undefined,
@@ -153,12 +172,12 @@ export async function syncStandings(
   competitionExternalRef: ExternalRef,
   seasonExternalRef: ExternalRef,
 ) {
-  const { season } = await findSeason(competitionExternalRef, seasonExternalRef);
+  const { season } = await findSeason(adapter.providerName, competitionExternalRef, seasonExternalRef);
   const rows = await adapter.fetchStandings(competitionExternalRef, seasonExternalRef);
 
   let skipped = 0;
   for (const row of rows) {
-    const team = await findTeamByExternalId(row.teamExternalRef.id);
+    const team = await findTeamByExternalId(adapter.providerName, row.teamExternalRef.id);
     if (!team) {
       skipped++;
       continue; // team lạ (chưa sync) — bỏ qua, không chặn cả job
@@ -200,20 +219,25 @@ export async function syncMatches(
   competitionExternalRef: ExternalRef,
   seasonExternalRef: ExternalRef,
 ) {
-  const { competition, season } = await findSeason(competitionExternalRef, seasonExternalRef);
+  const { competition, season } = await findSeason(adapter.providerName, competitionExternalRef, seasonExternalRef);
   const matches = await adapter.fetchMatches(competitionExternalRef, seasonExternalRef);
 
   let skipped = 0;
   for (const m of matches) {
-    const homeTeam = await findTeamByExternalId(m.homeTeamExternalRef.id);
-    const awayTeam = await findTeamByExternalId(m.awayTeamExternalRef.id);
+    const homeTeam = await findTeamByExternalId(adapter.providerName, m.homeTeamExternalRef.id);
+    const awayTeam = await findTeamByExternalId(adapter.providerName, m.awayTeamExternalRef.id);
     if (!homeTeam || !awayTeam) {
       skipped++;
       continue; // team lạ (chưa sync) — bỏ qua, không chặn cả job
     }
 
     const existing = await prisma.match.findFirst({
-      where: { externalRef: { path: ["id"], equals: m.externalRef.id } },
+      where: {
+        AND: [
+          { externalRef: { path: ["provider"], equals: adapter.providerName } },
+          { externalRef: { path: ["id"], equals: m.externalRef.id } },
+        ],
+      },
     });
     const data = {
       competitionId: competition.id,
