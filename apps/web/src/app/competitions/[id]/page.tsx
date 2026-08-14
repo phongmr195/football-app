@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
-import { competitionTypeMeta } from "@/lib/format";
+import { BackButton } from "@/components/BackButton";
+import { competitionDisplayName, competitionTypeMeta } from "@/lib/format";
 import type { CompetitionDetail } from "@/lib/types";
 
 // Competition + season list rarely changes — long ISR window is fine.
@@ -35,17 +36,19 @@ export default async function CompetitionDetailPage({
   if (!competition) notFound();
 
   const { label, variant } = competitionTypeMeta(competition.type);
+  const displayName = competitionDisplayName(competition);
   const seasons = [...competition.seasons].sort(
     (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
   );
 
   return (
     <Container size="md" className="py-10">
+      <BackButton />
       <Card className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center">
         {competition.logoUrl ? (
           <Image
             src={competition.logoUrl}
-            alt={competition.name}
+            alt={displayName}
             width={64}
             height={64}
             className="h-16 w-16 object-contain"
@@ -55,7 +58,7 @@ export default async function CompetitionDetailPage({
         )}
         <div className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-            {competition.name}
+            {displayName}
           </h1>
           <div className="flex items-center gap-2">
             <Badge variant={variant}>{label}</Badge>

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
+import { cors } from "hono/cors";
 import { healthRoute } from "./routes/health";
 import { competitionsRoute } from "./routes/competitions";
 import { teamsRoute } from "./routes/teams";
@@ -12,6 +13,28 @@ import { favoritesRoute } from "./routes/favorites";
 export const app = new Hono();
 
 app.use(logger());
+// apps/web's Client Components (e.g. favorites, MatchFilters' season lookup) call apps/api
+// directly from the browser via apiGetClient/apiMutateClient (lib/api-client.ts) — those are
+// cross-origin requests (web runs on its own Next.js dev/prod port, api on PORT above), so
+// without this the browser blocks them with a CORS error before our own auth/route logic
+// even runs. `next dev` picks whatever port is free (3000/3001/3002...) when the default is
+// taken, so the default list covers the common local range; override via CORS_ORIGIN
+// (comma-separated) for other environments (e.g. a deployed apps/web origin).
+const corsOrigins = (
+  process.env.CORS_ORIGIN ?? "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+)
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+app.use(
+  "*",
+  cors({
+    origin: corsOrigins,
+    // Auth is a manually-attached `Authorization: Bearer <idToken>` header (see
+    // apiGetClient/apiMutateClient), not cookies, so no need for credentialed CORS.
+    allowHeaders: ["Content-Type", "Authorization"],
+  })
+);
 app.route("/", healthRoute);
 app.route("/", competitionsRoute);
 app.route("/", teamsRoute);

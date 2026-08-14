@@ -9,13 +9,20 @@
 
 export type CompetitionType = "LEAGUE" | "CUP" | "INTERNATIONAL";
 
+/** Matches packages/data-provider's ExternalRef shape — {provider, id} identifies the row
+ * within whichever data provider synced it (see CLAUDE.md § Data provider). */
+export interface ExternalRef {
+  provider: string;
+  id: string;
+}
+
 export interface Competition {
   id: string;
   name: string;
   type: CompetitionType;
   countryCode: string | null;
   logoUrl: string | null;
-  externalRef: unknown;
+  externalRef: ExternalRef;
 }
 
 export interface Season {
@@ -55,6 +62,7 @@ export interface MatchCompetition {
   id: string;
   name: string;
   logoUrl: string | null;
+  externalRef: ExternalRef;
 }
 
 export interface Match {
@@ -102,7 +110,7 @@ export interface Team {
   countryCode: string | null;
   founded: number | null;
   stadiumId: string | null;
-  externalRef: unknown;
+  externalRef: ExternalRef;
 }
 
 export interface TeamDetail extends Team {
@@ -117,7 +125,7 @@ export interface Player {
   position: string | null;
   heightCm: number | null;
   teamId: string | null;
-  externalRef: unknown;
+  externalRef: ExternalRef;
 }
 
 export interface PlayerDetail extends Player {
