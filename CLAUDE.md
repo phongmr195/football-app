@@ -80,7 +80,26 @@ pnpm docker:down
 - Middleware auth dùng chung cho MỌI client (web, mobile) — không có logic riêng theo client.
 
 ### Database (`packages/database`)
-- Model mới trong `schema.prisma`: id dùng `String @id @default(cuid())`, tên bảng snake_case qua `@@map("...")`, thêm `external_ref Json?` nếu entity map với data provider.
+- Model mới trong `schema.prisma`: id dùng `String @id @default(cuid())`, tên bảng snake_case qua `@@map("...")`, thêm `externalRef Json?` (field name camelCase, KHÔNG `@map` — cột DB thật cũng là `"externalRef"` camelCase, xem migration init) nếu entity map với data provider. Shape bắt buộc `{ provider: string, id: string }` (`ExternalRef` trong `packages/data-provider/src/types.ts`).
+- **Model có `externalRef Json?` BẮT BUỘC đi kèm 1 unique expression index** trên `(externalRef->>'provider', externalRef->>'id')`, partial `WHERE "externalRef" IS NOT NULL` — lý do: 2 provider khác nhau (vd `api-football` id "39" vs `football-data` id "39") có thể trùng id số dù là 2 entity thật khác nhau; nếu code chỉ lookup theo `id` mà quên `provider`, `findFirst` có thể match nhầm row và silently overwrite data (bug thật tìm thấy 2026-08-14 ở `apps/sync-worker/src/sync-catalog.ts`, xem migration `20260814000000_add_external_ref_provider_id_unique_index`). Index này là **expression/functional index — không biểu diễn được trong Prisma schema DSL** (Prisma không có cú pháp cho index trên biểu thức JSON), nên phải viết migration tay theo style `packages/database/prisma/migrations/20260813000000_rename_cognito_sub_to_firebase_uid/migration.sql` (SQL thuần + comment giải thích), KHÔNG hiện trong `schema.prisma`/`prisma db pull`. Mẫu SQL (đổi tên bảng/index cho đúng model mới):
+  ```sql
+  CREATE UNIQUE INDEX "<table>_external_ref_provider_id_key"
+    ON "<table>" (("externalRef"->>'provider'), ("externalRef"->>'id'))
+    WHERE "externalRef" IS NOT NULL;
+  ```
+  Dùng B-tree (mặc định), KHÔNG dùng GIN — đây là exact-match lookup, không phải containment query.
+- **Lookup theo `externalRef` LUÔN LUÔN filter cả `provider` VÀ `id`, KHÔNG BAO GIỜ filter chỉ `id`** — đây chính là bug đã tìm thấy ở trên. Prisma JSON "AND 2 path điều kiện":
+  ```ts
+  prisma.<model>.findFirst({
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: provider } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
+  })
+  ```
+  Hàm lookup nên nhận `provider` qua tham số (lấy từ `adapter.providerName`, xem `DataProviderAdapter`), không đọc từ global.
 - Sau khi sửa schema: `pnpm db:generate`, rồi migration khi có DB thật (`pnpm db:migrate`).
 - Dùng skill `add-prisma-model` khi thêm model mới.
 - Sửa tay data sai từ provider (Phase 1, chưa có `apps/admin`) → `pnpm db:studio` (Prisma Studio, đã verify chạy thật) — không viết tool riêng trừ khi Prisma Studio thật sự không đủ.
