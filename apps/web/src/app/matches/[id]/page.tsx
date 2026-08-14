@@ -3,7 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
-import { formatKickoffAt, matchStatusMeta } from "@/lib/format";
+import { BackButton } from "@/components/BackButton";
+import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
 import type { MatchDetail } from "@/lib/types";
 
 // A single match's data (score/status) is essentially frozen once FINISHED, and there's no
@@ -31,9 +32,11 @@ export default async function MatchDetailPage({
 
   const { label, variant } = matchStatusMeta(match.status);
   const hasScore = match.homeScore !== null && match.awayScore !== null;
+  const competitionName = competitionDisplayName(match.competition);
 
   return (
     <Container size="md" className="py-10">
+      <BackButton />
       <Link
         href={`/competitions/${match.competition.id}`}
         className="mb-6 flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
@@ -41,13 +44,13 @@ export default async function MatchDetailPage({
         {match.competition.logoUrl ? (
           <Image
             src={match.competition.logoUrl}
-            alt={match.competition.name}
+            alt={competitionName}
             width={20}
             height={20}
             className="h-5 w-5 object-contain"
           />
         ) : null}
-        <span>{match.competition.name}</span>
+        <span>{competitionName}</span>
       </Link>
 
       <Card className="flex flex-col items-center gap-6 py-8">

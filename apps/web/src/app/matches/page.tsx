@@ -1,9 +1,17 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Badge, Card, Container } from "@football-app/ui";
+import { redirect } from "next/navigation";
+import { Badge, Card, Container, Pagination } from "@football-app/ui";
 import { apiGet, type ApiListResponse } from "@/lib/api-client";
-import { formatKickoffAt, matchStatusMeta } from "@/lib/format";
-import type { Match, MatchStatus } from "@/lib/types";
+import { MatchFilters } from "@/components/MatchFilters";
+import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
+import type { Competition, CompetitionDetail, Match, MatchStatus } from "@/lib/types";
+
+// Đây là provider mặc định hiện tại của sync-worker (xem CLAUDE.md § Data provider) — cùng 1
+// giải thật có thể có 2 row (1 mỗi provider, vd Premier League từ api-football lẫn từ
+// football-data) nếu cả 2 đều được sync match data. Lọc theo provider này để dropdown filter
+// không hiện trùng tên giải, và để chọn default competition/season nhất quán với data mới nhất.
+const DEFAULT_PROVIDER = "football-data";
 
 // Matches list — historical + scheduled fixtures. No live-polling here (Phase 2, not built
 // yet per ROADMAP) — a moderate ISR window keeps this reasonably fresh without hammering
@@ -22,22 +30,54 @@ const STATUS_VALUES: MatchStatus[] = [
 async function getMatches(
   page: number,
   competitionId?: string,
+  seasonId?: string,
   status?: MatchStatus
 ) {
   return apiGet<ApiListResponse<Match>>("/matches", {
     page,
     competitionId,
+    seasonId,
     status,
   });
+}
+
+/**
+ * Competitions that actually have synced matches, for the competition filter dropdown.
+ * Scoped to DEFAULT_PROVIDER so the same real-world competition doesn't show up twice when
+ * more than one provider happens to have match data for it.
+ */
+async function getFilterableCompetitions() {
+  const { items } = await apiGet<ApiListResponse<Competition>>("/competitions", {
+    hasMatches: true,
+    provider: DEFAULT_PROVIDER,
+    pageSize: 50,
+  });
+  return items;
+}
+
+/** competitionId not chosen by the user yet — pick a sensible default from the filterable list. */
+function pickDefaultCompetition(competitions: Competition[]): Competition | undefined {
+  return competitions.find((c) => c.name === "Premier League") ?? competitions[0];
+}
+
+/** seasonId not chosen by the user yet — pick the current season, else the most recent one. */
+async function pickDefaultSeasonId(competitionId: string): Promise<string | undefined> {
+  const detail = await apiGet<CompetitionDetail>(`/competitions/${competitionId}`);
+  // seasons đã sắp xếp startDate desc từ API — items[0] chính là mùa gần nhất nếu không có
+  // mùa nào isCurrent (ví dụ giải đã kết thúc hẳn, không còn mùa "đang diễn ra").
+  const season = detail.seasons.find((s) => s.isCurrent) ?? detail.seasons[0];
+  return season?.id;
 }
 
 function buildHref(params: {
   page?: number;
   competitionId?: string;
+  seasonId?: string;
   status?: MatchStatus;
 }): string {
   const searchParams = new URLSearchParams();
   if (params.competitionId) searchParams.set("competitionId", params.competitionId);
+  if (params.seasonId) searchParams.set("seasonId", params.seasonId);
   if (params.status) searchParams.set("status", params.status);
   if (params.page && params.page > 1) searchParams.set("page", String(params.page));
   const query = searchParams.toString();
@@ -47,11 +87,17 @@ function buildHref(params: {
 export default async function MatchesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; competitionId?: string; status?: string }>;
+  searchParams: Promise<{
+    page?: string;
+    competitionId?: string;
+    seasonId?: string;
+    status?: string;
+  }>;
 }) {
   const {
     page: pageParam,
-    competitionId,
+    competitionId: competitionIdParam,
+    seasonId: seasonIdParam,
     status: statusParam,
   } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
@@ -59,7 +105,27 @@ export default async function MatchesPage({
     ? (statusParam as MatchStatus)
     : undefined;
 
-  const { items, pageSize, total } = await getMatches(page, competitionId, status);
+  const filterableCompetitions = await getFilterableCompetitions();
+
+  // Lần đầu vào trang (chưa chọn competitionId/seasonId) — mặc định chọn 1 giải + mùa gần
+  // nhất thay vì hiện "Tất cả" (4000+ trận không lọc gì không phải trải nghiệm mặc định tốt).
+  // Resolve xong thì redirect 1 lần để URL phản ánh đúng giá trị đang áp dụng (client
+  // MatchFilters đọc state từ URL qua useSearchParams, không nhận prop riêng cho default).
+  let competitionId = competitionIdParam;
+  let seasonId = seasonIdParam;
+
+  if (!competitionId) {
+    competitionId = pickDefaultCompetition(filterableCompetitions)?.id;
+  }
+  if (competitionId && !seasonId) {
+    seasonId = await pickDefaultSeasonId(competitionId);
+  }
+
+  if (competitionId !== competitionIdParam || seasonId !== seasonIdParam) {
+    redirect(buildHref({ competitionId, seasonId, status }));
+  }
+
+  const { items, pageSize, total } = await getMatches(page, competitionId, seasonId, status);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -73,9 +139,11 @@ export default async function MatchesPage({
         </p>
       </div>
 
+      <MatchFilters competitions={filterableCompetitions} />
+
       <div className="mb-6 flex flex-wrap items-center gap-2 text-sm">
         <Link
-          href={buildHref({ competitionId })}
+          href={buildHref({ competitionId, seasonId })}
           className={
             !status
               ? "rounded-full bg-zinc-900 px-3 py-1 text-white dark:bg-zinc-50 dark:text-zinc-900"
@@ -90,7 +158,7 @@ export default async function MatchesPage({
           return (
             <Link
               key={value}
-              href={buildHref({ competitionId, status: value })}
+              href={buildHref({ competitionId, seasonId, status: value })}
               className={
                 isActive
                   ? "rounded-full bg-zinc-900 px-3 py-1 text-white dark:bg-zinc-50 dark:text-zinc-900"
@@ -112,6 +180,7 @@ export default async function MatchesPage({
           {items.map((match) => {
             const { label, variant } = matchStatusMeta(match.status);
             const hasScore = match.homeScore !== null && match.awayScore !== null;
+            const competitionName = competitionDisplayName(match.competition);
             return (
               <li key={match.id}>
                 {/* Note: team name/logo below link to /teams/[id], so the match link can't
@@ -126,13 +195,13 @@ export default async function MatchesPage({
                       {match.competition.logoUrl ? (
                         <Image
                           src={match.competition.logoUrl}
-                          alt={match.competition.name}
+                          alt={competitionName}
                           width={16}
                           height={16}
                           className="h-4 w-4 object-contain"
                         />
                       ) : null}
-                      <span>{match.competition.name}</span>
+                      <span>{competitionName}</span>
                     </div>
                     <span>{formatKickoffAt(match.kickoffAt)}</span>
                   </Link>
@@ -196,31 +265,15 @@ export default async function MatchesPage({
         </ul>
       )}
 
-      <nav className="mt-8 flex items-center justify-center gap-4 text-sm">
-        {page > 1 ? (
-          <Link
-            href={buildHref({ page: page - 1, competitionId, status })}
-            className="text-zinc-700 hover:underline dark:text-zinc-300"
-          >
-            &larr; Trang trước
-          </Link>
-        ) : (
-          <span className="text-zinc-400 dark:text-zinc-600">&larr; Trang trước</span>
-        )}
-        <span className="text-zinc-500 dark:text-zinc-400">
-          {page} / {totalPages}
-        </span>
-        {page < totalPages ? (
-          <Link
-            href={buildHref({ page: page + 1, competitionId, status })}
-            className="text-zinc-700 hover:underline dark:text-zinc-300"
-          >
-            Trang sau &rarr;
-          </Link>
-        ) : (
-          <span className="text-zinc-400 dark:text-zinc-600">Trang sau &rarr;</span>
-        )}
-      </nav>
+      <div className="mt-8">
+        <Pagination
+          currentPage={page}
+          totalPages={totalPages}
+          buildHref={(targetPage) =>
+            buildHref({ page: targetPage, competitionId, seasonId, status })
+          }
+        />
+      </div>
     </Container>
   );
 }

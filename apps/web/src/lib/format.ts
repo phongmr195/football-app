@@ -1,5 +1,24 @@
 import type { BadgeVariant } from "@football-app/ui";
-import type { CompetitionType, MatchStatus } from "@/lib/types";
+import type { CompetitionType, ExternalRef, MatchStatus } from "@/lib/types";
+
+/**
+ * Data providers sometimes use a competition's official/legal name rather than its popular
+ * commercial name — e.g. football-data.org names Spain's top league "Primera Division"
+ * (id 2014), not "La Liga" (a brand name adopted ~2016). This is accurate provider data, not
+ * a bug — the override here is purely a display-layer rename, the stored name/DB row is
+ * untouched. Keyed by `${externalRef.provider}:${externalRef.id}`, NOT by name — "Primera
+ * Division" alone collides with El Salvador/Guatemala/Nicaragua/Cuba's leagues (verified via
+ * psql), so a name-only lookup would have mislabeled those too.
+ */
+const COMPETITION_DISPLAY_NAME_OVERRIDES: Record<string, string> = {
+  "football-data:2014": "La Liga",
+};
+
+/** Display name for a competition, applying COMPETITION_DISPLAY_NAME_OVERRIDES if one exists. */
+export function competitionDisplayName(competition: { name: string; externalRef: ExternalRef }): string {
+  const key = `${competition.externalRef.provider}:${competition.externalRef.id}`;
+  return COMPETITION_DISPLAY_NAME_OVERRIDES[key] ?? competition.name;
+}
 
 /** Vietnamese label + Badge variant for a CompetitionType, for consistent display. */
 export function competitionTypeMeta(type: CompetitionType): {

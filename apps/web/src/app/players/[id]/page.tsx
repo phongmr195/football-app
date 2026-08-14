@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
+import { BackButton } from "@/components/BackButton";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { formatDate, playerPositionMeta } from "@/lib/format";
 import type { PlayerDetail } from "@/lib/types";
@@ -36,6 +37,7 @@ export default async function PlayerDetailPage({
 
   return (
     <Container size="md" className="py-10">
+      <BackButton />
       <Card className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="h-20 w-20 shrink-0 rounded-full bg-zinc-100 dark:bg-zinc-800" />
         <div className="flex flex-col gap-2">

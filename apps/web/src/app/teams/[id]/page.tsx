@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet, type ApiListResponse } from "@/lib/api-client";
+import { BackButton } from "@/components/BackButton";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { playerPositionMeta } from "@/lib/format";
 import type { Player, TeamDetail } from "@/lib/types";
@@ -44,6 +45,7 @@ export default async function TeamDetailPage({
 
   return (
     <Container size="md" className="py-10">
+      <BackButton />
       <Card className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center">
         {team.logoUrl ? (
           <Image

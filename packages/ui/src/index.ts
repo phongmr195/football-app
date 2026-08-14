@@ -10,4 +10,7 @@ export type { BadgeProps, BadgeVariant } from "./components/Badge";
 export { Container } from "./components/Container";
 export type { ContainerProps, ContainerSize } from "./components/Container";
 
+export { Pagination } from "./components/Pagination";
+export type { PaginationProps } from "./components/Pagination";
+
 export { cn } from "./utils/cn";

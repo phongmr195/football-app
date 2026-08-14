@@ -6,6 +6,7 @@ import { z } from "zod";
 
 const matchesQuerySchema = paginationQuerySchema.extend({
   competitionId: z.string().optional(),
+  seasonId: z.string().optional(),
   status: z
     .enum(["SCHEDULED", "LIVE", "HALFTIME", "FINISHED", "POSTPONED", "CANCELLED"])
     .optional(),
@@ -15,9 +16,10 @@ const teamSelect = { id: true, name: true, logoUrl: true } as const;
 
 export const matchesRoute = new Hono()
   .get("/matches", zValidator("query", matchesQuerySchema), async (c) => {
-    const { page, pageSize, competitionId, status } = c.req.valid("query");
+    const { page, pageSize, competitionId, seasonId, status } = c.req.valid("query");
     const where = {
       ...(competitionId ? { competitionId } : {}),
+      ...(seasonId ? { seasonId } : {}),
       ...(status ? { status } : {}),
     };
     const [items, total] = await Promise.all([
@@ -29,7 +31,7 @@ export const matchesRoute = new Hono()
         include: {
           homeTeam: { select: teamSelect },
           awayTeam: { select: teamSelect },
-          competition: { select: { id: true, name: true, logoUrl: true } },
+          competition: { select: { id: true, name: true, logoUrl: true, externalRef: true } },
         },
       }),
       prisma.match.count({ where }),
@@ -43,7 +45,7 @@ export const matchesRoute = new Hono()
       include: {
         homeTeam: { select: teamSelect },
         awayTeam: { select: teamSelect },
-        competition: { select: { id: true, name: true, logoUrl: true } },
+        competition: { select: { id: true, name: true, logoUrl: true, externalRef: true } },
         liveState: true,
       },
     });

@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Card, Container } from "@football-app/ui";
 import { apiGet } from "@/lib/api-client";
+import { BackButton } from "@/components/BackButton";
 import type { Standing } from "@/lib/types";
 
 // Standings can shift after each matchday — shorter ISR window than the mostly-static
@@ -34,6 +35,7 @@ export default async function StandingsPage({
 
   return (
     <Container size="md" className="py-10">
+      <BackButton />
       <h1 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         Bảng xếp hạng
       </h1>
