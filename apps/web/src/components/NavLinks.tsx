@@ -6,8 +6,8 @@ import { cn } from "@football-app/ui";
 
 const LINKS = [
   { href: "/competitions", label: "Giải đấu" },
+  { href: "/standings", label: "Bảng xếp hạng" },
   { href: "/matches", label: "Lịch thi đấu" },
-  { href: "/favorites", label: "Yêu thích" },
 ];
 
 /**

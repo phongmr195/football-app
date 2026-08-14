@@ -4,14 +4,13 @@ import { redirect } from "next/navigation";
 import { Badge, Card, Container, Pagination } from "@football-app/ui";
 import { apiGet, type ApiListResponse } from "@/lib/api-client";
 import { MatchFilters } from "@/components/MatchFilters";
+import {
+  getFilterableCompetitions,
+  pickDefaultCompetition,
+  pickDefaultSeasonId,
+} from "@/lib/default-selection";
 import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
-import type { Competition, CompetitionDetail, Match, MatchStatus } from "@/lib/types";
-
-// Đây là provider mặc định hiện tại của sync-worker (xem CLAUDE.md § Data provider) — cùng 1
-// giải thật có thể có 2 row (1 mỗi provider, vd Premier League từ api-football lẫn từ
-// football-data) nếu cả 2 đều được sync match data. Lọc theo provider này để dropdown filter
-// không hiện trùng tên giải, và để chọn default competition/season nhất quán với data mới nhất.
-const DEFAULT_PROVIDER = "football-data";
+import type { Match, MatchStatus } from "@/lib/types";
 
 // Matches list — historical + scheduled fixtures. No live-polling here (Phase 2, not built
 // yet per ROADMAP) — a moderate ISR window keeps this reasonably fresh without hammering
@@ -39,34 +38,6 @@ async function getMatches(
     seasonId,
     status,
   });
-}
-
-/**
- * Competitions that actually have synced matches, for the competition filter dropdown.
- * Scoped to DEFAULT_PROVIDER so the same real-world competition doesn't show up twice when
- * more than one provider happens to have match data for it.
- */
-async function getFilterableCompetitions() {
-  const { items } = await apiGet<ApiListResponse<Competition>>("/competitions", {
-    hasMatches: true,
-    provider: DEFAULT_PROVIDER,
-    pageSize: 50,
-  });
-  return items;
-}
-
-/** competitionId not chosen by the user yet — pick a sensible default from the filterable list. */
-function pickDefaultCompetition(competitions: Competition[]): Competition | undefined {
-  return competitions.find((c) => c.name === "Premier League") ?? competitions[0];
-}
-
-/** seasonId not chosen by the user yet — pick the current season, else the most recent one. */
-async function pickDefaultSeasonId(competitionId: string): Promise<string | undefined> {
-  const detail = await apiGet<CompetitionDetail>(`/competitions/${competitionId}`);
-  // seasons đã sắp xếp startDate desc từ API — items[0] chính là mùa gần nhất nếu không có
-  // mùa nào isCurrent (ví dụ giải đã kết thúc hẳn, không còn mùa "đang diễn ra").
-  const season = detail.seasons.find((s) => s.isCurrent) ?? detail.seasons[0];
-  return season?.id;
 }
 
 function buildHref(params: {

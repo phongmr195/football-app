@@ -13,6 +13,22 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "crests.football-data.org",
       },
+      {
+        // Google sign-in avatar (Firebase Auth user.photoURL).
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+      {
+        // Facebook sign-in avatar (Firebase Auth user.photoURL) — xác nhận thật (2026-08):
+        // dạng https://graph.facebook.com/<id>/picture, KHÔNG phải platform-lookaside.fbsbx.com
+        // như đoán ban đầu — giữ cả 2 host vì Facebook có thể trả dạng khác tuỳ trường hợp.
+        protocol: "https",
+        hostname: "graph.facebook.com",
+      },
+      {
+        protocol: "https",
+        hostname: "platform-lookaside.fbsbx.com",
+      },
     ],
   },
 };

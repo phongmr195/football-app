@@ -1,8 +1,15 @@
 import Image from "next/image";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Card, Container } from "@football-app/ui";
 import { apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
+import { StandingsFilters } from "@/components/StandingsFilters";
+import {
+  getFilterableCompetitions,
+  pickDefaultCompetition,
+  pickDefaultSeasonId,
+} from "@/lib/default-selection";
 import type { Standing } from "@/lib/types";
 
 // Standings can shift after each matchday — shorter ISR window than the mostly-static
@@ -12,6 +19,14 @@ export const revalidate = 300;
 async function getStandings(seasonId: string) {
   const { items } = await apiGet<{ items: Standing[] }>("/standings", { seasonId });
   return items;
+}
+
+function buildHref(params: { competitionId?: string; seasonId?: string }): string {
+  const searchParams = new URLSearchParams();
+  if (params.competitionId) searchParams.set("competitionId", params.competitionId);
+  if (params.seasonId) searchParams.set("seasonId", params.seasonId);
+  const query = searchParams.toString();
+  return query ? `/standings?${query}` : "/standings";
 }
 
 const columns: { key: keyof Standing; label: string }[] = [
@@ -26,12 +41,36 @@ const columns: { key: keyof Standing; label: string }[] = [
 ];
 
 export default async function StandingsPage({
-  params,
+  searchParams,
 }: {
-  params: Promise<{ seasonId: string }>;
+  searchParams: Promise<{ competitionId?: string; seasonId?: string }>;
 }) {
-  const { seasonId } = await params;
-  const standings = await getStandings(seasonId);
+  const {
+    competitionId: competitionIdParam,
+    seasonId: seasonIdParam,
+  } = await searchParams;
+
+  const filterableCompetitions = await getFilterableCompetitions();
+
+  // Lần đầu vào trang (chưa chọn competitionId/seasonId) — mặc định chọn 1 giải + mùa gần
+  // nhất, cùng logic với /matches (xem lib/default-selection.ts). Resolve xong thì redirect 1
+  // lần để URL phản ánh đúng giá trị đang áp dụng (client StandingsFilters đọc state từ URL
+  // qua useSearchParams, không nhận prop riêng cho default).
+  let competitionId = competitionIdParam;
+  let seasonId = seasonIdParam;
+
+  if (!competitionId) {
+    competitionId = pickDefaultCompetition(filterableCompetitions)?.id;
+  }
+  if (competitionId && !seasonId) {
+    seasonId = await pickDefaultSeasonId(competitionId);
+  }
+
+  if (competitionId !== competitionIdParam || seasonId !== seasonIdParam) {
+    redirect(buildHref({ competitionId, seasonId }));
+  }
+
+  const standings = seasonId ? await getStandings(seasonId) : [];
 
   return (
     <Container size="md" className="py-10">
@@ -39,6 +78,8 @@ export default async function StandingsPage({
       <h1 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         Bảng xếp hạng
       </h1>
+
+      <StandingsFilters competitions={filterableCompetitions} />
 
       {standings.length === 0 ? (
         <Card className="text-sm text-zinc-500 dark:text-zinc-400">

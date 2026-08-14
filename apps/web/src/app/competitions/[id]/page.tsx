@@ -89,7 +89,7 @@ export default async function CompetitionDetailPage({
         <ul className="flex flex-col gap-2">
           {seasons.map((season) => (
             <li key={season.id}>
-              <Link href={`/standings/${season.id}`}>
+              <Link href={`/standings?competitionId=${competition.id}&seasonId=${season.id}`}>
                 <Card
                   padding="sm"
                   className="flex items-center justify-between transition-colors hover:border-zinc-300 dark:hover:border-zinc-700"
