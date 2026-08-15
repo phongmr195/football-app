@@ -4,11 +4,14 @@ import { notFound } from "next/navigation";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
+import { LiveMatchPanel } from "@/components/LiveMatchPanel";
 import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
 import type { MatchDetail } from "@/lib/types";
 
-// A single match's data (score/status) is essentially frozen once FINISHED, and there's no
-// live-polling on this page yet (Phase 2 real-time not built) — same ISR window as the list.
+// A single match's data (score/status) is essentially frozen once FINISHED, so this stays
+// long-window ISR — same window as the list. Live matches are handled separately by
+// `<LiveMatchPanel>` below, which polls client-side and is mounted unconditionally (see its own
+// doc comment for why this page's `match.status`, however stale, must never gate it).
 export const revalidate = 1800;
 
 async function getMatch(id: string) {
@@ -108,6 +111,8 @@ export default async function MatchDetailPage({
           {formatKickoffAt(match.kickoffAt)}
         </p>
       </Card>
+
+      <LiveMatchPanel matchId={match.id} />
     </Container>
   );
 }

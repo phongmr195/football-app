@@ -94,6 +94,29 @@ export interface MatchDetail extends Match {
   liveState: LiveMatchState | null;
 }
 
+export type MatchEventType =
+  | "GOAL"
+  | "OWN_GOAL"
+  | "PENALTY"
+  | "YELLOW_CARD"
+  | "RED_CARD"
+  | "SUBSTITUTION"
+  | "VAR";
+
+/** Raw row shape returned by GET /matches/:id/events (see packages/database's MatchEvent model). */
+export interface MatchEvent {
+  id: string;
+  matchId: string;
+  seq: number;
+  minute: number;
+  type: MatchEventType;
+  teamId: string | null;
+  playerId: string | null;
+  relatedPlayerId: string | null;
+  detail: unknown;
+  createdAt: string;
+}
+
 export interface Stadium {
   id: string;
   name: string;

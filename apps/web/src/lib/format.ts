@@ -1,5 +1,5 @@
 import type { BadgeVariant } from "@football-app/ui";
-import type { CompetitionType, ExternalRef, MatchResult, MatchStatus } from "@/lib/types";
+import type { CompetitionType, ExternalRef, MatchEventType, MatchResult, MatchStatus } from "@/lib/types";
 
 /** Circle symbol + color for a MatchResult (WIN/DRAW/LOSS), used in standings "form" strips. */
 export function matchResultMeta(result: MatchResult): { symbol: string; className: string } {
@@ -72,6 +72,28 @@ export function matchStatusMeta(status: MatchStatus): {
       return { label: "Đã hủy", variant: "danger" };
     default:
       return { label: status, variant: "default" };
+  }
+}
+
+/** Vietnamese label for a MatchEventType, used in LiveMatchPanel's events list. */
+export function matchEventTypeLabel(type: MatchEventType): string {
+  switch (type) {
+    case "GOAL":
+      return "Bàn thắng";
+    case "OWN_GOAL":
+      return "Phản lưới nhà";
+    case "PENALTY":
+      return "Phạt đền";
+    case "YELLOW_CARD":
+      return "Thẻ vàng";
+    case "RED_CARD":
+      return "Thẻ đỏ";
+    case "SUBSTITUTION":
+      return "Thay người";
+    case "VAR":
+      return "VAR";
+    default:
+      return type;
   }
 }
 

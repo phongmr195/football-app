@@ -66,6 +66,7 @@ services:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/football_app?schema=public
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-demo-football-app}
       FIREBASE_AUTH_EMULATOR_HOST: ${FIREBASE_AUTH_EMULATOR_HOST:-firebase-emulator:9099}
+      REDIS_URL: redis://redis:6379
     ports:
       - "3000:3000"
     healthcheck:
@@ -98,6 +99,27 @@ services:
         condition: service_healthy
     profiles:
       - worker # chạy on-demand: docker compose --profile worker run sync-worker
+
+  # Live-match polling loop dài hạn (Phase 2 Bước 1) — tái dùng image sync-worker, chỉ đổi
+  # command sang entrypoint poll.ts (build ra dist/poll.js). on-demand qua profile "worker",
+  # KHÔNG tự chạy cùng docker:up, giống sync-worker ở trên.
+  sync-worker-live:
+    build:
+      context: .
+      dockerfile: apps/sync-worker/Dockerfile
+    command: ["node", "dist/poll.js"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/football_app?schema=public
+      API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
+      DATA_PROVIDER: ${DATA_PROVIDER:-football-data}
+      LIVE_POLL_INTERVAL_MS: ${LIVE_POLL_INTERVAL_MS:-30000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - worker # chạy on-demand: pnpm docker:worker:live
 
 volumes:
   postgres_data:

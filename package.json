@@ -19,6 +19,7 @@
     "docker:down": "docker compose down",
     "docker:logs": "open http://localhost:8080",
     "docker:worker": "docker compose --profile worker run --rm sync-worker",
+    "docker:worker:live": "docker compose --profile worker up sync-worker-live",
     "docker:test": "docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test-runner; docker compose -f docker-compose.test.yml down -v",
     "secretlint": "secretlint --secretlintignore .gitignore \"**/*\"",
     "prepare": "husky"
