@@ -117,6 +117,16 @@ function getClientBaseUrl(): string {
   return baseUrl;
 }
 
+/**
+ * Base URL for apps/api's WebSocket endpoint (`/live`, see lib/realtime-client.ts), derived from
+ * the same `NEXT_PUBLIC_API_URL` as `getClientBaseUrl()` — just swaps the scheme:
+ * `http://localhost:4000` -> `ws://localhost:4000`, `https://...` -> `wss://...` (the non-global
+ * regex only touches the leading match, so "https" doesn't turn into "wsss").
+ */
+export function getWsBaseUrl(): string {
+  return getClientBaseUrl().replace(/^http/, "ws");
+}
+
 function buildClientUrl(baseUrl: string, path: string, searchParams?: SearchParamsInit): string {
   const url = new URL(path, baseUrl);
   if (searchParams) {

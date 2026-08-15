@@ -1,6 +1,6 @@
 /**
- * React Query hooks for Phase 2 Bước 1's live-match REST polling, backing
- * `components/LiveMatchPanel.tsx` (embedded, unconditionally, in `app/matches/[id]/page.tsx`).
+ * React Query hooks for Phase 2's live-match updates, backing `components/LiveMatchPanel.tsx`
+ * (embedded, unconditionally, in `app/matches/[id]/page.tsx`).
  *
  * Follows the same pattern as `use-favorites.ts`: thin `useQuery` wrappers directly over
  * `apiGetClient` (no separate fetcher module — these two endpoints have exactly one consumer
@@ -8,18 +8,30 @@
  */
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiGetClient } from "./api-client";
+import { subscribeToMatch } from "./realtime-client";
 import type { LiveMatchState, MatchEvent } from "./types";
 
 /**
- * Polls GET /matches/:id/live every 3s (paused while the tab is hidden, via React Query's
- * default `refetchIntervalInBackground: false`). A match with no `LiveMatchState` row yet
- * (never gone live, or sync-worker hasn't caught up) is a normal, expected 404 from apps/api —
- * resolved to `null` here instead of surfacing as a query error, so `LiveMatchPanel` can treat
- * "no live state" the same as "not currently live" without special-casing errors.
+ * `GET /matches/:id/live` REST fetch (Bước 1) plus a Bước 2 WebSocket subscription
+ * (`lib/realtime-client.ts`) that pushes `match.snapshot` updates straight into this query's
+ * cache entry (`["match", matchId, "live"]`) as they arrive — the primary update mechanism now.
+ * `refetchInterval` is a 45s safety-net poll in case the socket dies silently without firing
+ * `onclose` (paused while the tab is hidden, via React Query's default
+ * `refetchIntervalInBackground: false`). A match with no `LiveMatchState` row yet (never gone
+ * live, or sync-worker hasn't caught up) is a normal, expected 404 from apps/api — resolved to
+ * `null` here instead of surfacing as a query error, so `LiveMatchPanel` can treat "no live state"
+ * the same as "not currently live" without special-casing errors.
  */
 export function useLiveMatch(matchId: string) {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    return subscribeToMatch(matchId, queryClient);
+  }, [matchId, queryClient]);
+
   return useQuery({
     queryKey: ["match", matchId, "live"],
     queryFn: async (): Promise<LiveMatchState | null> => {
@@ -30,7 +42,7 @@ export function useLiveMatch(matchId: string) {
         throw err;
       }
     },
-    refetchInterval: 3000,
+    refetchInterval: 45000,
     refetchIntervalInBackground: false,
   });
 }

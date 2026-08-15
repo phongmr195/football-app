@@ -12,17 +12,20 @@
   },
   "dependencies": {
     "@football-app/database": "workspace:*",
+    "@football-app/realtime": "workspace:*",
     "@football-app/shared": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@hono/zod-validator": "^0.4.0",
     "firebase-admin": "^13.0.0",
     "hono": "^4.6.0",
     "ioredis": "^6.0.0",
+    "ws": "^8.18.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@football-app/config": "workspace:*",
     "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
