@@ -1,78 +1,49 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { Button } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
-import {
-  addFavorite,
-  fetchFavoritePlayers,
-  fetchFavoriteTeams,
-  removeFavorite,
-  type FavoriteKind,
-} from "@/lib/favorites";
+import { useFavoritePlayers, useFavoriteTeams, useToggleFavorite } from "@/lib/use-favorites";
+import type { FavoritePlayerItem, FavoriteTeamItem } from "@/lib/types";
 
-export interface FavoriteButtonProps {
-  kind: FavoriteKind;
-  id: string;
-}
+export type FavoriteButtonProps =
+  | { kind: "team"; item: FavoriteTeamItem }
+  | { kind: "player"; item: FavoritePlayerItem };
 
 /**
  * Toggle button for favoriting a team or player. A Client "island" meant to be embedded as-is
  * inside the otherwise-Server-Component /teams/[id] and /players/[id] pages (ISR) — only `kind`
- * and `id` cross the server/client boundary, nothing else.
+ * and `item` (the subset of Team/Player fields matching FavoriteTeamItem/FavoritePlayerItem —
+ * TeamDetail/PlayerDetail are structurally compatible supersets, so the page can pass its
+ * already-fetched `team`/`player` object directly) cross the server/client boundary.
  *
  * There's no `GET /favorites/teams/:teamId` "is this favorited" endpoint (see
- * apps/api/src/routes/favorites.ts) — only list endpoints. So on mount (once signed in), this
- * fetches the user's whole favorites list for `kind` and checks membership by id. Acceptable
- * for Phase 1 — a user's favorites list is small (the backend's own reasoning for not
- * paginating those endpoints) — at the cost of a brief neutral/unknown flash while that request
- * is in flight.
+ * apps/api/src/routes/favorites.ts) — only list endpoints. So membership is derived from the
+ * shared `["favorites", kind]` React Query cache (see lib/use-favorites.ts) — the whole list for
+ * `kind` is fetched once (when signed in) and reused/deduped across every FavoriteButton instance
+ * and app/favorites/page.tsx, rather than each button independently re-fetching it.
  */
-export function FavoriteButton({ kind, id }: FavoriteButtonProps) {
-  const { user, loading: authLoading, getIdToken } = useAuth();
-  const [favorited, setFavorited] = useState(false);
-  const [pending, setPending] = useState(false);
+export function FavoriteButton(props: FavoriteButtonProps) {
+  const { kind, item } = props;
+  const { user, loading: authLoading } = useAuth();
+  const teamsQuery = useFavoriteTeams();
+  const playersQuery = useFavoritePlayers();
+  const { favorite, unfavorite } = useToggleFavorite(kind);
 
-  useEffect(() => {
-    if (authLoading || !user) return;
-    let cancelled = false;
+  const query = kind === "team" ? teamsQuery : playersQuery;
+  const favorited = (query.data ?? []).some((existing) => existing.id === item.id);
+  const pending = favorite.isPending || unfavorite.isPending;
 
-    (async () => {
-      try {
-        const idToken = await getIdToken();
-        const items =
-          kind === "team" ? await fetchFavoriteTeams(idToken) : await fetchFavoritePlayers(idToken);
-        if (!cancelled) setFavorited(items.some((item) => item.id === id));
-      } catch {
-        // Best-effort initial state — leave as not-favorited rather than crash the page.
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user, kind, id, getIdToken]);
-
-  const toggle = useCallback(async () => {
-    setPending(true);
-    try {
-      const idToken = await getIdToken();
-      if (favorited) {
-        await removeFavorite(kind, id, idToken);
-        setFavorited(false);
-      } else {
-        await addFavorite(kind, id, idToken);
-        setFavorited(true);
-      }
-    } catch {
-      // Minimal error handling for Phase 1 — leave state unchanged, don't crash.
-    } finally {
-      setPending(false);
+  const toggle = useCallback(() => {
+    if (favorited) {
+      unfavorite.mutate(item.id);
+    } else {
+      favorite.mutate(item);
     }
-  }, [favorited, kind, id, getIdToken]);
+  }, [favorited, favorite, unfavorite, item]);
 
-  if (authLoading) {
+  if (authLoading || (user && query.isLoading)) {
     return (
       <Button size="sm" variant="outline" disabled>
         …
@@ -95,7 +66,7 @@ export function FavoriteButton({ kind, id }: FavoriteButtonProps) {
       size="sm"
       variant={favorited ? "secondary" : "outline"}
       disabled={pending}
-      onClick={() => void toggle()}
+      onClick={toggle}
     >
       {favorited ? "★ Đang theo dõi" : "☆ Theo dõi"}
     </Button>
