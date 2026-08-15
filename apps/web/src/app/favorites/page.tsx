@@ -2,75 +2,32 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
 import { Badge, Button, Card, Container } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
-import { fetchFavoritePlayers, fetchFavoriteTeams, removeFavorite } from "@/lib/favorites";
 import { playerPositionMeta } from "@/lib/format";
-import type { FavoritePlayerItem, FavoriteTeamItem } from "@/lib/types";
+import { useFavoritePlayers, useFavoriteTeams, useToggleFavorite } from "@/lib/use-favorites";
 
 /**
  * Per-user private data (favorited teams/players) — inherently not cacheable/public, unlike the
  * rest of the browse pages, so this stays a Client Component rather than a Server
  * Component + ISR page. Needs both auth state (Firebase, browser-only) and the resulting data
  * fetch, so there's no meaningful server-rendered part to keep here.
+ *
+ * Lists come from the shared `["favorites", "teams"|"players"]` React Query cache (see
+ * lib/use-favorites.ts) — the same cache `components/FavoriteButton.tsx` reads/writes on
+ * /teams/[id] and /players/[id], so unfavoriting here (or favoriting from a detail page) stays
+ * consistent everywhere without an extra round-trip.
  */
 export default function FavoritesPage() {
-  const { user, loading: authLoading, getIdToken } = useAuth();
-  const [teams, setTeams] = useState<FavoriteTeamItem[]>([]);
-  const [players, setPlayers] = useState<FavoritePlayerItem[]>([]);
-  const [loadingData, setLoadingData] = useState(true);
+  const { user, loading: authLoading } = useAuth();
+  const teamsQuery = useFavoriteTeams();
+  const playersQuery = useFavoritePlayers();
+  const { unfavorite: unfavoriteTeamMutation } = useToggleFavorite("team");
+  const { unfavorite: unfavoritePlayerMutation } = useToggleFavorite("player");
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user) {
-      // Signed out: don't call the API at all (it would just 401) — the render below shows a
-      // sign-in prompt in this case without ever consulting `loadingData`, so nothing to update.
-      return;
-    }
-
-    let cancelled = false;
-    (async () => {
-      setLoadingData(true);
-      try {
-        const idToken = await getIdToken();
-        const [teamItems, playerItems] = await Promise.all([
-          fetchFavoriteTeams(idToken),
-          fetchFavoritePlayers(idToken),
-        ]);
-        if (!cancelled) {
-          setTeams(teamItems);
-          setPlayers(playerItems);
-        }
-      } catch {
-        // Minimal error handling for Phase 1 — leave lists empty rather than crash.
-      } finally {
-        if (!cancelled) setLoadingData(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authLoading, user, getIdToken]);
-
-  const unfavoriteTeam = useCallback(
-    async (teamId: string) => {
-      const idToken = await getIdToken();
-      await removeFavorite("team", teamId, idToken);
-      setTeams((prev) => prev.filter((team) => team.id !== teamId));
-    },
-    [getIdToken]
-  );
-
-  const unfavoritePlayer = useCallback(
-    async (playerId: string) => {
-      const idToken = await getIdToken();
-      await removeFavorite("player", playerId, idToken);
-      setPlayers((prev) => prev.filter((player) => player.id !== playerId));
-    },
-    [getIdToken]
-  );
+  const teams = teamsQuery.data ?? [];
+  const players = playersQuery.data ?? [];
+  const loadingData = user ? teamsQuery.isLoading || playersQuery.isLoading : false;
 
   if (authLoading) {
     return (
@@ -125,7 +82,11 @@ export default function FavoritesPage() {
                   )}
                   <span className="font-medium text-zinc-900 dark:text-zinc-50">{team.name}</span>
                 </Link>
-                <Button size="sm" variant="ghost" onClick={() => void unfavoriteTeam(team.id)}>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => unfavoriteTeamMutation.mutate(team.id)}
+                >
                   Bỏ theo dõi
                 </Button>
               </Card>
@@ -158,7 +119,7 @@ export default function FavoritesPage() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => void unfavoritePlayer(player.id)}
+                      onClick={() => unfavoritePlayerMutation.mutate(player.id)}
                     >
                       Bỏ theo dõi
                     </Button>

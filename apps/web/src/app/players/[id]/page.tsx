@@ -54,7 +54,7 @@ export default async function PlayerDetailPage({
           </div>
         </div>
         <div className="sm:ml-auto">
-          <FavoriteButton kind="player" id={player.id} />
+          <FavoriteButton kind="player" item={player} />
         </div>
       </Card>
 
