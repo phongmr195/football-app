@@ -59,22 +59,29 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 
 **Mục tiêu:** trải nghiệm "theo dõi thời gian thực" — điểm khác biệt cốt lõi so với việc chỉ xem kết quả tĩnh.
 
-**Bước 1 (REST polling trước — ra sản phẩm sớm):**
-- [ ] `live_match_state` table + Redis cache
-- [ ] `GET /matches/live`, `GET /matches/{id}/live`, `GET /matches/{id}/events?since_seq`
-- [ ] Web: polling ngắn (2-3s) khi vào trang live match — đủ để demo/dùng thật
+**(2026-08-15) Quyết định: chỉ triển khai/test 100% local, không mở AWS account** — lý do chi phí (Aurora Serverless v2 tối thiểu ~$44/tháng compute dù 0 traffic, không nằm trong Always Free) + LocalStack bản free không hỗ trợ API Gateway (REST/WebSocket, chỉ có ở bản Pro trả phí) nên không giả lập được đúng AWS miễn phí. Vẫn build **full chức năng** đúng plan gốc (WebSocket real-time, push notification), nhưng tách logic nghiệp vụ qua 1 interface — giống hệt pattern `DataProviderAdapter` (`packages/data-provider`) đã dùng cho data provider: local dùng `ws` package (plain WebSocket server) + Redis Pub/Sub (Redis đã wire từ Bước 1) thay cho API Gateway WS + SNS; implementation AWS thật (API Gateway/Lambda/SNS/DynamoDB) là bản thứ 2 của cùng interface, làm khi thật sự cần deploy production. Bước 2/3 dưới đây viết lại theo hướng này.
 
-**Bước 2 (nâng cấp lên WebSocket thật):**
-- [ ] API Gateway WebSocket + Lambda handlers (`$connect`/`$disconnect`/subscribe)
-- [ ] `ws_connections` (DynamoDB)
-- [ ] Web: chuyển từ polling sang WebSocket API của browser, giữ REST làm fallback/catch-up khi reconnect
+**Bước 1 (REST polling trước — ra sản phẩm sớm):** ✅ **Xong (2026-08-15)**
+- [x] `LiveMatchState`/`MatchEvent` (đã có sẵn trong schema từ trước, chưa dùng tới) + Redis cache (`GET /matches/live`, TTL 5s, fallback êm về Postgres nếu Redis down) — xem `apps/api/src/lib/redis.ts`
+- [x] `GET /matches/live`, `GET /matches/:id/live`, `GET /matches/:id/events?since_seq` — `apps/api/src/routes/matches.ts`
+- [x] sync-worker: polling loop nội bộ (`apps/sync-worker/src/poll-live-matches.ts`, `poll.ts`) mỗi 30s, không cần AWS/EventBridge — chạy qua `pnpm --filter sync-worker poll` hoặc `pnpm docker:worker:live`. Ghi cả `Match` + `LiveMatchState` trong 1 transaction (fix thêm bug thật: lookup match theo `externalRef` thiếu filter `provider`, cùng loại bug đã fix ở `sync-catalog.ts` 2026-08-14)
+- [x] Web: `LiveMatchPanel` (client component) tự poll 2-3s trên `/matches/[id]`, độc lập với ISR cache của trang (không gate theo `match.status` server-render vì cache có thể cũ tới 30 phút) — `apps/web/src/components/LiveMatchPanel.tsx`, `apps/web/src/lib/use-live-match.ts`
+- Verify thật: giả lập trận live qua Prisma Studio, curl 3 endpoint mới, xác nhận Redis cache thật có ghi (TTL) + fallback đúng khi Redis down, mở browser thật thấy panel tự cập nhật không cần F5.
 
-**Bước 3 (thông báo khi không mở app):**
-- [ ] SNS fan-out "match-updates" → Lambda fcm-push (web: Web Push qua FCM), nối với `notification_settings`
+**Bước 2 (nâng cấp lên WebSocket thật — local-first, xem quyết định ở trên):**
+- [ ] Định nghĩa 1 interface (vd `RealtimeTransport`) cho subscribe/broadcast theo matchId, tách khỏi implementation cụ thể
+- [ ] Local: WebSocket server dùng package `ws`, chạy trong (hoặc cạnh) `apps/api`; connection registry qua Redis (đã có) thay `ws_connections` DynamoDB
+- [ ] AWS (làm sau, khi thật sự deploy): API Gateway WebSocket + Lambda handlers (`$connect`/`$disconnect`/subscribe) + `ws_connections` (DynamoDB) — implementation thứ 2 của cùng interface
+- [ ] Web: chuyển từ polling (Bước 1) sang WebSocket API của browser, giữ REST `/matches/:id/events?since_seq` làm fallback/catch-up khi reconnect
+
+**Bước 3 (thông báo khi không mở app — local-first):**
+- [ ] Local: Redis Pub/Sub cho fan-out "match-updates" (thay SNS) → handler gọi FCM trực tiếp (Web Push qua FCM **không phụ thuộc AWS** — Firebase riêng, chạy được ngay cả ở local), nối với `notification_settings`
+- [ ] AWS (làm sau): SNS fan-out "match-updates" → Lambda fcm-push — implementation thứ 2 của cùng interface fan-out
 - [ ] `notifications`/`notification_logs` wiring
 
 **Bước 4 (tối ưu chi phí ingestion — có thể làm sau, không chặn release):**
-- [ ] EventBridge Scheduler + Step Functions thay cron cố định cho sync-worker (adaptive polling theo trận live)
+- [ ] Adaptive polling: nâng cấp loop cố định 30s của Bước 1 thành logic in-process (tight-poll quanh giờ kickoff từng trận) — không cần AWS để làm việc này
+- [ ] AWS (chỉ khi cần scale thật): EventBridge Scheduler + Step Functions thay cho loop/logic in-process
 
 **Exit criteria:** mở web đúng lúc trận đang diễn ra, thấy tỉ số/event cập nhật không cần refresh tay; nhận được push khi team yêu thích ghi bàn.
 

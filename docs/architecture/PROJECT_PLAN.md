@@ -100,6 +100,18 @@ Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + c
 - Firebase đã có trong stack sẵn cho FCM (push) và Crashlytics — dùng luôn Firebase Auth không phát sinh thêm vendor mới.
 - Đánh đổi: mất khả năng dùng chung 1 hệ IAM với các AWS service khác (Aurora, S3...) qua Cognito — nhưng ở scope hiện tại (chỉ cần login), điều này không quan trọng.
 
+### Real-time & Notifications — quyết định local-first, chưa mở AWS account (2026-08-15)
+
+Kiến trúc real-time ở § 3 (API Gateway WS + Lambda + DynamoDB + SNS) vẫn là **đích đến cuối cùng khi deploy production thật** — KHÔNG đổi kiến trúc. Nhưng trong giai đoạn hiện tại, quyết định **không mở AWS account**, vì:
+- Aurora Serverless v2 tối thiểu ~$44/tháng compute (0.5 ACU) dù 0 traffic + storage — không nằm trong AWS Always Free, là chi phí cố định hàng tháng không cần thiết ở giai đoạn chưa có user thật.
+- LocalStack (công cụ giả lập AWS phổ biến nhất để test local) — bản Community/free **không hỗ trợ API Gateway** (cả REST lẫn WebSocket, chỉ có ở bản Pro trả phí) — nên không thể giả lập đúng kiến trúc AWS thật mà không tốn phí subscription LocalStack.
+
+**Giải pháp**: tách logic nghiệp vụ real-time (subscribe/broadcast theo match, fan-out thông báo) qua 1 interface, đúng pattern `DataProviderAdapter` (`packages/data-provider`) đã dùng cho data provider (API-Football vs football-data.org) — 1 interface, nhiều implementation, downstream code không biết/không phụ thuộc implementation cụ thể nào:
+- **Local (dùng ngay bây giờ)**: WebSocket server package `ws` (thay API Gateway WS + Lambda `$connect`/`$disconnect`), Redis Pub/Sub cho connection registry + fan-out (thay DynamoDB `ws_connections` + SNS) — Redis đã có sẵn trong stack từ Phase 2 Bước 1. FCM push gọi trực tiếp (Web Push qua Firebase **không phụ thuộc AWS**, chạy được ngay ở local).
+- **AWS (làm sau, khi thật sự deploy production)**: API Gateway WebSocket + Lambda + DynamoDB `ws_connections` + SNS fan-out — implementation thứ 2 của cùng interface, không cần viết lại business logic.
+
+Xem chi tiết từng bước ở [ROADMAP.md § Phase 2](./ROADMAP.md).
+
 **Đã xong** (project `jankara-e2e-test`, dùng chung với vài project khác của chủ repo — không phải project riêng cho football-app):
 1. Tạo/chọn Firebase project qua `firebase login` + `firebase projects:list`
 2. Bật Google + Phone provider trong Firebase Console → Authentication → Sign-in method
