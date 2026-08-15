@@ -122,10 +122,11 @@ pnpm docker:down
 - Postgres trong Docker dùng đúng port/user/pass khớp `packages/database/.env.example` (`postgres:postgres@localhost:5432/football_app`) — sửa 1 chỗ phải sửa chỗ kia theo, đừng để lệch.
 - **Cảnh báo máy dev cụ thể**: nếu có Postgres.app (hoặc bất kỳ Postgres native nào) đang chạy trên máy, nó chiếm port 5432 và **âm thầm nhận hết traffic từ host tới `localhost:5432`** thay vì Docker container (bind cụ thể `127.0.0.1` được ưu tiên hơn bind wildcard `0.0.0.0` của Docker) — lệnh `prisma migrate`/`psql` chạy từ host tưởng đang nói với Docker Postgres nhưng thực ra vào native Postgres. Luôn `lsof -i :5432` kiểm tra trước khi debug "sao không thấy data" liên quan Docker Postgres.
 
-### Web (`apps/web`) — client chính, chưa scaffold
-- Khi scaffold: Next.js + `packages/ui`, gọi `apps/api` trực tiếp (REST), Firebase JS SDK cho auth (đăng ký Web app riêng trong Firebase project `jankara-e2e-test` trước).
+### Web (`apps/web`) — client chính, đã scaffold
+- Next.js (App Router) + `packages/ui`, gọi `apps/api` trực tiếp (REST), Firebase JS SDK cho auth (Web app đã đăng ký riêng trong Firebase project `jankara-e2e-test`).
 - Trang public (browse giải đấu/team/match) nên dùng SSR/ISR cho SEO — đây là lý do chính chọn Next.js thay vì Flutter Web.
-- Dùng skill `add-web-page` để scaffold page/feature mới (khi có).
+- Dùng skill `add-web-page` để scaffold page/feature mới.
+- **shadcn/ui là design system chính từ 2026-08-15** (`apps/web/components.json`, đã setup) — `packages/ui` cũ (Button/Card/Badge/Container/Pagination) đang được migrate dần sang shadcn, KHÔNG rewrite 1 lần. Component/trang MỚI luôn dùng shadcn (`npx shadcn@latest add <component>`), kể cả khi `packages/ui` đã có bản tương đương. Khi tiện sửa 1 trang đang dùng `packages/ui` cũ, đổi luôn sang shadcn nếu không tốn nhiều effort ngoài scope; không thì để nguyên, đừng ép migrate riêng 1 task không liên quan. Icon dùng `lucide-react`. `aliases.utils` trỏ `@football-app/ui` để dùng chung `cn` cũ — nhưng lệnh `shadcn add <component>` tự lỗi vì `packages/ui/package.json` thiếu `exports` field, phải tạm trả `aliases.utils` về `@/lib/utils` lúc chạy `add` rồi sửa tay import sau (chi tiết đầy đủ ở `.claude/agents/web-dev.md`). App chưa có `next-themes`/toggle `.dark` — `dark:` đang chạy theo system preference; nếu `shadcn init`/`add` tự thêm `@custom-variant dark (&:is(.dark *));` vào `globals.css` thì phải xoá, không sẽ tắt im lặng toàn bộ dark mode hiện có.
 
 ### Mobile (`apps/mobile`) — tạm pause, quy ước vẫn giữ cho khi resume
 - Feature mới → folder riêng trong `lib/features/<feature>/` (theo mẫu `lib/features/health/`), gồm 1 Riverpod provider gọi qua `dioProvider` + 1 screen.

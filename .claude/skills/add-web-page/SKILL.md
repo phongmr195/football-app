@@ -44,7 +44,12 @@ Scaffold 1 trang/feature mới cho `apps/web`. Nếu `apps/web` chưa tồn tạ
 
 3. **Trang cần interactivity nhiều (form, real-time, filter phía client)** → Client Component (`"use client"`), gọi qua `lib/api-client.ts`, dùng React Query (hoặc tương đương) cho client-side cache/refetch nếu data cần cập nhật liên tục.
 
-4. **Component tái dùng được** (button, card, layout chung) → đặt trong `packages/ui`, không viết riêng trong `apps/web` nếu có khả năng dùng lại ở `apps/admin` sau này.
+4. **(2026-08-15) Component UI → dùng shadcn/ui, đây là design system chính từ giờ trở đi**, KHÔNG tự viết tay từ đầu và KHÔNG import `Button`/`Card`/`Badge`/`Container`/`Pagination` từ `packages/ui` cho code mới nữa (package đó đang được migrate dần sang shadcn, giữ lại chỉ để không phá chỗ đang dùng cũ):
+   ```bash
+   cd apps/web && npx shadcn@latest add <component>
+   ```
+   Lưu ý bắt buộc: `aliases.utils` trong `components.json` trỏ `@football-app/ui` (dùng chung hàm `cn` cũ), nhưng lệnh `add` tự lỗi vì `packages/ui/package.json` thiếu `exports` field — phải tạm sửa `aliases.utils` về `"@/lib/utils"` trước khi chạy `add`, chạy xong trả lại `"@football-app/ui"` rồi tự sửa tay import `cn` trong file vừa sinh ra (từ `@/lib/utils` → `@football-app/ui`). Icon dùng `lucide-react` (đã cài sẵn), không dùng emoji/SVG tay. Nếu `add`/`init` tự thêm dòng `@custom-variant dark (&:is(.dark *));` vào `globals.css` — XOÁ ngay, app chưa có `next-themes`/toggle `.dark`, dòng đó sẽ tắt im lặng toàn bộ dark mode hiện có (dùng theo system preference).
+   - Nếu trang đang sửa sẵn dùng component `packages/ui` cũ và việc đổi sang shadcn không tốn nhiều effort ngoài scope → đổi luôn. Nếu tốn nhiều effort → để nguyên, không ép migrate trong task không liên quan.
 
 5. **Wire navigation**: thêm link vào layout/nav chung (`app/layout.tsx` hoặc component nav riêng) nếu trang cần xuất hiện trong menu chính.
 
