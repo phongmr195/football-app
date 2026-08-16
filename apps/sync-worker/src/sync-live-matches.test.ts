@@ -25,6 +25,7 @@ vi.mock("./provider", () => ({
 const mockPublisher: RealtimeTransport = {
   transportName: "mock",
   publish: vi.fn().mockResolvedValue(undefined),
+  publishGoal: vi.fn().mockResolvedValue(undefined),
 };
 vi.mock("./realtime", () => ({
   createPublisher: () => mockPublisher,
@@ -48,7 +49,11 @@ function makeMockAdapter(overrides: Partial<DataProviderAdapter> = {}): DataProv
   };
 }
 
-async function seedMatch(provider: string, matchExternalId: string) {
+async function seedMatch(
+  provider: string,
+  matchExternalId: string,
+  initial: { homeScore?: number | null; awayScore?: number | null } = {},
+) {
   const competition = await prisma.competition.create({
     data: {
       name: `${provider} League`,
@@ -79,9 +84,9 @@ async function seedMatch(provider: string, matchExternalId: string) {
       homeTeamId: homeTeam.id,
       awayTeamId: awayTeam.id,
       kickoffAt: new Date("2025-09-01T10:00:00.000Z"),
-      status: "SCHEDULED",
-      homeScore: null,
-      awayScore: null,
+      status: initial.homeScore === undefined && initial.awayScore === undefined ? "SCHEDULED" : "LIVE",
+      homeScore: initial.homeScore ?? null,
+      awayScore: initial.awayScore ?? null,
       externalRef: ref(provider, matchExternalId) as object,
     },
   });
@@ -103,6 +108,7 @@ async function cleanupTestData() {
 beforeEach(async () => {
   await cleanupTestData();
   mockPublisher.publish = vi.fn().mockResolvedValue(undefined);
+  mockPublisher.publishGoal = vi.fn().mockResolvedValue(undefined);
 });
 afterAll(cleanupTestData);
 
@@ -255,5 +261,155 @@ describe("syncLiveMatches — publish real-time update", () => {
 
     expect(result.syncedCount).toBe(1);
     expect(mockPublisher.publish).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("syncLiveMatches — goal detection (push notification, Phase 2 Bước 3)", () => {
+  it("home tăng -> publishGoal đúng 1 lần cho homeTeamId", async () => {
+    const match = await seedMatch(PROVIDER, "match-goal-home", { homeScore: 1, awayScore: 0 });
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-goal-home"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 30,
+      homeScore: 2,
+      awayScore: 0,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+
+    await syncLiveMatches();
+
+    expect(mockPublisher.publishGoal).toHaveBeenCalledTimes(1);
+    expect(mockPublisher.publishGoal).toHaveBeenCalledWith({
+      matchId: match.id,
+      teamId: match.homeTeamId,
+      homeScore: 2,
+      awayScore: 0,
+      scoredAt: expect.any(String),
+    });
+  });
+
+  it("away tăng -> publishGoal đúng 1 lần cho awayTeamId", async () => {
+    const match = await seedMatch(PROVIDER, "match-goal-away", { homeScore: 0, awayScore: 1 });
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-goal-away"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 40,
+      homeScore: 0,
+      awayScore: 2,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+
+    await syncLiveMatches();
+
+    expect(mockPublisher.publishGoal).toHaveBeenCalledTimes(1);
+    expect(mockPublisher.publishGoal).toHaveBeenCalledWith({
+      matchId: match.id,
+      teamId: match.awayTeamId,
+      homeScore: 0,
+      awayScore: 2,
+      scoredAt: expect.any(String),
+    });
+  });
+
+  it("cả 2 đội cùng tăng giữa 2 tick -> publishGoal gọi 2 lần, không dùng else-if", async () => {
+    const match = await seedMatch(PROVIDER, "match-goal-both", { homeScore: 1, awayScore: 1 });
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-goal-both"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 50,
+      homeScore: 2,
+      awayScore: 2,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+
+    await syncLiveMatches();
+
+    expect(mockPublisher.publishGoal).toHaveBeenCalledTimes(2);
+    expect(mockPublisher.publishGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ matchId: match.id, teamId: match.homeTeamId }),
+    );
+    expect(mockPublisher.publishGoal).toHaveBeenCalledWith(
+      expect.objectContaining({ matchId: match.id, teamId: match.awayTeamId }),
+    );
+  });
+
+  it("không đổi tỉ số -> publishGoal không được gọi", async () => {
+    await seedMatch(PROVIDER, "match-goal-nochange", { homeScore: 1, awayScore: 1 });
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-goal-nochange"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 60,
+      homeScore: 1,
+      awayScore: 1,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+
+    await syncLiveMatches();
+
+    expect(mockPublisher.publishGoal).not.toHaveBeenCalled();
+  });
+
+  it("tick đầu tiên (dbMatch score null, match score 0) -> không false-positive goal", async () => {
+    await seedMatch(PROVIDER, "match-goal-first-tick"); // homeScore/awayScore mặc định null (SCHEDULED)
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-goal-first-tick"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 1,
+      homeScore: 0,
+      awayScore: 0,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+
+    await syncLiveMatches();
+
+    expect(mockPublisher.publishGoal).not.toHaveBeenCalled();
+  });
+
+  it("publishGoal() reject KHÔNG làm syncLiveMatches() throw", async () => {
+    await seedMatch(PROVIDER, "match-goal-publish-fail", { homeScore: 0, awayScore: 0 });
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-goal-publish-fail"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 5,
+      homeScore: 1,
+      awayScore: 0,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+    mockPublisher.publishGoal = vi.fn().mockRejectedValue(new Error("redis down"));
+
+    const result = await syncLiveMatches();
+
+    expect(result.syncedCount).toBe(1);
+    expect(mockPublisher.publishGoal).toHaveBeenCalledTimes(1);
   });
 });

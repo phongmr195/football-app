@@ -1,12 +1,18 @@
 import Redis from "ioredis";
 import type { RealtimeTransport } from "../publisher.interface";
-import type { LiveUpdateEvent } from "../types";
+import type { GoalEvent, LiveUpdateEvent } from "../types";
 
 function channelFor(matchId: string): string {
   // Kênh theo TỪNG match, không dùng 1 kênh global — registry kết nối ở apps/api vốn đã per-match
   // (subscribe/unsubscribe Redis map 1:1 vào lifecycle đó), không cần filter thừa phía consumer.
   return `live:match:${matchId}`;
 }
+
+// Kênh global CỐ ĐỊNH, không per-match — push notification (Phase 2 Bước 3) phải nổ ngay cả khi
+// không có ai đang xem match qua WebSocket, nên cần 1 subscriber permanent (apps/api's
+// goal-notifier) đăng ký đúng 1 kênh này suốt vòng đời process, thay vì subscribe/unsubscribe
+// theo lifecycle của ConnectionRegistry như channelFor() ở trên.
+const GOAL_EVENTS_CHANNEL = "goal-events";
 
 export interface RedisPublisherOptions {
   redisUrl: string;
@@ -48,6 +54,20 @@ export class RedisPublisher implements RealtimeTransport {
       // net poll ở apps/web khi WS/push không tới.
       console.error(
         `redis-publisher: publish thất bại cho match ${event.matchId} (degrading gracefully)`,
+        err,
+      );
+    }
+  }
+
+  async publishGoal(event: GoalEvent): Promise<void> {
+    try {
+      await this.client.publish(GOAL_EVENTS_CHANNEL, JSON.stringify(event));
+    } catch (err) {
+      // Cùng triết lý với publish() ở trên — 1 lần publish goal-event thất bại không được phép
+      // làm syncLiveMatches() crash cả tick, DB đã ghi đúng score rồi, chỉ mỗi việc push
+      // notification bị bỏ lỡ (client vẫn thấy score mới qua REST/WS catch-up).
+      console.error(
+        `redis-publisher: publishGoal thất bại cho match ${event.matchId} (degrading gracefully)`,
         err,
       );
     }

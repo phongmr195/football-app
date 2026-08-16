@@ -15,6 +15,9 @@ const noopPublisher: RealtimeTransport = {
   async publish() {
     // no-op
   },
+  async publishGoal() {
+    // no-op
+  },
 };
 
 export function createPublisher(): RealtimeTransport {

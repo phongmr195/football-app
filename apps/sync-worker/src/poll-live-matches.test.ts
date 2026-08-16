@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { computeNextInterval } from "./adaptive-interval";
 import { runLivePollingLoop } from "./poll-live-matches";
 import { syncLiveMatches } from "./sync-live-matches";
 
@@ -6,11 +7,25 @@ vi.mock("./sync-live-matches", () => ({
   syncLiveMatches: vi.fn(),
 }));
 
+// computeNextInterval() được gọi trực tiếp bên trong runLivePollingLoop() (không nhận qua tham
+// số) — mock cả module "./adaptive-interval" cùng style với "./sync-live-matches" ở trên, để
+// control cadence trả về mà không cần Postgres thật (xem adaptive-interval.test.ts cho test
+// query DB thật của chính computeNextInterval()).
+vi.mock("./adaptive-interval", () => ({
+  computeNextInterval: vi.fn(),
+}));
+
 const mockedSyncLiveMatches = vi.mocked(syncLiveMatches);
+const mockedComputeNextInterval = vi.mocked(computeNextInterval);
 
 beforeEach(() => {
   vi.useFakeTimers();
   mockedSyncLiveMatches.mockReset();
+  mockedComputeNextInterval.mockReset();
+  // Mặc định trả về đúng giá trị intervalMs cố định mà đa số test hiện có đang dùng (1000ms) —
+  // test riêng cho adaptive cadence (tight/idle/thay đổi giữa chừng/reject) tự override bằng
+  // mockResolvedValueOnce/mockRejectedValueOnce bên dưới.
+  mockedComputeNextInterval.mockResolvedValue(1000);
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -83,5 +98,96 @@ describe("runLivePollingLoop", () => {
 
     await vi.advanceTimersByTimeAsync(30_000);
     expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1); // không có tick thêm sau abort
+  });
+});
+
+describe("runLivePollingLoop — adaptive cadence (Phase 2 Bước 4)", () => {
+  it("computeNextInterval() trả 15s (tight) -> loop dùng đúng 15s cho sleep, không dùng intervalMs cố định", async () => {
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 1 });
+    mockedComputeNextInterval.mockResolvedValue(15_000);
+    const controller = new AbortController();
+
+    const loopPromise = runLivePollingLoop({ intervalMs: 30_000, signal: controller.signal });
+    await flushMicrotasks();
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1);
+
+    // Chưa đủ 15s -> chưa có tick tiếp theo.
+    await vi.advanceTimersByTimeAsync(14_000);
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1);
+
+    // Đủ 15s (đúng giá trị computeNextInterval trả về, KHÔNG phải 30s của intervalMs) -> tick tiếp theo.
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(2);
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(15_000);
+    await loopPromise;
+  });
+
+  it("computeNextInterval() trả 300s (idle) -> loop dùng đúng 300s cho sleep", async () => {
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0 });
+    mockedComputeNextInterval.mockResolvedValue(300_000);
+    const controller = new AbortController();
+
+    const loopPromise = runLivePollingLoop({ intervalMs: 30_000, signal: controller.signal });
+    await flushMicrotasks();
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(299_000);
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(2);
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(300_000);
+    await loopPromise;
+  });
+
+  it("cadence đổi giữa chừng — tick kế tiếp dùng ngay giá trị computeNextInterval mới, không cần restart loop", async () => {
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 1 });
+    mockedComputeNextInterval
+      .mockResolvedValueOnce(15_000) // sau tick 1 (tight)
+      .mockResolvedValueOnce(300_000); // sau tick 2 (idle)
+    const controller = new AbortController();
+
+    const loopPromise = runLivePollingLoop({ intervalMs: 30_000, signal: controller.signal });
+    await flushMicrotasks();
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(15_000); // dùng cadence tight sau tick 1
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(2);
+
+    // Cadence đổi sang idle (300s) ngay sau tick 2 — 15s nữa (giống cadence cũ) KHÔNG đủ để có tick 3.
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(285_000); // đủ 300s kể từ tick 2
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(3);
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(300_000);
+    await loopPromise;
+  });
+
+  it("computeNextInterval() reject -> fallback về intervalMs truyền vào, log lỗi, không throw ra ngoài loop", async () => {
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0 });
+    mockedComputeNextInterval.mockRejectedValue(new Error("DB tạm lỗi"));
+    const controller = new AbortController();
+
+    const loopPromise = runLivePollingLoop({ intervalMs: 5000, signal: controller.signal });
+    await flushMicrotasks();
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1);
+
+    // Fallback đúng intervalMs=5000 (không phải cadence mặc định khác) dù computeNextInterval reject.
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockedSyncLiveMatches).toHaveBeenCalledTimes(2);
+
+    controller.abort();
+    await vi.advanceTimersByTimeAsync(5000);
+    await loopPromise; // loop không bị crash bởi computeNextInterval() reject
   });
 });

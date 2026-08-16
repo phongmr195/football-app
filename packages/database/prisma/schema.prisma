@@ -82,6 +82,7 @@ model NotificationSetting {
 enum DevicePlatform {
   IOS
   ANDROID
+  WEB
 }
 
 model Device {
