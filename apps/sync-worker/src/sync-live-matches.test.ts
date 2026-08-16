@@ -1,4 +1,5 @@
 import type { CanonicalMatch, DataProviderAdapter, ExternalRef } from "@football-app/data-provider";
+import type { RealtimeTransport } from "@football-app/realtime";
 import { prisma } from "@football-app/database";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { syncLiveMatches } from "./sync-live-matches";
@@ -16,6 +17,17 @@ let mockAdapter: DataProviderAdapter;
 // số), nên phải mock cả module "./provider" để control fetchLiveMatches() trong test.
 vi.mock("./provider", () => ({
   createAdapter: () => mockAdapter,
+}));
+
+// createPublisher() cũng được gọi trực tiếp bên trong syncLiveMatches() (memoized singleton, xem
+// realtime.ts) — mock cả module "./realtime" cùng style với "./provider" ở trên để control/assert
+// publish() mà không cần Redis thật.
+const mockPublisher: RealtimeTransport = {
+  transportName: "mock",
+  publish: vi.fn().mockResolvedValue(undefined),
+};
+vi.mock("./realtime", () => ({
+  createPublisher: () => mockPublisher,
 }));
 
 function makeMockAdapter(overrides: Partial<DataProviderAdapter> = {}): DataProviderAdapter {
@@ -88,7 +100,10 @@ async function cleanupTestData() {
   }
 }
 
-beforeEach(cleanupTestData);
+beforeEach(async () => {
+  await cleanupTestData();
+  mockPublisher.publish = vi.fn().mockResolvedValue(undefined);
+});
 afterAll(cleanupTestData);
 
 describe("syncLiveMatches — regression: lookup phải filter cả provider VÀ id", () => {
@@ -179,5 +194,66 @@ describe("syncLiveMatches — regression: lookup phải filter cả provider VÀ
 
     const result = await syncLiveMatches();
     expect(result.syncedCount).toBe(1); // matches.length vẫn tính cả match bị skip
+  });
+});
+
+describe("syncLiveMatches — publish real-time update", () => {
+  it("publish() được gọi đúng 1 lần/match live, SAU transaction, với đúng payload", async () => {
+    const match = await seedMatch(PROVIDER, "match-publish");
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-publish"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 20,
+      homeScore: 3,
+      awayScore: 2,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+
+    await syncLiveMatches();
+
+    // Transaction phải đã ghi xong TRƯỚC khi publish được gọi — assert gián tiếp bằng cách đọc
+    // lại DB (nếu publish() bị gọi trước transaction, DB vẫn ở trạng thái cũ dù mock publish
+    // không quan tâm thứ tự thật — điểm mấu chốt là code path trong sync-live-matches.ts gọi
+    // publish() ngay sau `await prisma.$transaction([...])`, xem file đó).
+    const dbMatch = await prisma.match.findUniqueOrThrow({ where: { id: match.id } });
+    expect(dbMatch.status).toBe("LIVE");
+
+    expect(mockPublisher.publish).toHaveBeenCalledTimes(1);
+    expect(mockPublisher.publish).toHaveBeenCalledWith({
+      matchId: match.id,
+      status: "LIVE",
+      minute: 20,
+      homeScore: 3,
+      awayScore: 2,
+      updatedAt: expect.any(String),
+    });
+  });
+
+  it("publish() reject KHÔNG làm syncLiveMatches() throw — loop hoàn tất bình thường", async () => {
+    await seedMatch(PROVIDER, "match-publish-fail");
+    const liveMatch: CanonicalMatch = {
+      externalRef: ref(PROVIDER, "match-publish-fail"),
+      competitionExternalRef: ref(PROVIDER, "live-comp-1"),
+      seasonExternalRef: ref(PROVIDER, "2025"),
+      homeTeamExternalRef: ref(PROVIDER, "live-team-a"),
+      awayTeamExternalRef: ref(PROVIDER, "live-team-b"),
+      kickoffAt: "2025-09-01T10:00:00.000Z",
+      status: "LIVE",
+      minute: 1,
+      homeScore: 0,
+      awayScore: 0,
+    };
+    mockAdapter = makeMockAdapter({ providerName: PROVIDER, fetchLiveMatches: async () => [liveMatch] });
+    mockPublisher.publish = vi.fn().mockRejectedValue(new Error("redis down"));
+
+    const result = await syncLiveMatches();
+
+    expect(result.syncedCount).toBe(1);
+    expect(mockPublisher.publish).toHaveBeenCalledTimes(1);
   });
 });

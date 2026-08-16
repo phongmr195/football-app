@@ -1,8 +1,10 @@
 import { prisma } from "@football-app/database";
 import { createAdapter } from "./provider";
+import { createPublisher } from "./realtime";
 
 export async function syncLiveMatches() {
   const adapter = createAdapter();
+  const publisher = createPublisher();
   const matches = await adapter.fetchLiveMatches();
 
   for (const match of matches) {
@@ -54,6 +56,24 @@ export async function syncLiveMatches() {
         },
       }),
     ]);
+
+    // Publish NGAY SAU transaction, dùng đúng data vừa ghi (không đọc lại DB) — RealtimeTransport
+    // implementations (RedisPublisher, no-op) tự catch lỗi/no-op nội bộ và không bao giờ throw,
+    // nhưng vẫn bọc try/catch ở đây làm lớp phòng thủ thứ 2: 1 lỗi publish (bug ở transport khác
+    // trong tương lai, hay implementation vi phạm contract) không được phép làm cả tick sync live-
+    // match thất bại — DB đã ghi đúng rồi, chỉ mỗi việc push real-time bị bỏ lỡ.
+    try {
+      await publisher.publish({
+        matchId: dbMatch.id,
+        status: match.status,
+        minute: match.minute ?? null,
+        homeScore: match.homeScore ?? 0,
+        awayScore: match.awayScore ?? 0,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error(`syncLiveMatches: publish thất bại cho match ${dbMatch.id}`, err);
+    }
   }
 
   return { syncedCount: matches.length };

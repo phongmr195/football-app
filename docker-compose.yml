@@ -115,8 +115,11 @@ services:
       FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
       DATA_PROVIDER: ${DATA_PROVIDER:-football-data}
       LIVE_POLL_INTERVAL_MS: ${LIVE_POLL_INTERVAL_MS:-30000}
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     profiles:
       - worker # chạy on-demand: pnpm docker:worker:live
