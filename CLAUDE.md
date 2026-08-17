@@ -11,7 +11,7 @@ Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architectu
 - **Auth**: Firebase Authentication (Google + Phone + Facebook đều đã enable) — đổi từ AWS Cognito, xem [PROJECT_PLAN.md § Authentication](docs/architecture/PROJECT_PLAN.md#authentication--quyết-định-đổi-từ-cognito-sang-firebase-auth-2026-08-06). Firebase project hiện dùng: `jankara-e2e-test` (project dùng chung, không riêng cho football-app).
 - **Backend**: Node.js, Hono, TypeScript, Zod (`@hono/zod-validator`), Prisma, `firebase-admin` (verify token + gửi FCM push)
 - **Database**: Aurora PostgreSQL (Prisma), Redis (cache + Pub/Sub cho real-time/push, xem Phase 2), Postgres FTS/pgvector cho search/AI (xem PROJECT_PLAN.md § 7.1 — hoãn OpenSearch tới khi cần)
-- **AI**: Amazon Bedrock (Claude, Titan embedding) — chưa implement, xem ROADMAP Phase 4
+- **AI**: Amazon Bedrock (Claude, Titan embedding) — chưa implement, xem ROADMAP Phase 5
 - **Data provider**: `football-data.org` (mặc định) qua adapter pattern (`packages/data-provider`) — API-Football vẫn giữ làm adapter phụ, đổi default vì API-Football free tier bị suspend nhiều lần, xem "### Data provider" dưới
 - **Infra**: Terraform (`infrastructure/terraform`, chưa apply), Turborepo + pnpm workspaces
 - **Secret scanning**: `secretlint` qua Husky pre-commit + CI backstop — xem "### Secrets & credentials"
@@ -21,13 +21,13 @@ Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architectu
 
 ```
 apps/
-  web/            Next.js — client chính, đã scaffold (browse pages, favorites, real-time)
+  web/            Next.js — client chính (browse pages, favorites, real-time) + /admin/* (ROADMAP Phase 4, cùng port, xem "### Admin" dưới)
   mobile/         Flutter app — TẠM PAUSE, giữ code
   api/            Hono API (TypeScript)
   sync-worker/    Đồng bộ dữ liệu từ data provider + polling live match
 packages/
   database/       Prisma schema + client (export từ packages/database/src/index.ts)
-  shared/         Types/utils dùng chung TS (pagination, ApiError)
+  shared/         Types/utils dùng chung TS (pagination, ApiError, admin-password hash/verify)
   data-provider/  Canonical model + adapter pattern cho data provider bóng đá
   realtime/       RealtimeTransport interface + Redis Pub/Sub adapter (WebSocket + goal push, Phase 2)
   ui/             Design system — dùng cho apps/web (Button/Card/Badge/Container...)
@@ -106,7 +106,7 @@ pnpm docker:down
 - Sau khi sửa schema: `pnpm db:generate`, rồi migration khi có DB thật (`pnpm db:migrate`).
 - **`pnpm db:generate` KHÔNG áp migration vào DB thật** — chỉ sinh lại Prisma Client theo `schema.prisma`. Bug thật gặp 2026-08-17: `schema.prisma` đã có `DevicePlatform.WEB` (merge từ PR khác), `db:generate` chạy bình thường không báo lỗi gì, nhưng DB dev local chưa hề chạy `pnpm db:migrate`/`db:migrate:deploy` nên enum Postgres thật vẫn chỉ có `IOS`/`ANDROID` — lỗi chỉ lộ ra lúc insert thật (`invalid input value for enum`). Sau khi `git pull`/merge PR có đổi schema, luôn chạy `db:migrate:deploy` thật trên DB đang dùng, đừng chỉ tin `db:generate` chạy xong là đủ.
 - Dùng skill `add-prisma-model` khi thêm model mới.
-- Sửa tay data sai từ provider (Phase 1, chưa có `apps/admin`) → `pnpm db:studio` (Prisma Studio, đã verify chạy thật) — không viết tool riêng trừ khi Prisma Studio thật sự không đủ.
+- Sửa tay data sai từ provider (`/admin` đã có access control thật, nhưng CRUD Competition/Team/Player/... CHƯA build — xem "### Admin" dưới + ROADMAP Phase 4) → `pnpm db:studio` (Prisma Studio, đã verify chạy thật) cho tới khi CRUD xong.
 
 ### Data provider (`packages/data-provider`)
 - KHÔNG để downstream code (sync-worker, api) biết hình dạng JSON thật của provider — luôn map qua canonical model trong `src/types.ts` trước.
@@ -131,6 +131,12 @@ pnpm docker:down
 - Trang public (browse giải đấu/team/match) nên dùng SSR/ISR cho SEO — đây là lý do chính chọn Next.js thay vì Flutter Web.
 - Dùng skill `add-web-page` để scaffold page/feature mới.
 - **shadcn/ui là design system chính từ 2026-08-15** (`apps/web/components.json`, đã setup) — `packages/ui` cũ (Button/Card/Badge/Container/Pagination) đang được migrate dần sang shadcn, KHÔNG rewrite 1 lần. Component/trang MỚI luôn dùng shadcn (`npx shadcn@latest add <component>`), kể cả khi `packages/ui` đã có bản tương đương. Khi tiện sửa 1 trang đang dùng `packages/ui` cũ, đổi luôn sang shadcn nếu không tốn nhiều effort ngoài scope; không thì để nguyên, đừng ép migrate riêng 1 task không liên quan. Icon dùng `lucide-react`. `aliases.utils` trỏ `@football-app/ui` để dùng chung `cn` cũ — nhưng lệnh `shadcn add <component>` tự lỗi vì `packages/ui/package.json` thiếu `exports` field, phải tạm trả `aliases.utils` về `@/lib/utils` lúc chạy `add` rồi sửa tay import sau (chi tiết đầy đủ ở `.claude/agents/web-dev.md`). App chưa có `next-themes`/toggle `.dark` — `dark:` đang chạy theo system preference; nếu `shadcn init`/`add` tự thêm `@custom-variant dark (&:is(.dark *));` vào `globals.css` thì phải xoá, không sẽ tắt im lặng toàn bộ dark mode hiện có.
+
+### Admin (`apps/web/src/app/admin/*`, ROADMAP Phase 4)
+- **Không phải app/port riêng** — sống chung `apps/web` (đã cân nhắc và bỏ 1 bản `apps/admin` scaffold độc lập trước đó), chỉ khác ở route `/admin/login`. `ConditionalWebChrome` (`apps/web/src/components/ConditionalWebChrome.tsx`) ẩn `NavBar`/`PushNotificationListener` công khai khi path bắt đầu `/admin` — root layout (`app/layout.tsx`) vẫn 1 Server Component duy nhất, KHÔNG tách route-group 2 root layout (đổi lại đơn giản hơn, không phải di chuyển mọi trang cũ).
+- **Auth hoàn toàn tách biệt khỏi Firebase** (khác mọi nơi khác trong app) — username/password thật, bảng `AdminUser` riêng (`username` + bcrypt `passwordHash`), JWT tự ký (`apps/api/src/middleware/admin-auth.ts`'s `requireAdminSession`, `ADMIN_JWT_SECRET` env, hạn 7 ngày). `AdminAuthProvider`/`useAdminAuth()` (`apps/web/src/lib/admin-auth-context.tsx`) lưu token ở `localStorage` — biết đây là tradeoff so với httpOnly cookie (rủi ro XSS), chấp nhận được cho tool nội bộ quy mô nhỏ. KHÔNG dùng `User`/`firebaseUid`/`requireAuth` — admin không phải end-user (không favorites/notifications/search history).
+- **Không có flow tự đăng ký/cấp quyền admin qua UI** — tạo (hoặc reset password) admin DUY NHẤT qua CLI: `pnpm --filter @football-app/api create-admin <username> <password>` (`apps/api/src/scripts/create-admin.ts`, upsert theo username).
+- CRUD Competition/Team/Player/Match/AppConfig/NotificationLog viewer: **chưa build**, mới có access control + scaffold + sidebar nav (mỗi trang còn là stub "Chưa triển khai") — xem ROADMAP Phase 4 cho breakdown từng phần còn lại.
 
 ### Mobile (`apps/mobile`) — tạm pause, quy ước vẫn giữ cho khi resume
 - Feature mới → folder riêng trong `lib/features/<feature>/` (theo mẫu `lib/features/health/`), gồm 1 Riverpod provider gọi qua `dioProvider` + 1 screen.

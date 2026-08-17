@@ -31,6 +31,20 @@ model User {
   @@map("users")
 }
 
+// Hoàn toàn tách biệt khỏi User/Firebase auth — apps/web's /admin/* (ROADMAP Phase 4) dùng
+// username/password + JWT tự ký (apps/api/src/routes/admin.ts, middleware/admin-auth.ts),
+// không verify qua Firebase. Admin không phải end-user (không favorites/notifications/search
+// history) nên không tái dùng bảng User — xem CLAUDE.md § Authentication cho lý do đầy đủ.
+model AdminUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
 model UserProfile {
   id          String  @id @default(cuid())
   userId      String  @unique

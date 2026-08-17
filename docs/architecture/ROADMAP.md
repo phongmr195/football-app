@@ -36,7 +36,7 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 - [x] `packages/data-provider`: canonical model + adapter API-Football — đã thêm `fetchCompetitions`/`fetchSeasons`/`fetchTeams`/`fetchPlayers`/`fetchMatches`, **verify thật với API key thật** (Premier League id=39, season 2023 — đối chiếu đúng bảng xếp hạng thật Man City 91đ/Arsenal 89đ). Phát hiện + fix 2 bug qua verify: (1) `/standings` lồng sâu hơn dự đoán (`response[0].league.standings` là mảng CÁC NHÓM, không phải mảng hàng trực tiếp — đã fix bằng `.flat()`), (2) `/players` phân trang thật (~3-4 trang/squad) — đã fix loop hết `paging.total`. `mapMatchEvent` (`/fixtures/events`) còn chưa verify (chưa có trận để test).
 - [x] `apps/sync-worker`: `sync-catalog.ts` (syncCompetitions → syncSeasons → syncTeams → syncPlayers → syncStandings/syncMatches, đúng thứ tự phụ thuộc) + `sync-all.ts` orchestrator (cron đơn giản, đọc `SYNC_COMPETITION_IDS`/`SYNC_SEASON_YEAR` từ env) — verify thật bằng mock adapter + Postgres Docker (5 test pass: upsert idempotent, FK resolve, throw đúng khi thiếu dependency, skip team lạ)
 - [x] API: `/competitions`, `/teams` (+ `/teams/:id/players`), `/players`, `/matches` (list có filter `competitionId`/`status`, detail), `/standings?seasonId=`, `/statistics/teams|players/:id?seasonId=` — verify thật qua curl với data seed (không phải chỉ build pass)
-- [x] Admin tool tối giản để sửa tay dữ liệu sai từ provider — **dùng Prisma Studio có sẵn** (`pnpm db:studio`), verify chạy thật (mở UI, HTTP 200) — không cần code riêng, đủ cho nhu cầu list/edit tay ở Phase 1. Nâng cấp thành `apps/admin` thật nếu sau này cần (ROADMAP Phase 6).
+- [x] Admin tool tối giản để sửa tay dữ liệu sai từ provider — **dùng Prisma Studio có sẵn** (`pnpm db:studio`), verify chạy thật (mở UI, HTTP 200) — không cần code riêng, đủ cho nhu cầu list/edit tay ở Phase 1. Nâng cấp thành `apps/admin` thật ở Phase 4 (xem bên dưới — đẩy sớm hơn "post-launch" trong plan gốc vì nhu cầu sửa data sai đã xuất hiện thật nhiều lần qua Phase 1-3, xem CLAUDE.md § Data provider).
 - [x] `sync-all.ts` (orchestrator dùng `SYNC_COMPETITION_IDS`) đã chạy full end-to-end với key thật cho competition 39/season 2023 — competitions(1239)/teams(20)/players(1022)/standings(20)/matches(380) đều đã vào DB đúng (2 bug thật gặp giữa đường đã fix, xem 2 bullet dưới).
 - [x] **Quota thật đo được** (header response, 2026-08): **10 request/phút** VÀ **100 request/ngày** (Free plan). Đã fix bug throttle thật: adapter cũ gọi request liên tục không giới hạn → dính `429` giữa chừng khi sync nhiều team (`packages/data-provider/src/rate-limiter.ts`, sliding-window 8 req/phút). Full sync 1 giải 20 team tốn **~85-95 request** (players chiếm phần lớn — 1093 lượt fetch cho 20 team, dedup DB xuống 1022 player vì có người chuyển team giữa mùa) — gần như dùng hết quota ngày, không đủ chạy tiếp `fetchMatches` trong cùng ngày nếu đã test nhiều trước đó. Kết luận: 1 giải/lần chạy/ngày là giới hạn thực tế của Free plan.
 - [x] **Bug thật quan trọng hơn, đã fix**: API-Football báo lỗi hết quota/param sai bằng **HTTP 200 kèm `errors` có nội dung trong body**, KHÔNG phải mã lỗi HTTP — code cũ chỉ check `res.ok`/429 nên coi lỗi này là "thành công" với response rỗng. Hậu quả thật đã xảy ra: `fetchMatches` trả về 0 match một cách âm thầm khi hết quota giữa lúc chạy `sync-all` thật (competitions/teams/players/standings đã sync đúng vào DB, matches=0 vì lỗi này). Đã fix: `request()` giờ throw nếu `body.errors` non-empty dù HTTP 200. Verify bằng test mock (`api-football.adapter.test.ts`), không cần gọi API thật.
@@ -101,14 +101,32 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 - [x] `/search` dùng Postgres full-text search (`contains`/`ILIKE` v1 — đủ nhanh cho quy mô data hiện tại, chưa cần `tsvector`+GIN hay OpenSearch, xem [PROJECT_PLAN.md § 7.1](./PROJECT_PLAN.md#71-chiến-lược-costcomplexity-theo-phase-nguyên-tắc-chung)) — `apps/api/src/routes/search.ts`, `apps/web/src/app/search/page.tsx` + ô tìm kiếm trên `NavBar`
 - [x] `search_history` — ghi 1 dòng/lượt search khi đã đăng nhập (ẩn danh bỏ qua, không có giá trị tra cứu lại) qua `tryResolveUserId()` (`apps/api/src/middleware/auth.ts`, biến thể không bắt buộc đăng nhập của `requireAuth`)
 - [x] `top_scorers`, `top_assists`, `clean_sheets` — verify thật 2026-08-17, Premier League 2025/26: `FootballDataAdapter.fetchTopScorers()` (`GET /competitions/{id}/scorers?limit=100`, endpoint free tier thật, KHÔNG phải feature trả phí) trả cả `goals` lẫn `assists`/`playedMatches` trong 1 request — derive `TopScorer` (rank theo goals) + `TopAssist` (rank theo assists, lọc `assists=0`) từ CÙNG dữ liệu. `clean_sheets` tính thẳng từ `Match` đã sync (không gọi thêm provider). Cả 2 job (`syncTopScorers`/`syncTeamAggregates`, `apps/sync-worker/src/sync-catalog.ts`) chạy tự động trong `syncCompetitionSeason()`. **Giới hạn đã biết**: `TopAssist` chỉ derive từ top-100 GOALS, không phải bảng kiến tạo đầy đủ của giải — 1 tiền vệ ghi ít bàn nhưng kiến tạo nhiều có thể bị thiếu nếu không lọt top 100 scorers (football-data.org free tier không có endpoint assists riêng). `ApiFootballAdapter.fetchTopScorers()` chưa implement (throw rõ ràng, caller catch gracefully) — provider phụ, hiện đang bị suspend.
-- [x] Player/team statistics chi tiết hơn — `PlayerStatistics.{appearances,goals,assists}` (từ scorers endpoint) + `TeamStatistics.{wins,draws,losses,goalsFor,goalsAgainst,cleanSheets}` (tính từ `Match`), hiện thẻ "Thống kê mùa giải gần nhất" trên `teams/[id]`/`players/[id]` (`GET /statistics/teams/:id`/`players/:id` không truyền `seasonId` → tự lấy mùa gần nhất có data). **Scoped down có chủ đích**: `yellowCards`/`redCards`/`minutesPlayed` giữ mặc định `0` của schema, KHÔNG hiện lên UI — cần dữ liệu match-event cấp cầu thủ mà provider hiện tại (football-data.org free tier) không có, xem mục dưới. So sánh cơ bản giữa 2 cầu thủ (nền cho AI compare Phase 4): **chưa làm**, để lại cho Phase 4 khi cần.
+- [x] Player/team statistics chi tiết hơn — `PlayerStatistics.{appearances,goals,assists}` (từ scorers endpoint) + `TeamStatistics.{wins,draws,losses,goalsFor,goalsAgainst,cleanSheets}` (tính từ `Match`), hiện thẻ "Thống kê mùa giải gần nhất" trên `teams/[id]`/`players/[id]` (`GET /statistics/teams/:id`/`players/:id` không truyền `seasonId` → tự lấy mùa gần nhất có data). **Scoped down có chủ đích**: `yellowCards`/`redCards`/`minutesPlayed` giữ mặc định `0` của schema, KHÔNG hiện lên UI — cần dữ liệu match-event cấp cầu thủ mà provider hiện tại (football-data.org free tier) không có, xem mục dưới. So sánh cơ bản giữa 2 cầu thủ (nền cho AI compare Phase 5): **chưa làm**, để lại cho Phase 5 khi cần.
 - [ ] `match_lineups`, `formations`, `player_ratings`, `team_ratings`, `commentaries` — **descope khỏi Phase 3, chưa đóng hẳn** (2026-08-17): `FootballDataAdapter.fetchMatchEvents()` (provider mặc định) throw có chủ đích — free tier `GET /matches/{id}` không trả lineup/booking/goal timeline gì cả (verify thật, xem comment trong file). `ApiFootballAdapter` (provider phụ) có endpoint lineup/formation/player rating ở free tier, nhưng **đang bị suspend** tại thời điểm này, và kể cả khi unblock cũng không có endpoint commentary dạng text (không nhà cung cấp free-tier nào có). Đã cân nhắc đi "gần raw hơn" (Opta/Sportradar/feed trực tiếp từ giải) — không khả thi, đây đều là data vendor bán license doanh nghiệp, đắt hơn chứ không rẻ/free hơn 2 provider hiện tại. Schema (`MatchLineup`, `Formation`, `PlayerRating`, `TeamRating`, `Commentary`) giữ nguyên, chưa dùng tới — revisit khi `api-football` unblock hoặc tìm được nguồn free ổn định khác.
 
 **Exit criteria:** tìm được team/player nhanh ✅, xem được top scorer/assist theo giải ✅ (kèm sạch lưới) — **đạt phần này**. Chi tiết trận đầy đủ (lineup, formation, rating) trên web — **chưa đạt**, hoãn theo lý do ở trên, không chặn phần còn lại của Phase 3.
 
 ---
 
-## Phase 4 — AI Features (Size: L)
+## Phase 4 — Admin Panel (Size: M)
+
+**Mục tiêu:** thay Prisma Studio bằng 1 tool nội bộ chuyên dụng để sửa data sai từ provider, quản lý feature flags, và debug notification — đẩy sớm hơn "post-launch" trong plan gốc (PROJECT_PLAN.md § 8) vì friction thật đã lặp lại nhiều lần qua Phase 1-3 (tên/logo sai từ provider, cần set tay `LiveMatchState` để test Phase 2, tra `NotificationLog` bằng SQL tay khi debug push Phase 2 Bước 3). Theo đúng nguyên tắc "chỉ thêm khi cần thật đo được" (PROJECT_PLAN.md § 7.1) — Prisma Studio đã đủ cho Phase 1-3, giờ mới đáng để build riêng.
+
+- [x] **Admin access control** — quyết định cuối (đổi từ bản nháp đầu dùng `User.role`+Firebase): **hoàn toàn tách biệt khỏi Firebase** — bảng `AdminUser` riêng (`username` + bcrypt `passwordHash`, KHÔNG dùng chung với `User`/`firebaseUid`), JWT tự ký (`apps/api/src/middleware/admin-auth.ts`'s `requireAdminSession`, `ADMIN_JWT_SECRET` env, hạn 7 ngày). Lý do đổi: yêu cầu thật là đăng nhập username/password nội bộ, không phải Google/Facebook — xem `AdminUser` model trong schema.prisma cho lý do không tái dùng `User`. Verify thật: `POST /admin/login` đúng/sai password, `GET /admin/me` có/không/sai token — cả 4 case đều đúng status (200/401). **Chưa có flow tự cấp quyền admin qua UI** — admin đầu tiên (và mọi admin sau) được tạo qua CLI script, xem bullet script bên dưới.
+- [x] `/admin/*` — **KHÔNG phải app/port riêng** (đổi từ bản nháp đầu `apps/admin` scaffold độc lập) — sống chung `apps/web`, cùng port, chỉ khác route `/admin/login`. `ConditionalWebChrome` (`apps/web/src/components/ConditionalWebChrome.tsx`) ẩn `NavBar`/`PushNotificationListener` công khai khi `pathname` bắt đầu bằng `/admin` — root layout vẫn là 1 Server Component duy nhất (không tách route-group 2 root layout, đổi lại đơn giản hơn: mọi trang cũ giữ nguyên chỗ, không phải di chuyển). `AdminAuthProvider`/`useAdminAuth()` (`apps/web/src/lib/admin-auth-context.tsx`, token lưu `localStorage`) + `AdminGate` (`apps/web/src/components/admin/AdminGate.tsx`) — bỏ qua chính `/admin/login`, redirect các route `/admin/*` khác về đó khi chưa đăng nhập, hiện sidebar (Giải đấu/Đội bóng/Cầu thủ/Trận đấu/Cấu hình/Nhật ký thông báo) khi đã xác nhận. Verify thật qua browser: `/admin` chưa đăng nhập → redirect `/admin/login`; trang công khai (`/`, `/competitions`) vẫn `NavBar` bình thường, không lẫn sidebar admin. `pnpm build` (turbo, root) verify sạch theo đúng cách đã dùng để tìm+fix bug CI build home-dashboard (xoá `.env.local`, dùng fake Firebase env vars của CI) — `/admin/*` không đụng Firebase nên không phụ thuộc các biến đó, nhưng vẫn build tĩnh (`○`) sạch cùng lúc với các trang công khai khác.
+- [x] Script tạo admin user — `pnpm --filter @football-app/api create-admin <username> <password>` (`apps/api/src/scripts/create-admin.ts`), upsert theo username (chạy lại = reset password, không báo lỗi trùng) — cách duy nhất để có admin đầu tiên, không có flow tự đăng ký. Verify thật: chạy script, kiểm tra `admin_users.passwordHash` bắt đầu bằng `$2b$12$` (bcrypt thật, không phải plaintext) qua `psql`.
+- [ ] Nav sidebar hiện có sẵn (Giải đấu/Đội bóng/Cầu thủ/Trận đấu/Cấu hình/Nhật ký thông báo) nhưng mỗi trang mới chỉ là stub ("Chưa triển khai") — các mục dưới đây thay stub bằng trang thật:
+- [ ] CRUD `Competition`/`Season`/`Team`/`Player`/`Stadium`/`Coach`/`Referee` — form có validate qua Zod (dùng lại schema đã có ở `apps/api`), thay cho sửa thẳng cột DB qua Prisma Studio (không có validate, dễ sửa sai kiểu dữ liệu)
+- [ ] Xem/sửa `Match` (tỉ số, trạng thái, lịch) + set tay `LiveMatchState` — thay cho việc tự set tay qua Prisma Studio mỗi lần cần test live-match (đã làm việc này nhiều lần ở Phase 2)
+- [ ] Trang quản lý `AppConfig` (feature flags) — model đã có sẵn trong schema từ đầu, **chưa từng được dùng tới** ở bất kỳ phase nào; đây là chỗ đầu tiên thật sự cần nó (chuẩn bị cho kill-switch ở Phase 6 — Hardening & Launch)
+- [ ] Trang xem `NotificationLog` (SENT/FAILED theo user/device/thời gian) — thay cho query `psql` tay (đã làm nhiều lần khi debug push notification Phase 2 Bước 3)
+- [ ] (cân nhắc, không bắt buộc) Xem danh sách `User` + favorites của họ — hỗ trợ debug khi có báo lỗi từ người dùng thật
+
+**Exit criteria:** sửa được tên/logo cầu thủ-đội-giải sai từ 1 form web (không cần Prisma Studio/SQL tay), bật/tắt được 1 feature flag qua UI, tra được lịch sử gửi thông báo theo user mà không cần query DB tay.
+
+---
+
+## Phase 5 — AI Features (Size: L)
 
 **Mục tiêu:** điểm khác biệt chính của app so với đối thủ.
 
@@ -122,7 +140,7 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 
 ---
 
-## Phase 5 — Hardening & Launch (Size: M)
+## Phase 6 — Hardening & Launch (Size: M)
 
 **Mục tiêu:** sẵn sàng phát hành công khai.
 
@@ -138,12 +156,12 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 
 ---
 
-## Phase 6 — Post-launch Growth (Size: XL, mở — làm theo feedback thật)
+## Phase 7 — Post-launch Growth (Size: XL, mở — làm theo feedback thật)
 
 Không chốt chi tiết trước launch vì phụ thuộc feedback người dùng thật. Các hướng dự kiến:
 - **Resume `apps/mobile`** — ưu tiên cao nếu web đã có traction, vì backend/data/AI đã sẵn, chỉ cần build lại UI (Firebase Auth mobile đã xong từ trước khi pause)
 - Personalization sâu hơn (feed theo hành vi xem)
-- `apps/admin` đầy đủ (nếu tool tối giản ở Phase 1 không còn đủ) — dùng chung `packages/ui` với `apps/web`
+- Mở rộng `apps/admin` (đã build ở Phase 4) — thêm tính năng theo nhu cầu vận hành thật sau launch, ví dụ audit log, bulk edit, dashboard chi phí AI/data provider
 - Mở rộng coverage giải đấu / nâng cấp data provider (Sportradar/Opta) nếu doanh thu cho phép
 - Monetization: ads, subscription cho tính năng AI nâng cao
 - Đa ngôn ngữ ngoài Việt/English nếu có nhu cầu thị trường
@@ -184,13 +202,18 @@ Phase 1 (Data & Browse — Web) ─────┐
 Phase 2 (Real-time)               │
    │                              │
    ▼                              ▼
-Phase 3 (Search & Stats) ──▶ Phase 4 (AI — cần statistics từ Phase 3
+Phase 3 (Search & Stats) ──▶ Phase 5 (AI — cần statistics từ Phase 3
    │                              làm nền cho so sánh/summary)
    ▼                              │
-Phase 5 (Hardening & Launch) ◀────┘
+Phase 4 (Admin Panel — độc lập,   │
+   không phụ thuộc Phase 3/5,     │
+   có thể làm song song)          │
+   │                              │
+   ▼                              ▼
+Phase 6 (Hardening & Launch) ◀────┘
    │
    ▼
-Phase 6 (Post-launch — bao gồm resume Mobile)
+Phase 7 (Post-launch — bao gồm resume Mobile)
 ```
 
 Phase 3 và Phase 4 có thể chạy **song song một phần** nếu team đủ người (1 track làm search/stats, 1 track làm AI infra) — chỉ cần đồng bộ ở điểm AI cần dữ liệu statistics làm input.
