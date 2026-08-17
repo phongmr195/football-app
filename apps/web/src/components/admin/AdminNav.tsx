@@ -7,13 +7,13 @@ import { cn } from "@football-app/ui";
 // Mọi trang ngoài "/" chỉ là stub cho tới khi build ở các piece sau (xem ROADMAP Phase 4) — link
 // thật (không phải href="#") để không tạo dead-end UX, nhưng nội dung trang chỉ ghi "chưa triển khai".
 const LINKS = [
-  { href: "/", label: "Dashboard" },
-  { href: "/competitions", label: "Giải đấu" },
-  { href: "/teams", label: "Đội bóng" },
-  { href: "/players", label: "Cầu thủ" },
-  { href: "/matches", label: "Trận đấu" },
-  { href: "/config", label: "Cấu hình" },
-  { href: "/notifications", label: "Nhật ký thông báo" },
+  { href: "/admin", label: "Dashboard" },
+  { href: "/admin/competitions", label: "Giải đấu" },
+  { href: "/admin/teams", label: "Đội bóng" },
+  { href: "/admin/players", label: "Cầu thủ" },
+  { href: "/admin/matches", label: "Trận đấu" },
+  { href: "/admin/config", label: "Cấu hình" },
+  { href: "/admin/notifications", label: "Nhật ký thông báo" },
 ];
 
 export function AdminNav() {
@@ -22,7 +22,7 @@ export function AdminNav() {
   return (
     <nav className="flex flex-col gap-1">
       {LINKS.map(({ href, label }) => {
-        const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href);
+        const isActive = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
         return (
           <Link
             key={href}

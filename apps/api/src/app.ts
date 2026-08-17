@@ -12,6 +12,7 @@ import { favoritesRoute } from "./routes/favorites";
 import { devicesRoute } from "./routes/devices";
 import { searchRoute } from "./routes/search";
 import { adminRoute } from "./routes/admin";
+import { stadiumsRoute } from "./routes/stadiums";
 
 export const app = new Hono();
 
@@ -49,5 +50,6 @@ app.route("/", favoritesRoute);
 app.route("/", devicesRoute);
 app.route("/", searchRoute);
 app.route("/", adminRoute);
+app.route("/", stadiumsRoute);
 
 export type App = typeof app;
