@@ -284,13 +284,19 @@ Không dựng toàn bộ Aurora + Redis + OpenSearch + Bedrock cùng lúc từ �
 
 ---
 
-## 8. Ghi chú về `apps/admin`
+## 8. Ghi chú về admin panel
 
-Plan gốc để admin là "tùy chọn". Thực tế nên có **admin tool tối giản từ Phase 1** (không cần là app đầy đủ) vì:
+Plan gốc để admin là "tùy chọn", để riêng thành `apps/admin`. Thực tế nên có **admin tool tối giản từ Phase 1** (không cần là app đầy đủ) vì:
 - Dữ liệu từ API-Football có thể sai/thiếu (tên cầu thủ, logo...) — cần cách sửa tay nhanh, không phải sửa trực tiếp DB
 - Cần nơi quản lý `feature_flags`/`app_config` mà không phải chạy SQL tay
 
-Có thể bắt đầu bằng 1 CLI script hoặc trang admin cực đơn giản (list + edit form), nâng cấp thành app đầy đủ ở phase sau nếu cần. Từ khi có `apps/web`, `apps/admin` có thể dùng chung `packages/ui` để đỡ công design system riêng.
+Phase 1: dùng **Prisma Studio có sẵn** (`pnpm db:studio`) — đủ cho nhu cầu list/edit tay lúc đó, không code riêng.
+
+**(2026-08-17) Cập nhật — đẩy sớm lên ROADMAP Phase 4:** friction sửa data tay qua Prisma Studio đã lặp lại nhiều lần thật qua Phase 1-3 (tên/logo sai từ provider, set tay `LiveMatchState` để test Phase 2, tra `NotificationLog` bằng SQL tay khi debug push Phase 2 Bước 3), đủ để tính là "nhu cầu thật đo được" theo nguyên tắc ở § 7.1.
+
+**Kiến trúc cuối (khác plan gốc `apps/admin` độc lập ở 2 điểm):**
+- **Không phải app/port riêng** — sống chung `apps/web` (`apps/web/src/app/admin/*`), chỉ khác route `/admin/login`. Lý do: yêu cầu thật là "chung 1 port, chỉ khác route đăng nhập" — tách app riêng (dù có dùng chung `packages/ui`) vẫn tốn thêm port/CORS/scaffold không cần thiết so với 1 route namespace trong app đã có.
+- **Auth hoàn toàn tách biệt khỏi Firebase** — username/password thật (không phải Google/Facebook như plan nháp đầu), bảng `AdminUser` riêng + JWT tự ký, không liên quan `User`/`firebaseUid`. Xem CLAUDE.md § Admin cho chi tiết đầy đủ, ROADMAP.md Phase 4 cho scope + tiến độ CRUD còn lại.
 
 ---
 

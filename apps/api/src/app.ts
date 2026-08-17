@@ -11,6 +11,7 @@ import { statisticsRoute } from "./routes/statistics";
 import { favoritesRoute } from "./routes/favorites";
 import { devicesRoute } from "./routes/devices";
 import { searchRoute } from "./routes/search";
+import { adminRoute } from "./routes/admin";
 
 export const app = new Hono();
 
@@ -47,5 +48,6 @@ app.route("/", statisticsRoute);
 app.route("/", favoritesRoute);
 app.route("/", devicesRoute);
 app.route("/", searchRoute);
+app.route("/", adminRoute);
 
 export type App = typeof app;
