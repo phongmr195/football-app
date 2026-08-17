@@ -1,3 +1,4 @@
+import { computeNextInterval } from "./adaptive-interval";
 import { syncLiveMatches } from "./sync-live-matches";
 
 // sleep() dùng setTimeout + abort listener thay vì sleep chặn thật — cho phép Ctrl-C (SIGINT/
@@ -40,6 +41,18 @@ export async function runLivePollingLoop({ intervalMs = 30_000, signal }: RunLiv
     }
 
     if (signal?.aborted) break;
-    await sleep(intervalMs, signal);
+
+    // Adaptive polling (Phase 2 Bước 4) — computeNextInterval() query DB để rút ngắn/giãn cadence
+    // theo trận có LIVE/HALFTIME/sắp kickoff hay không, thay vì intervalMs cố định. intervalMs
+    // tham số vẫn giữ vai trò fallback: nếu computeNextInterval() throw (DB tạm lỗi...), dùng lại
+    // giá trị cố định, log lỗi, không throw ra ngoài loop, không hang.
+    let nextInterval = intervalMs;
+    try {
+      nextInterval = await computeNextInterval();
+    } catch (err) {
+      console.error("computeNextInterval thất bại, dùng intervalMs mặc định", err);
+    }
+    console.log("live poll next interval", nextInterval);
+    await sleep(nextInterval, signal);
   }
 }

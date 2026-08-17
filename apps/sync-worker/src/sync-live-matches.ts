@@ -1,4 +1,5 @@
 import { prisma } from "@football-app/database";
+import type { GoalEvent } from "@football-app/realtime";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
 
@@ -25,6 +26,36 @@ export async function syncLiveMatches() {
       // TODO: match chưa tồn tại trong DB nghĩa là competition/team/season liên quan
       // cũng chưa được sync — cần chạy job sync danh mục (competitions/teams/seasons) trước.
       continue;
+    }
+
+    // Diff score TRƯỚC khi transaction ghi đè dbMatch.homeScore/awayScore — chỉ TĂNG mới tính là
+    // bàn thắng (giảm là provider sửa số liệu, không phải bàn thắng thật). Tick đầu tiên quan sát
+    // 1 match (dbMatch.homeScore null từ lúc còn SCHEDULED, match.homeScore về 0 lúc kickoff)
+    // không false-positive vì `0 > 0` là false. Không dùng else-if giữa 2 đội — cả 2 có thể cùng
+    // ghi bàn giữa 2 tick polling (xem plan Phase 2 Bước 3 § A2).
+    const newHomeScore = match.homeScore ?? 0;
+    const newAwayScore = match.awayScore ?? 0;
+    const oldHomeScore = dbMatch.homeScore ?? 0;
+    const oldAwayScore = dbMatch.awayScore ?? 0;
+
+    const goalEvents: GoalEvent[] = [];
+    if (newHomeScore > oldHomeScore) {
+      goalEvents.push({
+        matchId: dbMatch.id,
+        teamId: dbMatch.homeTeamId,
+        homeScore: newHomeScore,
+        awayScore: newAwayScore,
+        scoredAt: new Date().toISOString(),
+      });
+    }
+    if (newAwayScore > oldAwayScore) {
+      goalEvents.push({
+        matchId: dbMatch.id,
+        teamId: dbMatch.awayTeamId,
+        homeScore: newHomeScore,
+        awayScore: newAwayScore,
+        scoredAt: new Date().toISOString(),
+      });
     }
 
     // Ghi cả Match (status/score) lẫn LiveMatchState trong 1 transaction — các trang /matches
@@ -73,6 +104,20 @@ export async function syncLiveMatches() {
       });
     } catch (err) {
       console.error(`syncLiveMatches: publish thất bại cho match ${dbMatch.id}`, err);
+    }
+
+    // Publish từng goal event SAU transaction, mỗi event bọc try/catch riêng (không phải 1 try/
+    // catch bọc cả vòng for) — 1 event publish thất bại không được chặn các event còn lại của
+    // cùng match (vd cả 2 đội cùng ghi bàn giữa 2 tick).
+    for (const goalEvent of goalEvents) {
+      try {
+        await publisher.publishGoal(goalEvent);
+      } catch (err) {
+        console.error(
+          `syncLiveMatches: publishGoal thất bại cho match ${dbMatch.id}, team ${goalEvent.teamId}`,
+          err,
+        );
+      }
     }
   }
 

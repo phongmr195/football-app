@@ -26,7 +26,10 @@ const firebaseConfig = {
 // in dev. `getApps().length` guards against Firebase's
 // `FirebaseError: Firebase App named '[DEFAULT]' already exists` when `initializeApp` is called
 // more than once — the standard Next.js + Firebase pattern.
-const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+// Exported (not just used internally) because `getMessaging()` (lib/push-notifications.ts, Phase
+// 2 Bước 3 — goal push notifications) needs the initialized `FirebaseApp` instance directly, the
+// same way `getAuth(app)` below does.
+export const app: FirebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 
 export const auth: Auth = getAuth(app);
 

@@ -13,3 +13,15 @@ export interface LiveUpdateEvent {
   awayScore: number;
   updatedAt: string; // ISO datetime
 }
+
+// Publish-side shape của 1 lần ghi bàn — dùng cho kênh global "goal-events" (Phase 2 Bước 3, khác
+// với LiveUpdateEvent per-match ở trên: goal notification phải nổ kể cả khi KHÔNG ai đang xem qua
+// WebSocket, xem plan Phase 2 Bước 3 § Context). `teamId` là ID nội bộ (Prisma `Team.id`, không
+// phải externalRef) — apps/api reverse-lookup FavoriteTeam trực tiếp theo giá trị này.
+export interface GoalEvent {
+  matchId: string;
+  teamId: string;
+  homeScore: number;
+  awayScore: number;
+  scoredAt: string; // ISO datetime
+}

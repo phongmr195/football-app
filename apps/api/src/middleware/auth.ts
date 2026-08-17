@@ -1,21 +1,28 @@
-import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import type { MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import { prisma } from "@football-app/database";
 
-// Local dev: set FIREBASE_AUTH_EMULATOR_HOST (ví dụ "127.0.0.1:9099") — firebase-admin
-// tự route verifyIdToken tới Auth Emulator, không cần project/credentials thật.
+// Dùng chung 1 firebase-admin App cho CẢ verifyIdToken (auth) LẪN sendEachForMulticast (FCM, xem
+// src/realtime/goal-notifier.ts) — initializeApp() throw "app already exists" nếu gọi lần 2, nên
+// MỌI nơi trong apps/api cần firebase-admin PHẢI qua getFirebaseApp() này, không tự gọi
+// initializeApp() riêng. Local dev: set FIREBASE_AUTH_EMULATOR_HOST (ví dụ "127.0.0.1:9099") —
+// firebase-admin tự route verifyIdToken tới Auth Emulator, không cần project/credentials thật.
 // Production: set FIREBASE_SERVICE_ACCOUNT (JSON) hoặc GOOGLE_APPLICATION_CREDENTIALS.
+export function getFirebaseApp(): App {
+  const existing = getApps();
+  if (existing.length > 0) return existing[0]!;
+
+  return initializeApp(
+    process.env.FIREBASE_SERVICE_ACCOUNT
+      ? { credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) }
+      : { projectId: process.env.FIREBASE_PROJECT_ID },
+  );
+}
+
 function getFirebaseAuth() {
-  if (getApps().length === 0) {
-    initializeApp(
-      process.env.FIREBASE_SERVICE_ACCOUNT
-        ? { credential: cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) }
-        : { projectId: process.env.FIREBASE_PROJECT_ID },
-    );
-  }
-  return getAuth();
+  return getAuth(getFirebaseApp());
 }
 
 declare module "hono" {

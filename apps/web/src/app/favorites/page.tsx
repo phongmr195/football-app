@@ -2,9 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import { Badge, Button, Card, Container } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
+import { registerDevice } from "@/lib/devices";
 import { playerPositionMeta } from "@/lib/format";
+import { requestPushPermission } from "@/lib/push-notifications";
 import { useFavoritePlayers, useFavoriteTeams, useToggleFavorite } from "@/lib/use-favorites";
 
 /**
@@ -18,16 +21,41 @@ import { useFavoritePlayers, useFavoriteTeams, useToggleFavorite } from "@/lib/u
  * /teams/[id] and /players/[id], so unfavoriting here (or favoriting from a detail page) stays
  * consistent everywhere without an extra round-trip.
  */
+type NotificationOptInStatus = "idle" | "requesting" | "enabled" | "denied" | "unsupported" | "error";
+
 export default function FavoritesPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, getIdToken } = useAuth();
   const teamsQuery = useFavoriteTeams();
   const playersQuery = useFavoritePlayers();
   const { unfavorite: unfavoriteTeamMutation } = useToggleFavorite("team");
   const { unfavorite: unfavoritePlayerMutation } = useToggleFavorite("player");
+  const [notificationStatus, setNotificationStatus] = useState<NotificationOptInStatus>("idle");
 
   const teams = teamsQuery.data ?? [];
   const players = playersQuery.data ?? [];
   const loadingData = user ? teamsQuery.isLoading || playersQuery.isLoading : false;
+
+  async function handleEnableNotifications() {
+    setNotificationStatus("requesting");
+    try {
+      const token = await requestPushPermission();
+      if (!token) {
+        // requestPushPermission() returns null both for "browser doesn't support push" and for
+        // "user declined" — Notification.permission still tells the two apart afterwards.
+        const unsupported =
+          typeof window === "undefined" ||
+          !("Notification" in window) ||
+          !("serviceWorker" in navigator);
+        setNotificationStatus(unsupported ? "unsupported" : "denied");
+        return;
+      }
+      await registerDevice(token, await getIdToken());
+      setNotificationStatus("enabled");
+    } catch (err) {
+      console.error("handleEnableNotifications failed", err);
+      setNotificationStatus("error");
+    }
+  }
 
   if (authLoading) {
     return (
@@ -54,7 +82,37 @@ export default function FavoritesPage() {
 
   return (
     <Container size="md" className="py-10">
-      <h1 className="mb-8 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Yêu thích</h1>
+      <h1 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Yêu thích</h1>
+
+      <Card padding="sm" className="mb-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+          Nhận thông báo ngay khi đội bóng bạn theo dõi ghi bàn.
+        </p>
+        <div className="flex items-center gap-3">
+          <Button
+            size="sm"
+            onClick={() => void handleEnableNotifications()}
+            disabled={notificationStatus === "requesting" || notificationStatus === "enabled"}
+          >
+            {notificationStatus === "enabled" ? "Đã bật" : "Bật thông báo bàn thắng"}
+          </Button>
+          {notificationStatus === "denied" && (
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+              Bạn đã từ chối quyền thông báo.
+            </span>
+          )}
+          {notificationStatus === "unsupported" && (
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+              Trình duyệt không hỗ trợ thông báo đẩy.
+            </span>
+          )}
+          {notificationStatus === "error" && (
+            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+              Không thể bật thông báo, thử lại sau.
+            </span>
+          )}
+        </div>
+      </Card>
 
       <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-50">Đội bóng</h2>
       {loadingData ? (
