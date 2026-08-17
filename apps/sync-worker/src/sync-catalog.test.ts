@@ -279,13 +279,45 @@ describe("cross-provider id collision (regression, xem bug ghi ở CLAUDE.md § 
   });
 });
 
-// findFirst({ where: { name: "2025" } }) một mình sẽ nhầm match season của giải THẬT khác cũng
-// tên "2025" (DB test này chạy chung DATABASE_URL với dev, đã có data thật từ các lần sync
-// trước) — luôn scope qua competitionId của chính COMPETITION_EXT trong test này.
-async function getTestSeason() {
-  const dbCompetition = await prisma.competition.findFirst({
-    where: { externalRef: { path: ["id"], equals: COMPETITION_EXT.id } },
+// Luôn filter theo CẢ provider VÀ id khi lookup theo externalRef — DB test này chạy chung
+// DATABASE_URL với dev (đã có data thật từ các lần sync trước), filter chỉ theo id có thể match
+// nhầm row của provider/dataset khác (đúng bug class đã ghi ở CLAUDE.md § Database, xem
+// findCompetitionByExternalId/findTeamByExternalId/findPlayerByExternalId trong sync-catalog.ts).
+async function findTestCompetition() {
+  return prisma.competition.findFirst({
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: PROVIDER } },
+        { externalRef: { path: ["id"], equals: COMPETITION_EXT.id } },
+      ],
+    },
   });
+}
+
+async function findTestPlayer(externalId: string) {
+  return prisma.player.findFirst({
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: PROVIDER } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
+  });
+}
+
+async function findTestTeam(externalId: string) {
+  return prisma.team.findFirst({
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: PROVIDER } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
+  });
+}
+
+async function getTestSeason() {
+  const dbCompetition = await findTestCompetition();
   return prisma.season.findFirst({ where: { competitionId: dbCompetition?.id, name: "2025" } });
 }
 
@@ -339,8 +371,8 @@ describe("syncTopScorers (Phase 3)", () => {
     expect(result.syncedCount).toBe(2);
     expect(result.skipped).toBe(1);
 
-    const dbPlayerA = await prisma.player.findFirst({ where: { externalRef: { path: ["id"], equals: "player-a" } } });
-    const dbPlayerB = await prisma.player.findFirst({ where: { externalRef: { path: ["id"], equals: "player-b" } } });
+    const dbPlayerA = await findTestPlayer("player-a");
+    const dbPlayerB = await findTestPlayer("player-b");
     const dbSeason = await getTestSeason();
 
     const scorerA = await prisma.topScorer.findFirst({ where: { playerId: dbPlayerA?.id, seasonId: dbSeason?.id } });
@@ -366,7 +398,7 @@ describe("syncTopScorers (Phase 3)", () => {
     ];
     await syncTopScorers(makeMockAdapter({ fetchTopScorers: async () => rows }), COMPETITION_EXT, SEASON_EXT);
 
-    const dbPlayerA = await prisma.player.findFirst({ where: { externalRef: { path: ["id"], equals: "player-a" } } });
+    const dbPlayerA = await findTestPlayer("player-a");
     const assistRow = await prisma.topAssist.findFirst({ where: { playerId: dbPlayerA?.id } });
     expect(assistRow).toBeNull();
   });
@@ -393,8 +425,8 @@ describe("syncTeamAggregates (Phase 3 — TeamStatistics + CleanSheet, tính t�
     expect(result.teamsProcessed).toBe(2);
     expect(result.cleanSheetTeams).toBe(1); // chỉ team A có clean sheet (trận 1)
 
-    const dbTeamA = await prisma.team.findFirst({ where: { externalRef: { path: ["id"], equals: TEAM_A_EXT.id } } });
-    const dbTeamB = await prisma.team.findFirst({ where: { externalRef: { path: ["id"], equals: TEAM_B_EXT.id } } });
+    const dbTeamA = await findTestTeam(TEAM_A_EXT.id);
+    const dbTeamB = await findTestTeam(TEAM_B_EXT.id);
 
     const statsA = await prisma.teamStatistics.findFirst({ where: { teamId: dbTeamA?.id, seasonId: dbSeason?.id } });
     expect(statsA).toMatchObject({ wins: 1, draws: 1, losses: 0, goalsFor: 3, goalsAgainst: 1, cleanSheets: 1 });
