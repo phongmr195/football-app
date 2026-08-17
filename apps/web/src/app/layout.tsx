@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Football App",
-  description: "Football App — competitions, teams, matches and standings.",
+  title: "My Football",
+  description: "My Football — competitions, teams, matches and standings.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

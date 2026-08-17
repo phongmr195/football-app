@@ -12,7 +12,7 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiGetClient } from "./api-client";
 import { subscribeToMatch } from "./realtime-client";
-import type { LiveMatchState, MatchEvent } from "./types";
+import type { LiveMatchState, MatchDetail, MatchEvent } from "./types";
 
 /**
  * `GET /matches/:id/live` REST fetch (Bước 1) plus a Bước 2 WebSocket subscription
@@ -43,6 +43,26 @@ export function useLiveMatch(matchId: string) {
       }
     },
     refetchInterval: 45000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+/**
+ * Summary ticker for the home dashboard (`components/dashboard/LiveMatchesTicker.tsx`) — plain
+ * REST polling of `GET /matches/live` (already Redis-cached server-side, 5s TTL, see
+ * apps/api/src/routes/matches.ts), NOT a WebSocket subscription like `useLiveMatch` above. A
+ * home-page ticker just needs "is anything live right now, what's the score" at a glance; the
+ * per-match WebSocket + event catch-up machinery is only worth its complexity on the match detail
+ * page where a single match's minute-by-minute event feed actually matters.
+ */
+export function useLiveMatches() {
+  return useQuery({
+    queryKey: ["matches", "live"],
+    queryFn: async () => {
+      const { items } = await apiGetClient<{ items: MatchDetail[] }>("/matches/live");
+      return items;
+    },
+    refetchInterval: 10000,
     refetchIntervalInBackground: false,
   });
 }

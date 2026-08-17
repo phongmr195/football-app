@@ -11,6 +11,13 @@ const matchesQuerySchema = paginationQuerySchema.extend({
   status: z
     .enum(["SCHEDULED", "LIVE", "HALFTIME", "FINISHED", "POSTPONED", "CANCELLED"])
     .optional(),
+  // Comma-separated Team.id list — trận mà 1 trong các team này đá sân nhà HOẶC sân khách. Dùng
+  // cho dashboard trang chủ (upcoming/recent matches của các đội yêu thích), 1 request cho nhiều
+  // team thay vì N request riêng lẻ.
+  teamIds: z.string().optional(),
+  // "asc" (mặc định, không đổi hành vi cũ) cho upcoming (SCHEDULED, gần nhất trước); "desc" cho
+  // recent results (FINISHED, mới nhất trước) — dashboard cần cả 2 chiều từ cùng 1 endpoint.
+  order: z.enum(["asc", "desc"]).default("asc"),
 });
 
 const eventsQuerySchema = z.object({
@@ -24,18 +31,25 @@ const LIVE_MATCHES_CACHE_TTL_SECONDS = 5;
 
 export const matchesRoute = new Hono()
   .get("/matches", zValidator("query", matchesQuerySchema), async (c) => {
-    const { page, pageSize, competitionId, seasonId, status } = c.req.valid("query");
+    const { page, pageSize, competitionId, seasonId, status, teamIds, order } = c.req.valid("query");
+    const teamIdList = teamIds
+      ?.split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
     const where = {
       ...(competitionId ? { competitionId } : {}),
       ...(seasonId ? { seasonId } : {}),
       ...(status ? { status } : {}),
+      ...(teamIdList?.length
+        ? { OR: [{ homeTeamId: { in: teamIdList } }, { awayTeamId: { in: teamIdList } }] }
+        : {}),
     };
     const [items, total] = await Promise.all([
       prisma.match.findMany({
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        orderBy: { kickoffAt: "asc" },
+        orderBy: { kickoffAt: order },
         include: {
           homeTeam: { select: teamSelect },
           awayTeam: { select: teamSelect },
