@@ -260,8 +260,152 @@ export async function syncMatches(
   return { syncedCount: matches.length - skipped, skipped };
 }
 
-// Đồng bộ toàn bộ 1 giải đấu cho 1 season: teams -> players (từng team) -> standings + matches.
-// Giả định syncCompetitions + syncSeasons đã chạy trước (competition/season đã có trong DB).
+// Nguồn cho TopScorer/TopAssist/PlayerStatistics(appearances,goals,assists) — 1 request
+// (adapter.fetchTopScorers) trả cả goals lẫn assists nên derive được cả 2 bảng xếp hạng từ cùng
+// 1 tập dữ liệu. GIỚI HẠN ĐÃ BIẾT (xem football-data.adapter.ts's fetchTopScorers): đây là top-N
+// theo GOALS (N=100), không phải bảng kiến tạo đầy đủ của giải — cầu thủ ghi ít bàn nhưng kiến
+// tạo nhiều có thể bị thiếu khỏi TopAssist nếu không lọt top 100 scorers. Chấp nhận cho Phase 3
+// MVP, football-data.org free tier không có endpoint assists riêng.
+export async function syncTopScorers(
+  adapter: DataProviderAdapter,
+  competitionExternalRef: ExternalRef,
+  seasonExternalRef: ExternalRef,
+) {
+  const { season } = await findSeason(adapter.providerName, competitionExternalRef, seasonExternalRef);
+  const rows = await adapter.fetchTopScorers(competitionExternalRef, seasonExternalRef);
+
+  let skipped = 0;
+  const resolved: Array<{ playerId: string; playedMatches: number; goals: number; assists: number }> = [];
+  for (const row of rows) {
+    const player = await findPlayerByExternalId(adapter.providerName, row.playerExternalRef.id);
+    const team = await findTeamByExternalId(adapter.providerName, row.teamExternalRef.id);
+    if (!player || !team) {
+      skipped++; // cầu thủ/team lạ (vd đã chuyển đi, chưa sync) — bỏ qua, không chặn cả job
+      continue;
+    }
+    resolved.push({
+      playerId: player.id,
+      playedMatches: row.playedMatches,
+      goals: row.goals,
+      assists: row.assists,
+    });
+
+    await prisma.playerStatistics.upsert({
+      where: { playerId_seasonId: { playerId: player.id, seasonId: season.id } },
+      create: {
+        playerId: player.id,
+        seasonId: season.id,
+        appearances: row.playedMatches,
+        goals: row.goals,
+        assists: row.assists,
+      },
+      update: { appearances: row.playedMatches, goals: row.goals, assists: row.assists },
+    });
+  }
+
+  // adapter.fetchTopScorers đã trả sẵn theo goals desc, nhưng sort lại tường minh ở đây — không
+  // phụ thuộc ngầm vào thứ tự của provider (adapter khác có thể trả thứ tự khác).
+  const byGoals = [...resolved].sort((a, b) => b.goals - a.goals);
+  for (let i = 0; i < byGoals.length; i++) {
+    const row = byGoals[i]!;
+    await prisma.topScorer.upsert({
+      where: { seasonId_playerId: { seasonId: season.id, playerId: row.playerId } },
+      create: { seasonId: season.id, playerId: row.playerId, goals: row.goals, rank: i + 1 },
+      update: { goals: row.goals, rank: i + 1 },
+    });
+  }
+
+  // Bỏ assists=0 khỏi bảng kiến tạo — không có giá trị xếp hạng.
+  const byAssists = resolved.filter((r) => r.assists > 0).sort((a, b) => b.assists - a.assists);
+  for (let i = 0; i < byAssists.length; i++) {
+    const row = byAssists[i]!;
+    await prisma.topAssist.upsert({
+      where: { seasonId_playerId: { seasonId: season.id, playerId: row.playerId } },
+      create: { seasonId: season.id, playerId: row.playerId, assists: row.assists, rank: i + 1 },
+      update: { assists: row.assists, rank: i + 1 },
+    });
+  }
+
+  return { syncedCount: resolved.length, skipped };
+}
+
+// Tính TeamStatistics + CleanSheet trực tiếp từ Match đã sync (KHÔNG cần gọi thêm provider nào)
+// — mirror cách getRecentForm() (apps/api/src/routes/standings.ts) tính từ dữ liệu match có sẵn.
+// yellowCards/redCards/minutesPlayed của PlayerStatistics KHÔNG tính được ở đây (cần dữ liệu
+// match-event cấp độ cầu thủ, football-data.org free tier không có — xem CLAUDE.md/ROADMAP Phase
+// 3), giữ mặc định 0 của schema thay vì suy đoán.
+export async function syncTeamAggregates(seasonId: string) {
+  const matches = await prisma.match.findMany({
+    where: { seasonId, status: "FINISHED" },
+    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
+  });
+
+  interface Agg {
+    wins: number;
+    draws: number;
+    losses: number;
+    goalsFor: number;
+    goalsAgainst: number;
+    cleanSheets: number;
+  }
+  const stats = new Map<string, Agg>();
+  function ensure(teamId: string): Agg {
+    let agg = stats.get(teamId);
+    if (!agg) {
+      agg = { wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, cleanSheets: 0 };
+      stats.set(teamId, agg);
+    }
+    return agg;
+  }
+
+  for (const m of matches) {
+    if (m.homeScore === null || m.awayScore === null) continue; // FINISHED nhưng thiếu tỉ số — dữ liệu bất thường, bỏ qua
+    const home = ensure(m.homeTeamId);
+    const away = ensure(m.awayTeamId);
+    home.goalsFor += m.homeScore;
+    home.goalsAgainst += m.awayScore;
+    away.goalsFor += m.awayScore;
+    away.goalsAgainst += m.homeScore;
+    if (m.homeScore > m.awayScore) {
+      home.wins++;
+      away.losses++;
+    } else if (m.homeScore < m.awayScore) {
+      away.wins++;
+      home.losses++;
+    } else {
+      home.draws++;
+      away.draws++;
+    }
+    if (m.awayScore === 0) home.cleanSheets++;
+    if (m.homeScore === 0) away.cleanSheets++;
+  }
+
+  for (const [teamId, s] of stats) {
+    await prisma.teamStatistics.upsert({
+      where: { teamId_seasonId: { teamId, seasonId } },
+      create: { teamId, seasonId, ...s },
+      update: { ...s },
+    });
+  }
+
+  const ranked = [...stats.entries()]
+    .filter(([, s]) => s.cleanSheets > 0)
+    .sort((a, b) => b[1].cleanSheets - a[1].cleanSheets);
+  for (let i = 0; i < ranked.length; i++) {
+    const [teamId, s] = ranked[i]!;
+    await prisma.cleanSheet.upsert({
+      where: { seasonId_teamId: { seasonId, teamId } },
+      create: { seasonId, teamId, count: s.cleanSheets, rank: i + 1 },
+      update: { count: s.cleanSheets, rank: i + 1 },
+    });
+  }
+
+  return { teamsProcessed: stats.size, cleanSheetTeams: ranked.length };
+}
+
+// Đồng bộ toàn bộ 1 giải đấu cho 1 season: teams -> players (từng team) -> standings + matches
+// -> top scorers/assists + team/clean-sheet aggregates. Giả định syncCompetitions + syncSeasons
+// đã chạy trước (competition/season đã có trong DB).
 export async function syncCompetitionSeason(
   adapter: DataProviderAdapter,
   competitionExternalRef: ExternalRef,
@@ -279,10 +423,27 @@ export async function syncCompetitionSeason(
   const standingsResult = await syncStandings(adapter, competitionExternalRef, seasonExternalRef);
   const matchesResult = await syncMatches(adapter, competitionExternalRef, seasonExternalRef);
 
+  // Không phải adapter nào cũng có fetchTopScorers (vd ApiFootballAdapter hiện throw, xem
+  // provider.interface.ts) — degrade gracefully, không chặn phần sync chính đã thành công ở trên.
+  const topScorersResult = await syncTopScorers(adapter, competitionExternalRef, seasonExternalRef).catch(
+    (err) => {
+      console.warn(
+        `syncTopScorers thất bại cho competition ${competitionExternalRef.id} season ${seasonExternalRef.id} (provider ${adapter.providerName}) — bỏ qua`,
+        err,
+      );
+      return { syncedCount: 0, skipped: 0 };
+    },
+  );
+
+  const { season } = await findSeason(adapter.providerName, competitionExternalRef, seasonExternalRef);
+  const teamAggregatesResult = await syncTeamAggregates(season.id);
+
   return {
     teams: teamsResult.syncedCount,
     players: playersSynced,
     standings: standingsResult.syncedCount,
     matches: matchesResult.syncedCount,
+    topScorers: topScorersResult.syncedCount,
+    teamAggregates: teamAggregatesResult.teamsProcessed,
   };
 }

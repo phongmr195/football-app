@@ -128,7 +128,15 @@ export function formatDate(dateStr: string): string {
   });
 }
 
-/** Vietnamese label + Badge variant for a Player's position, seeded values from API-Football. */
+/**
+ * Vietnamese label + Badge variant for a Player's position. 2 provider dùng 2 vocabulary khác
+ * hẳn nhau cho cùng nhóm vị trí (verify thật qua psql, 2026-08-17): API-Football dùng tên đầy đủ
+ * ("Goalkeeper"/"Defender"/"Midfielder"/"Forward"/"Attacker"), football-data.org dùng tên
+ * chuyên biệt hơn + nhóm rộng ("Defence"/"Midfield"/"Offence"/"Goalkeeper" + "Centre-Back",
+ * "Right-Back", "Left-Back", "Central Midfield", "Defensive Midfield", "Attacking Midfield",
+ * "Right Midfield", "Left Midfield", "Centre-Forward", "Right Winger", "Left Winger") — gộp cả 2
+ * vào cùng 4 nhóm hiển thị (Thủ môn/Hậu vệ/Tiền vệ/Tiền đạo) thay vì hiện raw string không dịch.
+ */
 export function playerPositionMeta(position: string | null): {
   label: string;
   variant: BadgeVariant;
@@ -137,12 +145,25 @@ export function playerPositionMeta(position: string | null): {
     case "Goalkeeper":
       return { label: "Thủ môn", variant: "warning" };
     case "Defender":
+    case "Defence":
+    case "Centre-Back":
+    case "Right-Back":
+    case "Left-Back":
       return { label: "Hậu vệ", variant: "info" };
     case "Midfielder":
+    case "Midfield":
+    case "Central Midfield":
+    case "Defensive Midfield":
+    case "Attacking Midfield":
+    case "Right Midfield":
+    case "Left Midfield":
       return { label: "Tiền vệ", variant: "success" };
     case "Forward":
-      return { label: "Tiền đạo", variant: "danger" };
     case "Attacker":
+    case "Offence":
+    case "Centre-Forward":
+    case "Right Winger":
+    case "Left Winger":
       return { label: "Tiền đạo", variant: "danger" };
     default:
       return { label: position ?? "Chưa rõ", variant: "default" };

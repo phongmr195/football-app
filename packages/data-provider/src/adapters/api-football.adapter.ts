@@ -9,6 +9,7 @@ import type {
   CanonicalSeason,
   CanonicalStandingRow,
   CanonicalTeam,
+  CanonicalTopScorerRow,
   ExternalRef,
 } from "../types";
 
@@ -184,6 +185,19 @@ export class ApiFootballAdapter implements DataProviderAdapter {
     const league = (data.response[0] as any)?.league;
     const rows: unknown[] = (league?.standings ?? []).flat();
     return rows.map((raw) => this.mapStandingRow(raw, seasonExternalRef));
+  }
+
+  async fetchTopScorers(
+    _competitionExternalRef: ExternalRef,
+    _seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalTopScorerRow[]> {
+    // api-football có endpoint /players/topscorers tương đương (CHƯA verify thật shape — provider
+    // này hiện đang bị chặn/suspend, không phải là default provider, xem CLAUDE.md § Data
+    // provider). Throw rõ ràng thay vì trả [] để syncTopScorers (sync-catalog.ts) phân biệt được
+    // "provider không hỗ trợ" khỏi "giải này không có top scorer nào" — caller đã bọc try/catch.
+    throw new Error(
+      "ApiFootballAdapter.fetchTopScorers: chưa implement (chỉ FootballDataAdapter — provider mặc định — có method này, xem ROADMAP Phase 3)",
+    );
   }
 
   // ---- mapping: JSON thô của api-football -> canonical model ----

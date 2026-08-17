@@ -9,6 +9,7 @@ import type {
   CanonicalSeason,
   CanonicalStandingRow,
   CanonicalTeam,
+  CanonicalTopScorerRow,
   ExternalRef,
 } from "../types";
 
@@ -234,6 +235,42 @@ export class FootballDataAdapter implements DataProviderAdapter {
     // vòng bảng (group stage), mỗi nhóm bảng có 1 entry "TOTAL" riêng — flatMap để lấy hết.
     const rows = data.standings.filter((s) => s.type === "TOTAL").flatMap((s) => s.table);
     return rows.map((raw) => this.mapStandingRow(raw, seasonExternalRef));
+  }
+
+  async fetchTopScorers(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalTopScorerRow[]> {
+    // Xác nhận thật (2026-08-17, Premier League id=2021, season=2025): /competitions/{id}/scorers
+    // là endpoint FREE TIER thật (không phải feature trả phí như fetchMatchEvents ở trên) —
+    // limit=100 trả đủ 100 dòng thật (không cap thấp hơn ngầm), sort sẵn theo goals desc. Mỗi
+    // dòng có field "assists" thật (vd Haaland 27 goals/8 assists, verify thật) — đủ để derive cả
+    // TopScorer LẪN TopAssist từ CÙNG 1 request, không cần gọi thêm endpoint nào khác.
+    // GIỚI HẠN ĐÃ BIẾT: đây là top-N theo GOALS, không phải bảng kiến tạo đầy đủ của giải — 1
+    // tiền vệ ghi ít bàn nhưng kiến tạo nhiều có thể không lọt top 100 scorers nên bị thiếu khỏi
+    // TopAssist. Không có endpoint "assists" riêng trên free tier — chấp nhận cho Phase 3 MVP,
+    // xem ghi chú ở sync-catalog.ts's syncTopScorers().
+    const data = await this.request<{
+      scorers: Array<{
+        player: { id: number };
+        team: { id: number };
+        playedMatches: number;
+        goals: number;
+        assists: number | null;
+      }>;
+    }>(
+      `/competitions/${competitionExternalRef.id}/scorers?season=${seasonExternalRef.id}&limit=100`,
+    );
+    return data.scorers.map((row) => ({
+      seasonExternalRef,
+      playerExternalRef: toExternalRef(row.player.id),
+      teamExternalRef: toExternalRef(row.team.id),
+      playedMatches: row.playedMatches,
+      goals: row.goals,
+      // Xác nhận thật: "assists" có thể là null (không phải 0) cho vài cầu thủ trong response —
+      // coi null như 0 cho downstream, KHÔNG throw/skip dòng đó (goals vẫn hợp lệ để làm TopScorer).
+      assists: row.assists ?? 0,
+    }));
   }
 
   // ---- mapping: JSON thô của football-data.org -> canonical model ----

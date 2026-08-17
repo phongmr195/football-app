@@ -1,6 +1,6 @@
 import { initializeApp, getApps, cert, type App } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-import type { MiddlewareHandler } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { createMiddleware } from "hono/factory";
 import { prisma } from "@football-app/database";
 
@@ -63,3 +63,21 @@ export const requireAuth: MiddlewareHandler = createMiddleware(async (c, next) =
 
   await next();
 });
+
+// Biến thể không bắt buộc đăng nhập của requireAuth — dùng cho route công khai nhưng muốn cá
+// nhân hoá NẾU đã đăng nhập (vd /search ghi search_history theo user). Trả undefined thay vì
+// 401 khi thiếu/token không hợp lệ, KHÔNG set c.set("userId") (route tự đọc giá trị trả về thay
+// vì c.get("userId") — tránh xung đột với type ContextVariableMap.userId: string ở trên, vốn
+// giả định đã qua requireAuth).
+export async function tryResolveUserId(c: Context): Promise<string | undefined> {
+  const authHeader = c.req.header("authorization");
+  const token = authHeader?.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : undefined;
+  if (!token) return undefined;
+
+  try {
+    const decoded = await getFirebaseAuth().verifyIdToken(token);
+    return await resolveOrCreateUserId(decoded.uid, decoded.email);
+  } catch {
+    return undefined;
+  }
+}

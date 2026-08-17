@@ -6,6 +6,7 @@ import type {
   CanonicalSeason,
   CanonicalStandingRow,
   CanonicalTeam,
+  CanonicalTopScorerRow,
   ExternalRef,
 } from "./types";
 
@@ -35,4 +36,11 @@ export interface DataProviderAdapter {
     competitionExternalRef: ExternalRef,
     seasonExternalRef: ExternalRef,
   ): Promise<CanonicalStandingRow[]>;
+  // Danh sách cầu thủ ghi bàn nhiều nhất (kèm assists/playedMatches) — nguồn cho cả
+  // TopScorer/TopAssist/PlayerStatistics(appearances,goals,assists), xem sync-catalog.ts's
+  // syncTopScorers(). Không phải mọi provider có endpoint này (xem ApiFootballAdapter).
+  fetchTopScorers(
+    competitionExternalRef: ExternalRef,
+    seasonExternalRef: ExternalRef,
+  ): Promise<CanonicalTopScorerRow[]>;
 }
