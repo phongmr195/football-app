@@ -9,11 +9,8 @@ const deviceBodySchema = z.object({
   platform: z.enum(["IOS", "ANDROID", "WEB"]),
 });
 
-export const devicesRoute = new Hono().post(
-  "/devices",
-  requireAuth,
-  zValidator("json", deviceBodySchema),
-  async (c) => {
+export const devicesRoute = new Hono()
+  .post("/devices", requireAuth, zValidator("json", deviceBodySchema), async (c) => {
     const userId = c.get("userId");
     const { fcmToken, platform } = c.req.valid("json");
 
@@ -27,5 +24,26 @@ export const devicesRoute = new Hono().post(
     });
 
     return c.json(device, 200);
-  },
-);
+  })
+  // Cho phép frontend biết "trình duyệt này đã bật thông báo chưa" khi load lại trang (client tự
+  // getToken() lại — không prompt lại vì permission đã granted — rồi so với danh sách này theo
+  // fcmToken), và lấy device.id để gọi DELETE bên dưới.
+  .get("/devices", requireAuth, async (c) => {
+    const userId = c.get("userId");
+    const devices = await prisma.device.findMany({ where: { userId } });
+    return c.json({ items: devices });
+  })
+  // Tắt thông báo — xoá hẳn Device row nên goal-notifier không còn tìm thấy device này nữa.
+  // Idempotent (deleteMany, luôn 204) cùng convention với favorites.ts. Scope theo cả id VÀ
+  // userId — không cho xoá device của user khác dù đoán được id.
+  .delete(
+    "/devices/:id",
+    requireAuth,
+    zValidator("param", z.object({ id: z.string() })),
+    async (c) => {
+      const userId = c.get("userId");
+      const { id } = c.req.valid("param");
+      await prisma.device.deleteMany({ where: { id, userId } });
+      return c.body(null, 204);
+    },
+  );

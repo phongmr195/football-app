@@ -53,9 +53,27 @@ export function subscribeChannel(channel: string, onMessage: (raw: string) => vo
 
   ensureMessageHandler(redis);
   listeners.set(channel, onMessage);
-  redis.subscribe(channel).catch((err) => {
-    console.error(`redis-subscriber: subscribe("${channel}") thất bại (degrading gracefully)`, err);
-  });
+
+  const doSubscribe = () => {
+    redis.subscribe(channel).catch((err) => {
+      console.error(`redis-subscriber: subscribe("${channel}") thất bại (degrading gracefully)`, err);
+    });
+  };
+
+  // Bug thật (2026-08-17): `lazyConnect: false` bắt đầu connect ngay khi tạo client, nhưng
+  // connect là async — nếu subscribeChannel() được gọi ngay lúc boot (xem
+  // goal-notifier.ts's startGoalNotifier(), chạy đồng bộ trong index.ts), lệnh SUBSCRIBE có thể
+  // fire trước khi connection thật sự sẵn sàng. Vì `enableOfflineQueue: false` (chủ đích, để
+  // fail-fast khi Redis thật sự down thay vì queue vô hạn), ioredis KHÔNG tự buffer lệnh này —
+  // ném thẳng "Stream isn't writeable" và subscribe không bao giờ thành công, dù Redis đang chạy
+  // bình thường. Verify thật: lỗi này xảy ra 100% lần khởi động local trước khi fix, biến toàn bộ
+  // goal-notifier thành no-op im lặng (không throw ra ngoài, dễ tưởng nhầm là "đã hoạt động").
+  // Fix: đợi event "ready" nếu client chưa sẵn sàng, thay vì subscribe ngay.
+  if (redis.status === "ready") {
+    doSubscribe();
+  } else {
+    redis.once("ready", doSubscribe);
+  }
 }
 
 export function unsubscribeChannel(channel: string): void {

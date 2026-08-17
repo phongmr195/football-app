@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { NavBar } from "@/components/NavBar";
+import { PushNotificationListener } from "@/components/PushNotificationListener";
 import { AuthProvider } from "@/lib/auth-context";
 import { QueryProvider } from "@/lib/query-provider";
 import "./globals.css";
@@ -36,6 +37,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             wherever FavoriteButton/favorites/page.tsx render, so both must be above NavBar too). */}
         <QueryProvider>
           <AuthProvider>
+            <PushNotificationListener />
             <NavBar />
             <main className="flex flex-1 flex-col">{children}</main>
           </AuthProvider>
