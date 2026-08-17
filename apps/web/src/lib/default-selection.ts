@@ -26,8 +26,14 @@ export function pickDefaultCompetition(competitions: Competition[]): Competition
 /** seasonId not chosen by the user yet — pick the current season, else the most recent one. */
 export async function pickDefaultSeasonId(competitionId: string): Promise<string | undefined> {
   const detail = await apiGet<CompetitionDetail>(`/competitions/${competitionId}`);
-  // seasons đã sắp xếp startDate desc từ API — items[0] chính là mùa gần nhất nếu không có
-  // mùa nào isCurrent (ví dụ giải đã kết thúc hẳn, không còn mùa "đang diễn ra").
-  const season = detail.seasons.find((s) => s.isCurrent) ?? detail.seasons[0];
+  // Bug thật phát hiện 2026-08-17 (dashboard trang chủ hiện trống): football-data.org đã đánh dấu
+  // mùa giải MỚI là "isCurrent" ngay khi công bố lịch, có thể TRƯỚC NGÀY KHAI MẠC vài ngày (vd
+  // Premier League 2026/27 startDate=2026-08-21, "hôm nay" mới 2026-08-17) — mùa đó chưa có trận
+  // nào đá nên standings/scorers/assists rỗng, trong khi mùa vừa kết thúc (2025/26, đầy đủ data)
+  // lại không phải "current" nữa. Ưu tiên mùa isCurrent NHƯNG đã thực sự bắt đầu (startDate đã
+  // qua); nếu mùa current chưa bắt đầu, lùi về mùa gần nhất ĐÃ bắt đầu — seasons đã sắp xếp
+  // startDate desc từ API nên started[0] chính là mùa đó.
+  const started = detail.seasons.filter((s) => new Date(s.startDate).getTime() <= Date.now());
+  const season = started.find((s) => s.isCurrent) ?? started[0] ?? detail.seasons[0];
   return season?.id;
 }

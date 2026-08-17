@@ -21,7 +21,7 @@ export function NavBar() {
             href="/"
             className="text-sm font-semibold text-zinc-900 dark:text-zinc-50"
           >
-            Football App
+            My Football
           </Link>
           <NavLinks />
         </div>
