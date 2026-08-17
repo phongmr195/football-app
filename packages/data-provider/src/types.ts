@@ -81,6 +81,15 @@ export interface CanonicalMatchEvent {
   relatedPlayerExternalRef?: ExternalRef;
 }
 
+export interface CanonicalTopScorerRow {
+  seasonExternalRef: ExternalRef;
+  playerExternalRef: ExternalRef;
+  teamExternalRef: ExternalRef;
+  playedMatches: number;
+  goals: number;
+  assists: number;
+}
+
 export interface CanonicalStandingRow {
   seasonExternalRef: ExternalRef;
   teamExternalRef: ExternalRef;

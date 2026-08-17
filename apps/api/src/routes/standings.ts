@@ -56,11 +56,14 @@ async function getRecentForm(seasonId: string, teamId: string): Promise<RecentFo
     });
 }
 
-// Không phân trang — bảng xếp hạng 1 season vốn nhỏ (thường ~18-24 dòng), trả nguyên bảng.
-export const standingsRoute = new Hono().get(
-  "/standings",
-  zValidator("query", z.object({ seasonId: z.string() })),
-  async (c) => {
+const seasonQuerySchema = z.object({ seasonId: z.string() });
+const playerSelect = { id: true, name: true, position: true, team: { select: teamSelect } } as const;
+
+// Không phân trang — mọi bảng dưới đây vốn nhỏ (1 season: ~18-24 team, top 100 scorer), trả
+// nguyên bảng. Xem apps/sync-worker/src/sync-catalog.ts's syncTopScorers()/syncTeamAggregates()
+// cho nguồn dữ liệu (Phase 3).
+export const standingsRoute = new Hono()
+  .get("/standings", zValidator("query", seasonQuerySchema), async (c) => {
     const { seasonId } = c.req.valid("query");
     const standings = await prisma.standing.findMany({
       where: { seasonId },
@@ -76,5 +79,31 @@ export const standingsRoute = new Hono().get(
     );
 
     return c.json({ items });
-  },
-);
+  })
+  .get("/standings/top-scorers", zValidator("query", seasonQuerySchema), async (c) => {
+    const { seasonId } = c.req.valid("query");
+    const items = await prisma.topScorer.findMany({
+      where: { seasonId },
+      orderBy: { rank: "asc" },
+      include: { player: { select: playerSelect } },
+    });
+    return c.json({ items });
+  })
+  .get("/standings/top-assists", zValidator("query", seasonQuerySchema), async (c) => {
+    const { seasonId } = c.req.valid("query");
+    const items = await prisma.topAssist.findMany({
+      where: { seasonId },
+      orderBy: { rank: "asc" },
+      include: { player: { select: playerSelect } },
+    });
+    return c.json({ items });
+  })
+  .get("/standings/clean-sheets", zValidator("query", seasonQuerySchema), async (c) => {
+    const { seasonId } = c.req.valid("query");
+    const items = await prisma.cleanSheet.findMany({
+      where: { seasonId },
+      orderBy: { rank: "asc" },
+      include: { team: { select: teamSelect } },
+    });
+    return c.json({ items });
+  });

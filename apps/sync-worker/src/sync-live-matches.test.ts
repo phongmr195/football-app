@@ -45,6 +45,7 @@ function makeMockAdapter(overrides: Partial<DataProviderAdapter> = {}): DataProv
     },
     fetchMatchEvents: async () => [],
     fetchStandings: async () => [],
+    fetchTopScorers: async () => [],
     ...overrides,
   };
 }

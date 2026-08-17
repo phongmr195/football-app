@@ -205,3 +205,50 @@ describe("FootballDataAdapter — fetchPlayers: 403 (team rời khỏi free-tier
     await expect(adapter.fetchCompetitions()).rejects.toThrow(/restricted/);
   });
 });
+
+describe("FootballDataAdapter — fetchTopScorers (xác nhận thật 2026-08-17, Premier League id=2021 season=2025)", () => {
+  it("map goals/assists thật, coi assists null như 0", async () => {
+    const adapter = makeAdapter([
+      {
+        status: 200,
+        body: {
+          scorers: [
+            {
+              player: { id: 38101, name: "Erling Haaland" },
+              team: { id: 65, name: "Manchester City FC" },
+              playedMatches: 36,
+              goals: 27,
+              assists: 8,
+              penalties: 3,
+            },
+            {
+              // Xác nhận thật: field "assists" có thể null (không phải 0) cho vài cầu thủ
+              player: { id: 12345, name: "Eli Kroupi" },
+              team: { id: 402, name: "Brentford FC" },
+              playedMatches: 20,
+              goals: 13,
+              assists: null,
+              penalties: null,
+            },
+          ],
+        },
+      },
+    ]);
+
+    const rows = await adapter.fetchTopScorers(
+      { provider: "football-data", id: "2021" },
+      { provider: "football-data", id: "2025" },
+    );
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toEqual({
+      seasonExternalRef: { provider: "football-data", id: "2025" },
+      playerExternalRef: { provider: "football-data", id: "38101" },
+      teamExternalRef: { provider: "football-data", id: "65" },
+      playedMatches: 36,
+      goals: 27,
+      assists: 8,
+    });
+    expect(rows[1]?.assists).toBe(0);
+  });
+});

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Container } from "@football-app/ui";
 import { AuthStatus } from "./AuthStatus";
 import { NavLinks } from "./NavLinks";
+import { SearchBox } from "./SearchBox";
 
 /**
  * Minimal top nav — not a full site-wide nav design, just enough to reach the browse
@@ -24,7 +25,10 @@ export function NavBar() {
           </Link>
           <NavLinks />
         </div>
-        <AuthStatus />
+        <div className="flex items-center gap-4">
+          <SearchBox className="hidden w-56 sm:block" />
+          <AuthStatus />
+        </div>
       </Container>
     </header>
   );

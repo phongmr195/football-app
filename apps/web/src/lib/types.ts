@@ -185,6 +185,18 @@ export interface RecentFormEntry {
   kickoffAt: string;
 }
 
+/** GET /search response shape (apps/api/src/routes/search.ts) — a small capped result set per
+ * entity type, not a paginated list like the browse endpoints. */
+export interface SearchPlayerItem extends Player {
+  team: { id: string; name: string; logoUrl: string | null } | null;
+}
+
+export interface SearchResults {
+  teams: Team[];
+  players: SearchPlayerItem[];
+  competitions: Competition[];
+}
+
 export interface Standing {
   id: string;
   seasonId: string;
@@ -201,4 +213,61 @@ export interface Standing {
   team: StandingTeam;
   /** Last 5 FINISHED matches in this season, oldest -> newest (see apps/api/src/routes/standings.ts). */
   recentForm: RecentFormEntry[];
+}
+
+/** Shapes returned by GET /standings/top-scorers, /top-assists, /clean-sheets (Phase 3) — see
+ * apps/api/src/routes/standings.ts and apps/sync-worker/src/sync-catalog.ts's syncTopScorers()/
+ * syncTeamAggregates() for how these are derived. */
+export interface StandingPlayer {
+  id: string;
+  name: string;
+  position: string | null;
+  team: StandingTeam | null;
+}
+
+export interface TopScorerEntry {
+  id: string;
+  rank: number;
+  goals: number;
+  player: StandingPlayer;
+}
+
+export interface TopAssistEntry {
+  id: string;
+  rank: number;
+  assists: number;
+  player: StandingPlayer;
+}
+
+export interface CleanSheetEntry {
+  id: string;
+  rank: number;
+  count: number;
+  team: StandingTeam;
+}
+
+/** GET /statistics/teams/:id and /statistics/players/:id (Phase 3) — no `seasonId` query param
+ * means "most recent season with data", see apps/api/src/routes/statistics.ts. */
+export interface TeamStatistics {
+  id: string;
+  teamId: string;
+  seasonId: string;
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsFor: number;
+  goalsAgainst: number;
+  cleanSheets: number;
+}
+
+export interface PlayerStatistics {
+  id: string;
+  playerId: string;
+  seasonId: string;
+  appearances: number;
+  goals: number;
+  assists: number;
+  yellowCards: number;
+  redCards: number;
+  minutesPlayed: number;
 }

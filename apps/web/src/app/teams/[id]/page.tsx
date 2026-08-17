@@ -6,7 +6,7 @@ import { ApiError, apiGet, type ApiListResponse } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { playerPositionMeta } from "@/lib/format";
-import type { Player, TeamDetail } from "@/lib/types";
+import type { Player, TeamDetail, TeamStatistics } from "@/lib/types";
 
 // Team bio (logo/name/founded/stadium) is close to static; the roster changes with
 // transfers but not often enough to warrant a short ISR window — similar to the
@@ -26,6 +26,19 @@ async function getRoster(id: string, page: number) {
   return apiGet<ApiListResponse<Player>>(`/teams/${id}/players`, { page });
 }
 
+// Không truyền seasonId — trả về mùa giải gần nhất có dữ liệu (xem
+// apps/api/src/routes/statistics.ts). Trang này không có season-selector riêng, đó là việc của
+// /standings; 404 nghĩa là chưa có TeamStatistics nào cho team này (sync-worker chưa chạy qua
+// giải/mùa của team đó) — ẩn card, không coi là lỗi.
+async function getTeamStatistics(id: string) {
+  try {
+    return await apiGet<TeamStatistics>(`/statistics/teams/${id}`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
 export default async function TeamDetailPage({
   params,
   searchParams,
@@ -40,7 +53,10 @@ export default async function TeamDetailPage({
   const team = await getTeam(id);
   if (!team) notFound();
 
-  const { items: roster, pageSize, total } = await getRoster(id, page);
+  const [{ items: roster, pageSize, total }, statistics] = await Promise.all([
+    getRoster(id, page),
+    getTeamStatistics(id),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -87,6 +103,31 @@ export default async function TeamDetailPage({
               ? ` · Sức chứa ${team.stadium.capacity.toLocaleString("vi-VN")}`
               : ""}
           </p>
+        </Card>
+      ) : null}
+
+      {statistics ? (
+        <Card className="mb-8 flex flex-col gap-3">
+          <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            Thống kê mùa giải gần nhất
+          </h2>
+          <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
+            {[
+              { label: "Thắng", value: statistics.wins },
+              { label: "Hòa", value: statistics.draws },
+              { label: "Thua", value: statistics.losses },
+              { label: "Bàn thắng", value: statistics.goalsFor },
+              { label: "Bàn thua", value: statistics.goalsAgainst },
+              { label: "Sạch lưới", value: statistics.cleanSheets },
+            ].map((stat) => (
+              <div key={stat.label} className="flex flex-col items-center gap-1">
+                <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                  {stat.value}
+                </span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{stat.label}</span>
+              </div>
+            ))}
+          </div>
         </Card>
       ) : null}
 

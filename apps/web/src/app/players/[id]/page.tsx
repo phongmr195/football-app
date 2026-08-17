@@ -6,17 +6,29 @@ import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
 import { FavoriteButton } from "@/components/FavoriteButton";
 import { formatDate, playerPositionMeta } from "@/lib/format";
-import type { PlayerDetail } from "@/lib/types";
+import type { PlayerDetail, PlayerStatistics } from "@/lib/types";
 
 // Player bio (name/position/nationality/team) is close to static — same ISR window as
-// the team detail page. Statistics (PlayerStatistics) are deliberately left out: the
-// sync-worker does not populate that table yet (see apps/sync-worker/sync-catalog.ts),
-// so there's no real data to show.
+// the team detail page.
 export const revalidate = 1800;
 
 async function getPlayer(id: string) {
   try {
     return await apiGet<PlayerDetail>(`/players/${id}`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+// Không truyền seasonId — trả về mùa giải gần nhất có dữ liệu (xem
+// apps/api/src/routes/statistics.ts). 404 nghĩa là cầu thủ này chưa từng lọt top scorers/assists
+// của mùa nào (nguồn duy nhất hiện có cho PlayerStatistics, xem sync-catalog.ts's
+// syncTopScorers()) — ẩn card, không coi là lỗi. yellowCards/redCards/minutesPlayed KHÔNG hiện
+// (luôn 0, cần dữ liệu match-event cấp cầu thủ mà provider hiện tại không có — xem ROADMAP Phase 3).
+async function getPlayerStatistics(id: string) {
+  try {
+    return await apiGet<PlayerStatistics>(`/statistics/players/${id}`);
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) return null;
     throw err;
@@ -32,6 +44,8 @@ export default async function PlayerDetailPage({
   const player = await getPlayer(id);
 
   if (!player) notFound();
+
+  const statistics = await getPlayerStatistics(id);
 
   const { label, variant } = playerPositionMeta(player.position);
 
@@ -72,6 +86,28 @@ export default async function PlayerDetailPage({
           </dd>
         </Card>
       </dl>
+
+      {statistics ? (
+        <Card className="mt-8 flex flex-col gap-3">
+          <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            Thống kê mùa giải gần nhất
+          </h2>
+          <div className="grid grid-cols-3 gap-4">
+            {[
+              { label: "Ra sân", value: statistics.appearances },
+              { label: "Bàn thắng", value: statistics.goals },
+              { label: "Kiến tạo", value: statistics.assists },
+            ].map((stat) => (
+              <div key={stat.label} className="flex flex-col items-center gap-1">
+                <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+                  {stat.value}
+                </span>
+                <span className="text-xs text-zinc-500 dark:text-zinc-400">{stat.label}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       <h2 className="mt-8 mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
         Câu lạc bộ

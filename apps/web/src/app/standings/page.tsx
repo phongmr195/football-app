@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Card, Container } from "@football-app/ui";
+import { Card, Container, cn } from "@football-app/ui";
 import { apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
 import { StandingsFilters } from "@/components/StandingsFilters";
@@ -15,7 +15,14 @@ import {
   formatSeasonRange,
   matchResultMeta,
 } from "@/lib/format";
-import type { CompetitionDetail, RecentFormEntry, Standing } from "@/lib/types";
+import type {
+  CleanSheetEntry,
+  CompetitionDetail,
+  RecentFormEntry,
+  Standing,
+  TopAssistEntry,
+  TopScorerEntry,
+} from "@/lib/types";
 
 // Standings can shift after each matchday — shorter ISR window than the mostly-static
 // competition catalog pages.
@@ -26,10 +33,34 @@ async function getStandings(seasonId: string) {
   return items;
 }
 
-function buildHref(params: { competitionId?: string; seasonId?: string }): string {
+async function getTopScorers(seasonId: string) {
+  const { items } = await apiGet<{ items: TopScorerEntry[] }>("/standings/top-scorers", { seasonId });
+  return items;
+}
+
+async function getTopAssists(seasonId: string) {
+  const { items } = await apiGet<{ items: TopAssistEntry[] }>("/standings/top-assists", { seasonId });
+  return items;
+}
+
+async function getCleanSheets(seasonId: string) {
+  const { items } = await apiGet<{ items: CleanSheetEntry[] }>("/standings/clean-sheets", { seasonId });
+  return items;
+}
+
+const TABS = [
+  { key: "table", label: "Bảng xếp hạng" },
+  { key: "scorers", label: "Vua phá lưới" },
+  { key: "assists", label: "Kiến tạo" },
+  { key: "clean-sheets", label: "Sạch lưới" },
+] as const;
+type TabKey = (typeof TABS)[number]["key"];
+
+function buildHref(params: { competitionId?: string; seasonId?: string; tab?: TabKey }): string {
   const searchParams = new URLSearchParams();
   if (params.competitionId) searchParams.set("competitionId", params.competitionId);
   if (params.seasonId) searchParams.set("seasonId", params.seasonId);
+  if (params.tab && params.tab !== "table") searchParams.set("tab", params.tab);
   const query = searchParams.toString();
   return query ? `/standings?${query}` : "/standings";
 }
@@ -57,12 +88,14 @@ function latestScoreLabel(recentForm: RecentFormEntry[]): string | null {
 export default async function StandingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ competitionId?: string; seasonId?: string }>;
+  searchParams: Promise<{ competitionId?: string; seasonId?: string; tab?: string }>;
 }) {
   const {
     competitionId: competitionIdParam,
     seasonId: seasonIdParam,
+    tab: tabParam,
   } = await searchParams;
+  const tab: TabKey = TABS.some((t) => t.key === tabParam) ? (tabParam as TabKey) : "table";
 
   const filterableCompetitions = await getFilterableCompetitions();
 
@@ -80,12 +113,17 @@ export default async function StandingsPage({
     seasonId = await pickDefaultSeasonId(competitionId);
   }
 
-  if (competitionId !== competitionIdParam || seasonId !== seasonIdParam) {
-    redirect(buildHref({ competitionId, seasonId }));
+  if (competitionId !== competitionIdParam || seasonId !== seasonIdParam || tab !== (tabParam ?? "table")) {
+    redirect(buildHref({ competitionId, seasonId, tab }));
   }
 
-  const [standings, competition] = await Promise.all([
-    seasonId ? getStandings(seasonId) : Promise.resolve([]),
+  // Chỉ fetch dữ liệu của tab đang xem — 4 tab dùng 4 endpoint riêng (xem
+  // apps/api/src/routes/standings.ts), không cần tải cả 4 khi chỉ hiện 1.
+  const [standings, topScorers, topAssists, cleanSheets, competition] = await Promise.all([
+    seasonId && tab === "table" ? getStandings(seasonId) : Promise.resolve([]),
+    seasonId && tab === "scorers" ? getTopScorers(seasonId) : Promise.resolve([]),
+    seasonId && tab === "assists" ? getTopAssists(seasonId) : Promise.resolve([]),
+    seasonId && tab === "clean-sheets" ? getCleanSheets(seasonId) : Promise.resolve([]),
     competitionId ? apiGet<CompetitionDetail>(`/competitions/${competitionId}`) : Promise.resolve(null),
   ]);
   const season = competition?.seasons.find((s) => s.id === seasonId);
@@ -107,11 +145,148 @@ export default async function StandingsPage({
 
       <StandingsFilters competitions={filterableCompetitions} />
 
-      {standings.length === 0 ? (
+      {/* Plain <Link>, không cần "use client" — chỉ đổi query param rồi Server Component render
+          lại theo tab tương ứng, giống StandingsFilters đổi competitionId/seasonId. */}
+      <nav className="mb-6 flex items-center gap-1 text-sm">
+        {TABS.map((t) => (
+          <Link
+            key={t.key}
+            href={buildHref({ competitionId, seasonId, tab: t.key })}
+            className={cn(
+              "rounded-full px-3 py-1.5 transition-colors",
+              tab === t.key
+                ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
+                : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50",
+            )}
+          >
+            {t.label}
+          </Link>
+        ))}
+      </nav>
+
+      {tab === "scorers" &&
+        (topScorers.length === 0 ? (
+          <Card className="text-sm text-zinc-500 dark:text-zinc-400">
+            Chưa có dữ liệu vua phá lưới cho mùa giải này.
+          </Card>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {topScorers.map((entry) => (
+              <li key={entry.id}>
+                <Card padding="sm" className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-center font-semibold text-zinc-500 dark:text-zinc-400">
+                      {entry.rank}
+                    </span>
+                    {entry.player.team?.logoUrl ? (
+                      <Image
+                        src={entry.player.team.logoUrl}
+                        alt={entry.player.team.name}
+                        width={24}
+                        height={24}
+                        className="h-6 w-6 object-contain"
+                      />
+                    ) : (
+                      <div className="h-6 w-6 rounded bg-zinc-100 dark:bg-zinc-800" />
+                    )}
+                    <div className="flex flex-col">
+                      <Link href={`/players/${entry.player.id}`} className="font-medium text-zinc-900 hover:underline dark:text-zinc-50">
+                        {entry.player.name}
+                      </Link>
+                      {entry.player.team ? (
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">{entry.player.team.name}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-50">{entry.goals} bàn</span>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        ))}
+
+      {tab === "assists" &&
+        (topAssists.length === 0 ? (
+          <Card className="text-sm text-zinc-500 dark:text-zinc-400">
+            Chưa có dữ liệu kiến tạo cho mùa giải này.
+          </Card>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {topAssists.map((entry) => (
+              <li key={entry.id}>
+                <Card padding="sm" className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-center font-semibold text-zinc-500 dark:text-zinc-400">
+                      {entry.rank}
+                    </span>
+                    {entry.player.team?.logoUrl ? (
+                      <Image
+                        src={entry.player.team.logoUrl}
+                        alt={entry.player.team.name}
+                        width={24}
+                        height={24}
+                        className="h-6 w-6 object-contain"
+                      />
+                    ) : (
+                      <div className="h-6 w-6 rounded bg-zinc-100 dark:bg-zinc-800" />
+                    )}
+                    <div className="flex flex-col">
+                      <Link href={`/players/${entry.player.id}`} className="font-medium text-zinc-900 hover:underline dark:text-zinc-50">
+                        {entry.player.name}
+                      </Link>
+                      {entry.player.team ? (
+                        <span className="text-xs text-zinc-500 dark:text-zinc-400">{entry.player.team.name}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-50">{entry.assists} kiến tạo</span>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        ))}
+
+      {tab === "clean-sheets" &&
+        (cleanSheets.length === 0 ? (
+          <Card className="text-sm text-zinc-500 dark:text-zinc-400">
+            Chưa có dữ liệu sạch lưới cho mùa giải này.
+          </Card>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {cleanSheets.map((entry) => (
+              <li key={entry.id}>
+                <Card padding="sm" className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-center font-semibold text-zinc-500 dark:text-zinc-400">
+                      {entry.rank}
+                    </span>
+                    {entry.team.logoUrl ? (
+                      <Image
+                        src={entry.team.logoUrl}
+                        alt={entry.team.name}
+                        width={24}
+                        height={24}
+                        className="h-6 w-6 object-contain"
+                      />
+                    ) : (
+                      <div className="h-6 w-6 rounded bg-zinc-100 dark:bg-zinc-800" />
+                    )}
+                    <Link href={`/teams/${entry.team.id}`} className="font-medium text-zinc-900 hover:underline dark:text-zinc-50">
+                      {entry.team.name}
+                    </Link>
+                  </div>
+                  <span className="font-semibold text-zinc-900 dark:text-zinc-50">{entry.count} trận</span>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        ))}
+
+      {tab === "table" && standings.length === 0 ? (
         <Card className="text-sm text-zinc-500 dark:text-zinc-400">
           Chưa có dữ liệu bảng xếp hạng cho mùa giải này.
         </Card>
-      ) : (
+      ) : tab === "table" ? (
         <Card padding="none" className="overflow-x-auto">
           <table className="w-full min-w-[880px] text-sm">
             <thead>
@@ -214,7 +389,7 @@ export default async function StandingsPage({
             </tbody>
           </table>
         </Card>
-      )}
+      ) : null}
     </Container>
   );
 }

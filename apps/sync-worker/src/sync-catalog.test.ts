@@ -5,6 +5,7 @@ import type {
   CanonicalSeason,
   CanonicalStandingRow,
   CanonicalTeam,
+  CanonicalTopScorerRow,
   DataProviderAdapter,
   ExternalRef,
 } from "@football-app/data-provider";
@@ -16,7 +17,9 @@ import {
   syncPlayers,
   syncSeasons,
   syncStandings,
+  syncTeamAggregates,
   syncTeams,
+  syncTopScorers,
 } from "./sync-catalog";
 
 // Test chạy against Postgres thật (Docker) — xem CLAUDE.md § Docker để có DATABASE_URL đúng.
@@ -41,6 +44,7 @@ function makeMockAdapter(overrides: Partial<DataProviderAdapter> = {}): DataProv
     },
     fetchMatchEvents: async () => [],
     fetchStandings: async () => [],
+    fetchTopScorers: async () => [],
     ...overrides,
   };
 }
@@ -272,5 +276,167 @@ describe("cross-provider id collision (regression, xem bug ghi ở CLAUDE.md § 
     expect(dbCompetitionA?.id).not.toBe(dbCompetitionB?.id); // 2 row riêng biệt, không phải cùng 1 row
     expect(dbCompetitionA?.name).toBe("Provider A League"); // không bị provider B overwrite
     expect(dbCompetitionB?.name).toBe("Provider B League");
+  });
+});
+
+// Luôn filter theo CẢ provider VÀ id khi lookup theo externalRef — DB test này chạy chung
+// DATABASE_URL với dev (đã có data thật từ các lần sync trước), filter chỉ theo id có thể match
+// nhầm row của provider/dataset khác (đúng bug class đã ghi ở CLAUDE.md § Database, xem
+// findCompetitionByExternalId/findTeamByExternalId/findPlayerByExternalId trong sync-catalog.ts).
+async function findTestCompetition() {
+  return prisma.competition.findFirst({
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: PROVIDER } },
+        { externalRef: { path: ["id"], equals: COMPETITION_EXT.id } },
+      ],
+    },
+  });
+}
+
+async function findTestPlayer(externalId: string) {
+  return prisma.player.findFirst({
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: PROVIDER } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
+  });
+}
+
+async function findTestTeam(externalId: string) {
+  return prisma.team.findFirst({
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: PROVIDER } },
+        { externalRef: { path: ["id"], equals: externalId } },
+      ],
+    },
+  });
+}
+
+async function getTestSeason() {
+  const dbCompetition = await findTestCompetition();
+  return prisma.season.findFirst({ where: { competitionId: dbCompetition?.id, name: "2025" } });
+}
+
+describe("syncTopScorers (Phase 3)", () => {
+  async function setupCompetitionTeamsPlayers() {
+    await syncCompetitions(makeMockAdapter({ fetchCompetitions: async () => [competition] }));
+    await syncSeasons(makeMockAdapter({ fetchSeasons: async () => [season] }), COMPETITION_EXT);
+    await syncTeams(makeMockAdapter({ fetchTeams: async () => [teamA, teamB] }), COMPETITION_EXT, SEASON_EXT);
+    const playerA: CanonicalPlayer = { externalRef: ref("player-a"), name: "Player A", position: "Forward" };
+    const playerB: CanonicalPlayer = { externalRef: ref("player-b"), name: "Player B", position: "Midfielder" };
+    await syncPlayers(makeMockAdapter({ fetchPlayers: async () => [playerA] }), TEAM_A_EXT, SEASON_EXT);
+    await syncPlayers(makeMockAdapter({ fetchPlayers: async () => [playerB] }), TEAM_B_EXT, SEASON_EXT);
+  }
+
+  it("rank TopScorer theo goals desc, TopAssist theo assists desc — độc lập nhau", async () => {
+    await setupCompetitionTeamsPlayers();
+
+    const rows: CanonicalTopScorerRow[] = [
+      {
+        seasonExternalRef: SEASON_EXT,
+        playerExternalRef: ref("player-a"),
+        teamExternalRef: TEAM_A_EXT,
+        playedMatches: 20,
+        goals: 10,
+        assists: 3,
+      },
+      {
+        seasonExternalRef: SEASON_EXT,
+        playerExternalRef: ref("player-b"),
+        teamExternalRef: TEAM_B_EXT,
+        playedMatches: 18,
+        goals: 5,
+        assists: 7,
+      },
+      // Cầu thủ lạ (chưa sync) — phải bị skip, không chặn cả job.
+      {
+        seasonExternalRef: SEASON_EXT,
+        playerExternalRef: ref("unknown-player"),
+        teamExternalRef: TEAM_A_EXT,
+        playedMatches: 10,
+        goals: 2,
+        assists: 0,
+      },
+    ];
+
+    const result = await syncTopScorers(
+      makeMockAdapter({ fetchTopScorers: async () => rows }),
+      COMPETITION_EXT,
+      SEASON_EXT,
+    );
+    expect(result.syncedCount).toBe(2);
+    expect(result.skipped).toBe(1);
+
+    const dbPlayerA = await findTestPlayer("player-a");
+    const dbPlayerB = await findTestPlayer("player-b");
+    const dbSeason = await getTestSeason();
+
+    const scorerA = await prisma.topScorer.findFirst({ where: { playerId: dbPlayerA?.id, seasonId: dbSeason?.id } });
+    const scorerB = await prisma.topScorer.findFirst({ where: { playerId: dbPlayerB?.id, seasonId: dbSeason?.id } });
+    expect(scorerA?.rank).toBe(1); // 10 goals > 5 goals
+    expect(scorerB?.rank).toBe(2);
+
+    const assistA = await prisma.topAssist.findFirst({ where: { playerId: dbPlayerA?.id, seasonId: dbSeason?.id } });
+    const assistB = await prisma.topAssist.findFirst({ where: { playerId: dbPlayerB?.id, seasonId: dbSeason?.id } });
+    expect(assistB?.rank).toBe(1); // 7 assists > 3 assists — thứ tự NGƯỢC với TopScorer
+    expect(assistA?.rank).toBe(2);
+
+    const statsA = await prisma.playerStatistics.findFirst({ where: { playerId: dbPlayerA?.id, seasonId: dbSeason?.id } });
+    expect(statsA?.appearances).toBe(20);
+    expect(statsA?.goals).toBe(10);
+    expect(statsA?.assists).toBe(3);
+  });
+
+  it("assists=0 không được đưa vào TopAssist", async () => {
+    await setupCompetitionTeamsPlayers();
+    const rows: CanonicalTopScorerRow[] = [
+      { seasonExternalRef: SEASON_EXT, playerExternalRef: ref("player-a"), teamExternalRef: TEAM_A_EXT, playedMatches: 20, goals: 10, assists: 0 },
+    ];
+    await syncTopScorers(makeMockAdapter({ fetchTopScorers: async () => rows }), COMPETITION_EXT, SEASON_EXT);
+
+    const dbPlayerA = await findTestPlayer("player-a");
+    const assistRow = await prisma.topAssist.findFirst({ where: { playerId: dbPlayerA?.id } });
+    expect(assistRow).toBeNull();
+  });
+});
+
+describe("syncTeamAggregates (Phase 3 — TeamStatistics + CleanSheet, tính từ Match có sẵn)", () => {
+  it("tính wins/draws/losses/goals/cleanSheets đúng, chỉ tính FINISHED có tỉ số", async () => {
+    await syncCompetitions(makeMockAdapter({ fetchCompetitions: async () => [competition] }));
+    await syncSeasons(makeMockAdapter({ fetchSeasons: async () => [season] }), COMPETITION_EXT);
+    await syncTeams(makeMockAdapter({ fetchTeams: async () => [teamA, teamB] }), COMPETITION_EXT, SEASON_EXT);
+
+    const matches: CanonicalMatch[] = [
+      // Trận 1: A thắng B 2-0 -> A: win + clean sheet, B: loss
+      { externalRef: ref("m1"), competitionExternalRef: COMPETITION_EXT, seasonExternalRef: SEASON_EXT, homeTeamExternalRef: TEAM_A_EXT, awayTeamExternalRef: TEAM_B_EXT, kickoffAt: "2025-09-01T10:00:00.000Z", status: "FINISHED", homeScore: 2, awayScore: 0 },
+      // Trận 2: B hoà A 1-1 -> cả 2 draw, không ai clean sheet
+      { externalRef: ref("m2"), competitionExternalRef: COMPETITION_EXT, seasonExternalRef: SEASON_EXT, homeTeamExternalRef: TEAM_B_EXT, awayTeamExternalRef: TEAM_A_EXT, kickoffAt: "2025-09-08T10:00:00.000Z", status: "FINISHED", homeScore: 1, awayScore: 1 },
+      // Trận 3: chưa đá (SCHEDULED, không tỉ số) -> phải bị bỏ qua
+      { externalRef: ref("m3"), competitionExternalRef: COMPETITION_EXT, seasonExternalRef: SEASON_EXT, homeTeamExternalRef: TEAM_A_EXT, awayTeamExternalRef: TEAM_B_EXT, kickoffAt: "2025-09-15T10:00:00.000Z", status: "SCHEDULED" },
+    ];
+    await syncMatches(makeMockAdapter({ fetchMatches: async () => matches }), COMPETITION_EXT, SEASON_EXT);
+
+    const dbSeason = await getTestSeason();
+    const result = await syncTeamAggregates(dbSeason!.id);
+    expect(result.teamsProcessed).toBe(2);
+    expect(result.cleanSheetTeams).toBe(1); // chỉ team A có clean sheet (trận 1)
+
+    const dbTeamA = await findTestTeam(TEAM_A_EXT.id);
+    const dbTeamB = await findTestTeam(TEAM_B_EXT.id);
+
+    const statsA = await prisma.teamStatistics.findFirst({ where: { teamId: dbTeamA?.id, seasonId: dbSeason?.id } });
+    expect(statsA).toMatchObject({ wins: 1, draws: 1, losses: 0, goalsFor: 3, goalsAgainst: 1, cleanSheets: 1 });
+
+    const statsB = await prisma.teamStatistics.findFirst({ where: { teamId: dbTeamB?.id, seasonId: dbSeason?.id } });
+    expect(statsB).toMatchObject({ wins: 0, draws: 1, losses: 1, goalsFor: 1, goalsAgainst: 3, cleanSheets: 0 });
+
+    const cleanSheetA = await prisma.cleanSheet.findFirst({ where: { teamId: dbTeamA?.id, seasonId: dbSeason?.id } });
+    expect(cleanSheetA).toMatchObject({ count: 1, rank: 1 });
+    const cleanSheetB = await prisma.cleanSheet.findFirst({ where: { teamId: dbTeamB?.id, seasonId: dbSeason?.id } });
+    expect(cleanSheetB).toBeNull(); // 0 clean sheet -> không có row (không có giá trị xếp hạng)
   });
 });
