@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Card, Container } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
-import { registerDevice } from "@/lib/devices";
+import { listDevices, registerDevice, unregisterDevice } from "@/lib/devices";
 import { playerPositionMeta } from "@/lib/format";
 import { requestPushPermission } from "@/lib/push-notifications";
 import { useFavoritePlayers, useFavoriteTeams, useToggleFavorite } from "@/lib/use-favorites";
@@ -21,7 +21,15 @@ import { useFavoritePlayers, useFavoriteTeams, useToggleFavorite } from "@/lib/u
  * /teams/[id] and /players/[id], so unfavoriting here (or favoriting from a detail page) stays
  * consistent everywhere without an extra round-trip.
  */
-type NotificationOptInStatus = "idle" | "requesting" | "enabled" | "denied" | "unsupported" | "error";
+type NotificationOptInStatus =
+  | "idle"
+  | "checking"
+  | "requesting"
+  | "enabled"
+  | "disabling"
+  | "denied"
+  | "unsupported"
+  | "error";
 
 export default function FavoritesPage() {
   const { user, loading: authLoading, getIdToken } = useAuth();
@@ -30,10 +38,51 @@ export default function FavoritesPage() {
   const { unfavorite: unfavoriteTeamMutation } = useToggleFavorite("team");
   const { unfavorite: unfavoritePlayerMutation } = useToggleFavorite("player");
   const [notificationStatus, setNotificationStatus] = useState<NotificationOptInStatus>("idle");
+  const [deviceId, setDeviceId] = useState<string | null>(null);
 
   const teams = teamsQuery.data ?? [];
   const players = playersQuery.data ?? [];
   const loadingData = user ? teamsQuery.isLoading || playersQuery.isLoading : false;
+
+  // Trạng thái nút phải phản ánh đúng thực tế đã lưu ở backend, không chỉ state trong session
+  // hiện tại — nếu không, reload trang sau khi đã bật thông báo sẽ lại hiện "Bật thông báo bàn
+  // thắng" dù trình duyệt này thật ra đã đăng ký rồi (bug thật user báo). Cách kiểm tra: nếu
+  // Notification.permission đã "granted" (không cần hỏi lại), gọi requestPushPermission() để lấy
+  // token HIỆN TẠI của trình duyệt này (getToken() trả lại token cũ, không tạo mới, không hỏi
+  // permission lại lần nữa vì đã granted), rồi so với danh sách device đã đăng ký ở backend.
+  useEffect(() => {
+    if (!user) return;
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+
+    let cancelled = false;
+    (async () => {
+      setNotificationStatus("checking");
+      try {
+        const [token, idToken] = await Promise.all([requestPushPermission(), getIdToken()]);
+        if (!token) {
+          if (!cancelled) setNotificationStatus("idle");
+          return;
+        }
+        const devices = await listDevices(idToken);
+        const existing = devices.find((d) => d.fcmToken === token);
+        if (cancelled) return;
+        if (existing) {
+          setDeviceId(existing.id);
+          setNotificationStatus("enabled");
+        } else {
+          setNotificationStatus("idle");
+        }
+      } catch (err) {
+        console.error("check existing device registration failed", err);
+        if (!cancelled) setNotificationStatus("idle");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user, getIdToken]);
 
   async function handleEnableNotifications() {
     setNotificationStatus("requesting");
@@ -49,10 +98,30 @@ export default function FavoritesPage() {
         setNotificationStatus(unsupported ? "unsupported" : "denied");
         return;
       }
-      await registerDevice(token, await getIdToken());
+      const idToken = await getIdToken();
+      await registerDevice(token, idToken);
+      // POST /devices trả về Device row đã upsert — nhưng registerDevice() hiện chỉ trả về void
+      // (xem lib/devices.ts), nên lấy lại deviceId qua listDevices thay vì đổi return type của
+      // registerDevice() chỉ để phục vụ 1 chỗ gọi này.
+      const devices = await listDevices(idToken);
+      const justRegistered = devices.find((d) => d.fcmToken === token);
+      setDeviceId(justRegistered?.id ?? null);
       setNotificationStatus("enabled");
     } catch (err) {
       console.error("handleEnableNotifications failed", err);
+      setNotificationStatus("error");
+    }
+  }
+
+  async function handleDisableNotifications() {
+    if (!deviceId) return;
+    setNotificationStatus("disabling");
+    try {
+      await unregisterDevice(deviceId, await getIdToken());
+      setDeviceId(null);
+      setNotificationStatus("idle");
+    } catch (err) {
+      console.error("handleDisableNotifications failed", err);
       setNotificationStatus("error");
     }
   }
@@ -89,13 +158,24 @@ export default function FavoritesPage() {
           Nhận thông báo ngay khi đội bóng bạn theo dõi ghi bàn.
         </p>
         <div className="flex items-center gap-3">
-          <Button
-            size="sm"
-            onClick={() => void handleEnableNotifications()}
-            disabled={notificationStatus === "requesting" || notificationStatus === "enabled"}
-          >
-            {notificationStatus === "enabled" ? "Đã bật" : "Bật thông báo bàn thắng"}
-          </Button>
+          {notificationStatus === "enabled" ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleDisableNotifications()}
+              disabled={notificationStatus !== "enabled"}
+            >
+              Tắt thông báo bàn thắng
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => void handleEnableNotifications()}
+              disabled={notificationStatus === "requesting" || notificationStatus === "checking"}
+            >
+              Bật thông báo bàn thắng
+            </Button>
+          )}
           {notificationStatus === "denied" && (
             <span className="text-sm text-zinc-500 dark:text-zinc-400">
               Bạn đã từ chối quyền thông báo.
