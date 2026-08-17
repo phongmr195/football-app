@@ -68,22 +68,29 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 - [x] Web: `LiveMatchPanel` (client component) tự poll 2-3s trên `/matches/[id]`, độc lập với ISR cache của trang (không gate theo `match.status` server-render vì cache có thể cũ tới 30 phút) — `apps/web/src/components/LiveMatchPanel.tsx`, `apps/web/src/lib/use-live-match.ts`
 - Verify thật: giả lập trận live qua Prisma Studio, curl 3 endpoint mới, xác nhận Redis cache thật có ghi (TTL) + fallback đúng khi Redis down, mở browser thật thấy panel tự cập nhật không cần F5.
 
-**Bước 2 (nâng cấp lên WebSocket thật — local-first, xem quyết định ở trên):**
-- [ ] Định nghĩa 1 interface (vd `RealtimeTransport`) cho subscribe/broadcast theo matchId, tách khỏi implementation cụ thể
-- [ ] Local: WebSocket server dùng package `ws`, chạy trong (hoặc cạnh) `apps/api`; connection registry qua Redis (đã có) thay `ws_connections` DynamoDB
-- [ ] AWS (làm sau, khi thật sự deploy): API Gateway WebSocket + Lambda handlers (`$connect`/`$disconnect`/subscribe) + `ws_connections` (DynamoDB) — implementation thứ 2 của cùng interface
-- [ ] Web: chuyển từ polling (Bước 1) sang WebSocket API của browser, giữ REST `/matches/:id/events?since_seq` làm fallback/catch-up khi reconnect
+**Bước 2 (nâng cấp lên WebSocket thật — local-first, xem quyết định ở trên):** ✅ **Xong (PR #31)**
+- [x] Interface `RealtimeTransport` (`packages/realtime/src/publisher.interface.ts`) — `publish()`/`publishGoal()`, tách khỏi implementation cụ thể (Redis local vs AWS sau này)
+- [x] Local: WebSocket server dùng package `ws` (`apps/api/src/realtime/ws-server.ts`), connection registry qua Redis (`connection-registry.ts`, có test riêng) thay `ws_connections` DynamoDB
+- [ ] AWS (làm sau, khi thật sự deploy): API Gateway WebSocket + Lambda handlers (`$connect`/`$disconnect`/subscribe) + `ws_connections` (DynamoDB) — implementation thứ 2 của cùng interface, **chưa làm, đúng theo quyết định hoãn AWS ở trên**
+- [x] Web: đã chuyển từ polling sang WebSocket thật (`apps/web/src/lib/use-live-match.ts` gọi `subscribeToMatch()` từ `lib/realtime-client.ts`), giữ 1 poll 45s làm safety-net (phòng socket chết không bắn `onclose`) + REST `/matches/:id/events?since_seq` làm catch-up — verify thật qua `LiveMatchPanel` trên `/matches/[id]`
 
-**Bước 3 (thông báo khi không mở app — local-first):**
-- [ ] Local: Redis Pub/Sub cho fan-out "match-updates" (thay SNS) → handler gọi FCM trực tiếp (Web Push qua FCM **không phụ thuộc AWS** — Firebase riêng, chạy được ngay cả ở local), nối với `notification_settings`
-- [ ] AWS (làm sau): SNS fan-out "match-updates" → Lambda fcm-push — implementation thứ 2 của cùng interface fan-out
-- [ ] `notifications`/`notification_logs` wiring
+**Bước 3 (thông báo khi không mở app — local-first):** ✅ **Xong, verify thật 2026-08-17 (PR #32 + fix thêm)**
+- [x] Local: Redis Pub/Sub channel `goal-events` (`apps/api/src/realtime/goal-notifier.ts` + `redis-subscriber.ts`) → gọi FCM trực tiếp qua `firebase-admin/messaging`, nối với `notification_settings` (thiếu row = coi `goalAlerts: true`, đúng `@default`)
+- [ ] AWS (làm sau): SNS fan-out "match-updates" → Lambda fcm-push — implementation thứ 2 của cùng interface fan-out, **chưa làm, đúng theo quyết định hoãn AWS**
+- [x] `notifications`/`notification_logs` wiring — mỗi lần gửi ghi 1 `Notification` + 1 `NotificationLog`/token (status `SENT`/`FAILED`)
+- **5 bug thật phát hiện + fix qua test thủ công thật (publish `goal-events` qua `redis-cli`, không phải unit test)**, xem chi tiết trong git log các commit tương ứng ngày 2026-08-17:
+  1. `redis-subscriber.ts`: `subscribeChannel()` gọi `.subscribe()` ngay lúc boot, TRƯỚC KHI connection ioredis (`lazyConnect: false`) thật sự sẵn sàng — do `enableOfflineQueue: false` (chủ đích, fail-fast khi Redis down thật), lệnh SUBSCRIBE bị lỗi "Stream isn't writeable" và fail **100% số lần khởi động local** trước khi fix, khiến toàn bộ goal-notifier thành no-op im lặng (không throw, dễ tưởng nhầm đã hoạt động). Fix: đợi event `"ready"` nếu client chưa sẵn sàng.
+  2. Schema drift thật: `schema.prisma` đã có `DevicePlatform.WEB` nhưng migration gốc (`20260807032808_init`) chỉ tạo enum Postgres với `IOS`/`ANDROID` — không có migration nào từng thêm `WEB` cho tới khi phát hiện qua lỗi `invalid input value for enum "DevicePlatform": "WEB"` lúc test `POST /devices` thật. Fix: migration `20260816152237_add_web_device_platform` (đã có sẵn trong PR #32 nhưng DB dev local chưa apply — bài học: `pnpm db:generate` không đủ, phải chạy `pnpm db:migrate`/`db:migrate:deploy` thật sau khi pull code mới có migration).
+  3. `packages/realtime` chưa từng được build (`dist/` không tồn tại) dù đã link đúng qua pnpm workspace — `pnpm install` không tự build workspace package, phải chạy `pnpm --filter @football-app/realtime build` tay (hoặc qua turbo) sau khi thêm package mới.
+  4. Frontend thiếu hẳn xử lý **foreground push** (tab đang mở/focus) — `firebase-messaging-sw.js`'s `onBackgroundMessage` chỉ tự hiện notification khi KHÔNG tab nào focus; code cũ cố ý chưa làm phần foreground (comment "not part of this piece"). Fix: thêm `listenForForegroundMessages()` (`onMessage()` + `new Notification()` tay) trong `lib/push-notifications.ts`, mount qua `<PushNotificationListener />` toàn app trong `layout.tsx`.
+  5. UX thật: nút "Bật thông báo bàn thắng" ở `/favorites` không phản ánh đúng trạng thái đã lưu — reload trang sau khi đã bật vẫn hiện lại nút bật từ đầu, và không có cách tắt. Fix: thêm `GET /devices` + `DELETE /devices/:id`, trang tự kiểm tra device hiện có khi mount (`getToken()` lại + so khớp danh sách), hiện đúng nút "Tắt thông báo" khi đã bật.
+  - Lưu ý ngoài code: macOS có thể chặn notification của Chrome ở **cấp hệ điều hành** (System Settings → Notifications → Google Chrome) độc lập với quyền "Allow" trong browser — không phải bug, cần bật tay khi test.
 
-**Bước 4 (tối ưu chi phí ingestion — có thể làm sau, không chặn release):**
-- [ ] Adaptive polling: nâng cấp loop cố định 30s của Bước 1 thành logic in-process (tight-poll quanh giờ kickoff từng trận) — không cần AWS để làm việc này
-- [ ] AWS (chỉ khi cần scale thật): EventBridge Scheduler + Step Functions thay cho loop/logic in-process
+**Bước 4 (tối ưu chi phí ingestion — có thể làm sau, không chặn release):** ✅ **Xong (PR #32)**
+- [x] Adaptive polling in-process (`apps/sync-worker/src/adaptive-interval.ts`, có test) — tight 15s khi có trận LIVE/HALFTIME hoặc SCHEDULED sắp kickoff trong 15 phút tới, idle 5 phút còn lại — không cần AWS
+- [ ] AWS (chỉ khi cần scale thật): EventBridge Scheduler + Step Functions thay cho loop/logic in-process — **chưa làm, đúng theo quyết định hoãn AWS**
 
-**Exit criteria:** mở web đúng lúc trận đang diễn ra, thấy tỉ số/event cập nhật không cần refresh tay; nhận được push khi team yêu thích ghi bàn.
+**Exit criteria:** mở web đúng lúc trận đang diễn ra, thấy tỉ số/event cập nhật không cần refresh tay; nhận được push khi team yêu thích ghi bàn. → **Đạt** (verify thật 2026-08-17: goal push nhận được trên browser thật, sau khi fix 5 bug ở trên). Phần AWS thật (API Gateway/SNS/EventBridge) vẫn hoãn theo quyết định 2026-08-15, làm khi thật sự cần deploy production.
 
 ---
 

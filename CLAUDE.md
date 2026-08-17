@@ -6,11 +6,11 @@ Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architectu
 
 ## Tech stack
 
-- **Web** (client chính): Next.js (React), Firebase Authentication (Google/Phone) qua Firebase JS SDK — chưa scaffold, xem ROADMAP Phase 1
+- **Web** (client chính): Next.js (React), Firebase Authentication (Google/Phone/Facebook) qua Firebase JS SDK — đã scaffold + browse pages + favorites + real-time (Phase 1+2), xem ROADMAP
 - **Mobile** (tạm pause): Flutter, Riverpod, GoRouter, Hive, Dio — đã có Phase 0 + auth, xem [ROADMAP.md § Mobile — tạm pause](docs/architecture/ROADMAP.md#mobile--tạm-pause-trạng-thái-tại-thời-điểm-pause)
-- **Auth**: Firebase Authentication (Google + Phone đã enable, Facebook chưa) — đổi từ AWS Cognito, xem [PROJECT_PLAN.md § Authentication](docs/architecture/PROJECT_PLAN.md#authentication--quyết-định-đổi-từ-cognito-sang-firebase-auth-2026-08-06). Firebase project hiện dùng: `jankara-e2e-test` (project dùng chung, không riêng cho football-app).
-- **Backend**: Node.js, Hono, TypeScript, Zod (`@hono/zod-validator`), Prisma, `firebase-admin` (verify token)
-- **Database**: Aurora PostgreSQL (Prisma), Redis (cache — chưa setup), Postgres FTS/pgvector cho search/AI (xem PROJECT_PLAN.md § 7.1 — hoãn OpenSearch tới khi cần)
+- **Auth**: Firebase Authentication (Google + Phone + Facebook đều đã enable) — đổi từ AWS Cognito, xem [PROJECT_PLAN.md § Authentication](docs/architecture/PROJECT_PLAN.md#authentication--quyết-định-đổi-từ-cognito-sang-firebase-auth-2026-08-06). Firebase project hiện dùng: `jankara-e2e-test` (project dùng chung, không riêng cho football-app).
+- **Backend**: Node.js, Hono, TypeScript, Zod (`@hono/zod-validator`), Prisma, `firebase-admin` (verify token + gửi FCM push)
+- **Database**: Aurora PostgreSQL (Prisma), Redis (cache + Pub/Sub cho real-time/push, xem Phase 2), Postgres FTS/pgvector cho search/AI (xem PROJECT_PLAN.md § 7.1 — hoãn OpenSearch tới khi cần)
 - **AI**: Amazon Bedrock (Claude, Titan embedding) — chưa implement, xem ROADMAP Phase 4
 - **Data provider**: `football-data.org` (mặc định) qua adapter pattern (`packages/data-provider`) — API-Football vẫn giữ làm adapter phụ, đổi default vì API-Football free tier bị suspend nhiều lần, xem "### Data provider" dưới
 - **Infra**: Terraform (`infrastructure/terraform`, chưa apply), Turborepo + pnpm workspaces
@@ -21,15 +21,16 @@ Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architectu
 
 ```
 apps/
-  web/            Next.js — client chính (chưa scaffold)
+  web/            Next.js — client chính, đã scaffold (browse pages, favorites, real-time)
   mobile/         Flutter app — TẠM PAUSE, giữ code
   api/            Hono API (TypeScript)
-  sync-worker/    Đồng bộ dữ liệu từ data provider
+  sync-worker/    Đồng bộ dữ liệu từ data provider + polling live match
 packages/
   database/       Prisma schema + client (export từ packages/database/src/index.ts)
   shared/         Types/utils dùng chung TS (pagination, ApiError)
   data-provider/  Canonical model + adapter pattern cho data provider bóng đá
-  ui/             Design system — dùng cho apps/web (chưa scaffold)
+  realtime/       RealtimeTransport interface + Redis Pub/Sub adapter (WebSocket + goal push, Phase 2)
+  ui/             Design system — dùng cho apps/web (Button/Card/Badge/Container...)
   config/         eslint/tsconfig/prettier chung
 ```
 
@@ -42,6 +43,8 @@ pnpm dev                # chạy tất cả apps qua turbo
 pnpm --filter @football-app/api dev
 pnpm lint / typecheck / build / test    # chạy toàn monorepo qua turbo
 ```
+
+**`pnpm install` chỉ link workspace package (symlink qua `node_modules/@football-app/<pkg>`), KHÔNG tự build nó** — package mới (`main`/`types` trỏ `dist/...`) thiếu `dist/` sẽ làm consumer (`apps/api`, v.v.) lỗi `Cannot find module`/`error TS2307` dù `pnpm install` chạy xong không báo lỗi gì. Bug thật gặp 2026-08-17 với `packages/realtime` (đã merge từ PR khác nhưng chưa từng build ở máy dev khác). Sau khi `git pull`/checkout code có thêm package mới, chạy `pnpm build` toàn repo (hoặc `pnpm --filter <pkg> build` riêng) trước khi trust rằng mọi thứ đã sẵn sàng.
 
 ```bash
 # Mobile (tạm pause — lệnh dưới vẫn đúng khi resume)
@@ -101,6 +104,7 @@ pnpm docker:down
   ```
   Hàm lookup nên nhận `provider` qua tham số (lấy từ `adapter.providerName`, xem `DataProviderAdapter`), không đọc từ global.
 - Sau khi sửa schema: `pnpm db:generate`, rồi migration khi có DB thật (`pnpm db:migrate`).
+- **`pnpm db:generate` KHÔNG áp migration vào DB thật** — chỉ sinh lại Prisma Client theo `schema.prisma`. Bug thật gặp 2026-08-17: `schema.prisma` đã có `DevicePlatform.WEB` (merge từ PR khác), `db:generate` chạy bình thường không báo lỗi gì, nhưng DB dev local chưa hề chạy `pnpm db:migrate`/`db:migrate:deploy` nên enum Postgres thật vẫn chỉ có `IOS`/`ANDROID` — lỗi chỉ lộ ra lúc insert thật (`invalid input value for enum`). Sau khi `git pull`/merge PR có đổi schema, luôn chạy `db:migrate:deploy` thật trên DB đang dùng, đừng chỉ tin `db:generate` chạy xong là đủ.
 - Dùng skill `add-prisma-model` khi thêm model mới.
 - Sửa tay data sai từ provider (Phase 1, chưa có `apps/admin`) → `pnpm db:studio` (Prisma Studio, đã verify chạy thật) — không viết tool riêng trừ khi Prisma Studio thật sự không đủ.
 
@@ -144,9 +148,14 @@ pnpm docker:down
 - Backend verify token qua `requireAuth` middleware (`apps/api/src/middleware/auth.ts`) dùng `firebase-admin` — chạy qua `pnpm docker:up` đã tự set `FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099` (xem "### Docker"), không cần project thật để test local; set `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` trong `.env` khi cần verify token thật từ `jankara-e2e-test`. Dùng chung cho web + mobile.
 - `requireAuth` KHÔNG set raw Firebase UID vào context. Sau `verifyIdToken`, nó resolve-or-create `User` row nội bộ theo `User.firebaseUid` (just-in-time provisioning — chưa có flow signup/profile riêng ở Phase 1) rồi `c.set("userId", internalUser.id)`. Vì vậy `c.get("userId")` trong route là `User.id` (cuid) FK-safe, dùng trực tiếp cho query Prisma (ví dụ `FavoriteTeam.userId`/`FavoritePlayer.userId`) — không phải raw Firebase UID. `User.email` là optional (`String?`) vì user đăng nhập bằng phone không có email claim.
 - **Facebook login (web)**: code đã wire (`signInWithFacebook` trong `auth-context.tsx`, nút trong `auth/page.tsx`), nhưng cần enable tay ở Firebase Console (Authentication → Sign-in method → Facebook, nhập App ID + App Secret từ developers.facebook.com) + whitelist redirect URI `https://jankara-e2e-test.firebaseapp.com/__/auth/handler` trong cấu hình OAuth của Facebook App đó — không có CLI cho bước này. Chưa enable → lỗi `auth/operation-not-allowed` khi bấm nút. Mobile chưa có Facebook (xem note ở trên, chưa cần tới).
-- **Web Push notification (Phase 2 Bước 3, FCM)**: code đã wire đầy đủ (`apps/web/src/lib/push-notifications.ts` + `apps/web/src/app/firebase-messaging-sw.js/route.ts` + nút "Bật thông báo bàn thắng" ở `/favorites`, backend `POST /devices` + `apps/api/src/realtime/goal-notifier.ts` fan-out qua `firebase-admin/messaging`), chỉ còn **1 việc thủ công** trước khi push thật hoạt động, không tự động hoá được: tạo VAPID key pair tại Firebase Console → Project Settings → Cloud Messaging → Web configuration → Generate key pair, set vào `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (`apps/web/.env.local`).
-  - Service worker `/firebase-messaging-sw.js` KHÔNG phải file tĩnh trong `public/` — đó là 1 Route Handler (`app/firebase-messaging-sw.js/route.ts`) đọc `process.env.NEXT_PUBLIC_FIREBASE_*` server-side lúc request và trả JS content — không cần copy tay giá trị Firebase config vào file nào cả, tự động đúng theo `.env.local`/`.env` đang chạy.
-  Thiếu VAPID key → `getToken()` lỗi khi bấm nút, không chặn build/typecheck. `firebase-admin` gửi FCM cũng cần service account hợp lệ (`FIREBASE_SERVICE_ACCOUNT` ở `apps/api/.env`, xem "### Authentication" ở trên) — thiếu thì `sendEachForMulticast` lỗi (đã catch, ghi `NotificationLog` status `FAILED`, không crash server).
+- **Web Push notification (Phase 2 Bước 3, FCM)** — **verify thật 2026-08-17: nhận được push thật trên browser**, sau khi fix 5 bug thật (chi tiết đầy đủ ở [ROADMAP.md § Phase 2 Bước 3](docs/architecture/ROADMAP.md#phase-2--real-time--notifications-size-l)):
+  - Service worker `/firebase-messaging-sw.js` KHÔNG phải file tĩnh trong `public/` — đó là 1 Route Handler (`app/firebase-messaging-sw.js/route.ts`) đọc `process.env.NEXT_PUBLIC_FIREBASE_*` server-side lúc request và trả JS content — không cần copy tay giá trị Firebase config vào file nào cả, tự động đúng theo `.env.local`/`.env` đang chạy. Chỉ tự hiện notification khi KHÔNG tab nào của app đang focus.
+  - **Tab đang mở/focus (foreground) KHÔNG tự hiện notification** — đây là hành vi thật của FCM Web (khác biệt quan trọng, dễ tưởng nhầm là bug), phải tự code `onMessage()` + `new Notification()` tay ở phía client (`listenForForegroundMessages()` trong `lib/push-notifications.ts`, mount qua `<PushNotificationListener />` toàn app trong `layout.tsx`) — service worker's `onBackgroundMessage` không cover case này.
+  - Thiếu `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (Firebase Console → Project Settings → Cloud Messaging → Web configuration → Generate key pair) → `getToken()` lỗi khi bấm nút, không chặn build/typecheck.
+  - Thiếu `FIREBASE_SERVICE_ACCOUNT` hợp lệ ở `apps/api` (env, xem "### Authentication" ở trên) → `sendEachForMulticast` lỗi thật `"Could not load the default credentials"` (chỉ `FIREBASE_PROJECT_ID` không đủ để GỬI FCM — khác với `verifyIdToken` chỉ cần `projectId`) — đã catch, ghi `NotificationLog` status `FAILED`, không crash server, nhưng silent nếu không chủ động check bảng này.
+  - `apps/api/src/realtime/redis-subscriber.ts`'s `subscribeChannel()` (dùng bởi `goal-notifier.ts`) phải đợi event Redis `"ready"` trước khi subscribe nếu client chưa kết nối xong — gọi ngay lúc boot (trước khi ioredis với `lazyConnect: false` kết nối xong) từng fail 100% (`enableOfflineQueue: false` không buffer lệnh) khiến subscriber không bao giờ nhận message, không throw ra ngoài nên dễ tưởng đã hoạt động.
+  - Trạng thái nút "Bật thông báo bàn thắng" ở `/favorites` phải tự check lại khi mount (`GET /devices` + so khớp `getToken()` hiện tại) — không chỉ dựa vào state trong session, nếu không reload trang sẽ mất trạng thái "đã bật" dù backend vẫn còn device. `DELETE /devices/:id` để tắt.
+  - **macOS có thể chặn notification của Chrome ở cấp hệ điều hành** (System Settings → Notifications → Google Chrome → "Allow Notifications") độc lập hoàn toàn với quyền "Allow" trong browser (`Notification.permission === "granted"` vẫn đúng, code chạy không lỗi, nhưng popup không hiện) — không phải bug code, luôn kiểm tra cả 2 lớp khi debug push không hiện trên macOS.
 - `firebase-tools` CLI (đã cài global) dùng cho `flutterfire configure`/`firebase emulators:start`/`firebase login`.
 - `google-services.json`, `GoogleService-Info.plist`, `lib/firebase_options.dart` **đã gitignore** (2026-08-07, sau khi bị secret scanner flag do repo public) — không phải secret nhạy cảm kiểu AWS key (Firebase client API key an toàn để public theo thiết kế của Google), nhưng project `jankara-e2e-test` dùng chung với app khác nên không commit. Máy mới clone repo phải tự chạy `flutterfire configure -p jankara-e2e-test --platforms=ios,android -y` trong `apps/mobile` để sinh lại 3 file này trước khi build.
 
