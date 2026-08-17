@@ -10,11 +10,16 @@ import { apiGet, type ApiListResponse } from "@/lib/api-client";
 import { getFilterableCompetitions, pickDefaultCompetition, pickDefaultSeasonId } from "@/lib/default-selection";
 import type { Match, Standing, TopAssistEntry, TopScorerEntry } from "@/lib/types";
 
-// Standings/scorers/assists don't change often enough to need a short window — same as
-// /standings. Anything that DOES need to feel live (live matches, favorites) is a client island
-// below that fetches independently of this page's ISR cache (see LiveMatchesTicker,
-// FavoritesDashboardSection).
-export const revalidate = 300;
+// Bug thật gặp 2026-08-17 (CI build fail): `/` là trang DUY NHẤT trong app gọi apiGet() mà KHÔNG
+// nhận searchParams — mọi trang browse khác (/matches, /standings, ...) nhận `searchParams`
+// (1 dynamic API của Next.js App Router), tự động bị coi là dynamic nên Next.js không cố
+// static-prerender chúng lúc `next build`. Trang này không có searchParams nào nên Next.js CỐ
+// prerender lúc build — CI không có `apps/api` chạy thật (`API_URL` không set, xem
+// .github/workflows/ci.yml), nên apiGet() throw ngay giữa lúc build, fail hẳn `next build`.
+// `force-dynamic` tắt hẳn việc static-prerender trang này (luôn render lúc có request thật,
+// giống hành vi thật sự các trang browse khác đã có sẵn nhờ searchParams) — đánh đổi mất cache
+// ISR 5 phút để đổi lấy build không phụ thuộc API sống, chấp nhận được cho 1 trang chủ.
+export const dynamic = "force-dynamic";
 
 const PREVIEW_COUNT = 5;
 
