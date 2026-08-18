@@ -44,8 +44,23 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", cleaned).strip()
 
 
+# Biệt danh khác nhau giữa nguồn — KHÔNG phải suffix chung (fc/afc/cf, đã xử lý bằng
+# TEAM_SUFFIX_RE) mà là rút gọn tên riêng. Phát hiện thật (2026-08-18, đối chiếu toàn bộ 20 đội
+# Premier League 2025-26 thật giữa football-data.org và Sofascore): CHỈ 1/20 đội gặp case này —
+# "Wolverhampton Wanderers FC" (football-data.org) vs "Wolverhampton" (Sofascore, bỏ hẳn
+# "Wanderers", không phải suffix) — khiến toàn bộ 38 trận của đội này (~10% mùa giải) không bao
+# giờ resolve được game_id, lặp lại y hệt ở mọi lần chạy backfill cho tới khi fix. 19 đội còn lại
+# chỉ khác biệt suffix, TEAM_SUFFIX_RE đã xử lý đúng. Thêm alias mới ở đây nếu gặp case tương tự
+# (không dùng substring/prefix match chung — rủi ro nhầm lẫn thật, vd "Manchester United" vs
+# "Manchester City" cùng chứa "manchester").
+TEAM_NAME_ALIASES = {
+    "wolverhampton wanderers": "wolverhampton",
+}
+
+
 def normalize_team_name(name: str) -> str:
-    return TEAM_SUFFIX_RE.sub("", normalize(name)).strip()
+    stripped = TEAM_SUFFIX_RE.sub("", normalize(name)).strip()
+    return TEAM_NAME_ALIASES.get(stripped, stripped)
 
 
 def match_player(sofascore_name: str, roster: list[dict[str, str]]) -> str | None:
