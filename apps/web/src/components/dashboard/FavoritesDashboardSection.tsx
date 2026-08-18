@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { CalendarClock, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -97,7 +98,10 @@ export function FavoritesDashboardSection() {
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Sắp diễn ra</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          Sắp diễn ra
+        </h3>
         {!upcomingQuery.data || upcomingQuery.data.length === 0 ? (
           <Card>
             <CardContent className="py-4 text-sm text-zinc-500 dark:text-zinc-400">
@@ -111,7 +115,10 @@ export function FavoritesDashboardSection() {
         )}
       </div>
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Kết quả gần đây</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          <History className="h-4 w-4" aria-hidden="true" />
+          Kết quả gần đây
+        </h3>
         {!recentQuery.data || recentQuery.data.length === 0 ? (
           <Card>
             <CardContent className="py-4 text-sm text-zinc-500 dark:text-zinc-400">

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { LogIn, Phone, Send } from "lucide-react";
 import { Button, Card, Container } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
 
@@ -89,7 +90,10 @@ export default function AuthPage() {
 
   return (
     <Container size="sm" className="py-10">
-      <h1 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Đăng nhập</h1>
+      <h1 className="mb-6 flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <LogIn className="h-6 w-6" aria-hidden="true" />
+        Đăng nhập
+      </h1>
 
       <Card className="flex flex-col gap-6">
         <Button onClick={() => void handleGoogle()} disabled={pending} className="w-full">
@@ -114,7 +118,10 @@ export default function AuthPage() {
         {step === "phone" ? (
           <form onSubmit={handleSendCode} className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Số điện thoại (kèm mã quốc gia, ví dụ +84901234567)
+              <span className="flex items-center gap-1.5">
+                <Phone className="h-4 w-4" aria-hidden="true" />
+                Số điện thoại (kèm mã quốc gia, ví dụ +84901234567)
+              </span>
               <input
                 type="tel"
                 required
@@ -124,7 +131,8 @@ export default function AuthPage() {
                 className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
               />
             </label>
-            <Button type="submit" variant="outline" disabled={pending}>
+            <Button type="submit" variant="outline" disabled={pending} className="gap-1.5">
+              <Send className="h-4 w-4" aria-hidden="true" />
               Gửi mã xác nhận
             </Button>
           </form>

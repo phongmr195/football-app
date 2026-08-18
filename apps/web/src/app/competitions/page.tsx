@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Trophy } from "lucide-react";
 import { Badge, Card, Container, Pagination } from "@football-app/ui";
 import { apiGet, type ApiListResponse } from "@/lib/api-client";
 import { CompetitionFilters } from "@/components/CompetitionFilters";
@@ -45,7 +46,8 @@ export default async function CompetitionsPage({
   return (
     <Container size="lg" className="py-10">
       <div className="mb-6 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          <Trophy className="h-6 w-6" aria-hidden="true" />
           Giải đấu
         </h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">

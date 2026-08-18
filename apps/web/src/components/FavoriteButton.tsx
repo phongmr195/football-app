@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback } from "react";
+import { Star } from "lucide-react";
 import { Button } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
 import { useFavoritePlayers, useFavoriteTeams, useToggleFavorite } from "@/lib/use-favorites";
@@ -54,8 +55,9 @@ export function FavoriteButton(props: FavoriteButtonProps) {
   if (!user) {
     return (
       <Link href="/auth">
-        <Button size="sm" variant="outline">
-          ☆ Theo dõi
+        <Button size="sm" variant="outline" className="gap-1.5">
+          <Star className="h-4 w-4" aria-hidden="true" />
+          Theo dõi
         </Button>
       </Link>
     );
@@ -67,8 +69,10 @@ export function FavoriteButton(props: FavoriteButtonProps) {
       variant={favorited ? "secondary" : "outline"}
       disabled={pending}
       onClick={toggle}
+      className="gap-1.5"
     >
-      {favorited ? "★ Đang theo dõi" : "☆ Theo dõi"}
+      <Star className="h-4 w-4" aria-hidden="true" fill={favorited ? "currentColor" : "none"} />
+      {favorited ? "Đang theo dõi" : "Theo dõi"}
     </Button>
   );
 }

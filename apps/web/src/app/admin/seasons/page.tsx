@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { CalendarRange } from "lucide-react";
 import { AdminResourcePage } from "@/components/admin/AdminResourcePage";
 import { apiGetClient, type ApiListResponse } from "@/lib/api-client";
 import { useAdminAuth } from "@/lib/admin-auth-context";
@@ -36,6 +37,7 @@ export default function AdminSeasonsPage() {
   return (
     <AdminResourcePage<AdminSeasonRow>
       title="Mùa giải"
+      icon={CalendarRange}
       resourcePath="/seasons"
       queryKey="admin-seasons"
       searchPlaceholder="Tìm theo tên mùa giải (vd 2025/2026)..."

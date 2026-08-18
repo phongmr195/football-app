@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Clock, Sparkles } from "lucide-react";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
@@ -120,14 +121,18 @@ export default async function MatchDetailPage({
           </Link>
         </div>
 
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+          <Clock className="h-4 w-4" aria-hidden="true" />
           {formatKickoffAt(match.kickoffAt)}
         </p>
       </Card>
 
       {match.aiSummary ? (
         <Card className="mt-6 flex flex-col gap-2 py-6">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Tóm tắt trận đấu</h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            Tóm tắt trận đấu
+          </h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-300">{match.aiSummary.content}</p>
         </Card>
       ) : null}

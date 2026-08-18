@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { Standing } from "@/lib/types";
 
@@ -50,9 +51,10 @@ export function StandingsPreviewBlock({ standings, competitionId, seasonId }: St
       </table>
       <Link
         href={href}
-        className="block border-t border-zinc-100 px-4 py-2 text-center text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700 dark:border-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
+        className="flex items-center justify-center gap-1 border-t border-zinc-100 px-4 py-2 text-sm text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700 dark:border-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
       >
         Xem đầy đủ
+        <ChevronRight className="h-4 w-4" aria-hidden="true" />
       </Link>
     </Card>
   );

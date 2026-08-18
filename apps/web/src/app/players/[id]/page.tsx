@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BarChart3, Cake, Ruler, Shield, Sparkles } from "lucide-react";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
@@ -74,13 +75,19 @@ export default async function PlayerDetailPage({
 
       <dl className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Card padding="sm" className="flex flex-col gap-1">
-          <dt className="text-sm text-zinc-500 dark:text-zinc-400">Ngày sinh</dt>
+          <dt className="flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+            <Cake className="h-4 w-4" aria-hidden="true" />
+            Ngày sinh
+          </dt>
           <dd className="font-medium text-zinc-900 dark:text-zinc-50">
             {player.dateOfBirth ? formatDate(player.dateOfBirth) : "Chưa rõ"}
           </dd>
         </Card>
         <Card padding="sm" className="flex flex-col gap-1">
-          <dt className="text-sm text-zinc-500 dark:text-zinc-400">Chiều cao</dt>
+          <dt className="flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+            <Ruler className="h-4 w-4" aria-hidden="true" />
+            Chiều cao
+          </dt>
           <dd className="font-medium text-zinc-900 dark:text-zinc-50">
             {player.heightCm ? `${player.heightCm} cm` : "Chưa rõ"}
           </dd>
@@ -89,7 +96,8 @@ export default async function PlayerDetailPage({
 
       {statistics ? (
         <Card className="mt-8 flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          <h2 className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
             Thống kê mùa giải gần nhất
           </h2>
           <div className="grid grid-cols-3 gap-4">
@@ -111,12 +119,16 @@ export default async function PlayerDetailPage({
 
       {player.aiSummary ? (
         <Card className="mt-6 flex flex-col gap-2 py-6">
-          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Tóm tắt cầu thủ</h2>
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            Tóm tắt cầu thủ
+          </h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-300">{player.aiSummary.content}</p>
         </Card>
       ) : null}
 
-      <h2 className="mt-8 mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+      <h2 className="mt-8 mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <Shield className="h-5 w-5" aria-hidden="true" />
         Câu lạc bộ
       </h2>
 

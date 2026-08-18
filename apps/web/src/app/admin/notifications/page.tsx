@@ -2,6 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -64,7 +65,10 @@ export default function AdminNotificationLogsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Nhật ký thông báo</h1>
+      <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <Bell className="h-6 w-6" aria-hidden="true" />
+        Nhật ký thông báo
+      </h1>
 
       <div className="flex flex-wrap items-center gap-3">
         <Input

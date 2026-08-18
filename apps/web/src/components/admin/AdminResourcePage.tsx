@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError, apiGetClient, apiMutateClient, type ApiListResponse } from "@/lib/api-client";
@@ -15,6 +16,8 @@ const SEARCH_DEBOUNCE_MS = 350;
 export interface AdminResourcePageConfig<T extends { id: string }> {
   /** Tiêu đề trang, vd "Giải đấu". */
   title: string;
+  /** Icon cạnh tiêu đề, vd `Trophy` — mỗi trang admin dùng 1 icon riêng cho dễ nhận diện. */
+  icon: LucideIcon;
   /** Path REST của resource, vd "/competitions" — dùng cho cả GET list và POST/PATCH. */
   resourcePath: string;
   /** Query key riêng cho resource này (React Query cache) — không trùng giữa các trang. */
@@ -37,6 +40,7 @@ export interface AdminResourcePageConfig<T extends { id: string }> {
  */
 export function AdminResourcePage<T extends { id: string }>({
   title,
+  icon: Icon,
   resourcePath,
   queryKey,
   columns,
@@ -125,7 +129,10 @@ export function AdminResourcePage<T extends { id: string }>({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">{title}</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          <Icon className="h-6 w-6" aria-hidden="true" />
+          {title}
+        </h1>
         <Button onClick={openCreate}>+ Thêm mới</Button>
       </div>
 

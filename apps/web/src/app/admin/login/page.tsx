@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -40,7 +41,8 @@ export default function AdminLoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-50 dark:bg-black">
       <Card className="flex w-80 flex-col gap-4 px-6 py-8">
-        <h1 className="text-center text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <h1 className="flex items-center justify-center gap-2 text-center text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <Lock className="h-5 w-5" aria-hidden="true" />
           Football App — Admin
         </h1>
         <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3">

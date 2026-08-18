@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Shield } from "lucide-react";
 import { AdminResourcePage } from "@/components/admin/AdminResourcePage";
 import { apiGetClient, type ApiListResponse } from "@/lib/api-client";
 import { useAdminAuth } from "@/lib/admin-auth-context";
@@ -26,6 +27,7 @@ export default function AdminTeamsPage() {
   return (
     <AdminResourcePage<Team>
       title="Đội bóng"
+      icon={Shield}
       resourcePath="/teams"
       queryKey="admin-teams"
       searchPlaceholder="Tìm theo tên đội bóng..."

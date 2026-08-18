@@ -1,5 +1,6 @@
 "use client";
 
+import { Landmark } from "lucide-react";
 import { AdminResourcePage } from "@/components/admin/AdminResourcePage";
 import type { Stadium } from "@/lib/types";
 
@@ -7,6 +8,7 @@ export default function AdminStadiumsPage() {
   return (
     <AdminResourcePage<Stadium>
       title="Sân vận động"
+      icon={Landmark}
       resourcePath="/stadiums"
       queryKey="admin-stadiums"
       searchPlaceholder="Tìm theo tên sân vận động..."

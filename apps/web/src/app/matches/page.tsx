@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Calendar, Clock } from "lucide-react";
 import { Badge, Card, Container, Pagination } from "@football-app/ui";
 import { apiGet, type ApiListResponse } from "@/lib/api-client";
 import { MatchFilters } from "@/components/MatchFilters";
@@ -102,7 +103,8 @@ export default async function MatchesPage({
   return (
     <Container size="lg" className="py-10">
       <div className="mb-6 flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+          <Calendar className="h-6 w-6" aria-hidden="true" />
           Lịch thi đấu
         </h1>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
@@ -174,7 +176,10 @@ export default async function MatchesPage({
                       ) : null}
                       <span>{competitionName}</span>
                     </div>
-                    <span>{formatKickoffAt(match.kickoffAt)}</span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" aria-hidden="true" />
+                      {formatKickoffAt(match.kickoffAt)}
+                    </span>
                   </Link>
 
                   <div className="flex items-center justify-between gap-4">

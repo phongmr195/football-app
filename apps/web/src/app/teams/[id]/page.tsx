@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BarChart3, Landmark, Users } from "lucide-react";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet, type ApiListResponse } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
@@ -91,7 +92,8 @@ export default async function TeamDetailPage({
 
       {team.stadium ? (
         <Card className="mb-8 flex flex-col gap-1">
-          <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          <h2 className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            <Landmark className="h-4 w-4" aria-hidden="true" />
             Sân vận động
           </h2>
           <p className="font-medium text-zinc-900 dark:text-zinc-50">
@@ -108,7 +110,8 @@ export default async function TeamDetailPage({
 
       {statistics ? (
         <Card className="mb-8 flex flex-col gap-3">
-          <h2 className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          <h2 className="flex items-center gap-1.5 text-sm font-medium text-zinc-500 dark:text-zinc-400">
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
             Thống kê mùa giải gần nhất
           </h2>
           <div className="grid grid-cols-3 gap-4 sm:grid-cols-6">
@@ -132,7 +135,8 @@ export default async function TeamDetailPage({
       ) : null}
 
       <div className="mb-4 flex items-baseline justify-between gap-4">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <Users className="h-5 w-5" aria-hidden="true" />
           Danh sách cầu thủ
         </h2>
         <p className="text-sm text-zinc-500 dark:text-zinc-400">

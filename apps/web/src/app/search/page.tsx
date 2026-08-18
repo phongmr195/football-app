@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { Search, Shield, Trophy, User } from "lucide-react";
 import { Badge, Card, Container } from "@football-app/ui";
 import { SearchBox } from "@/components/SearchBox";
 import { apiGet } from "@/lib/api-client";
@@ -29,7 +30,10 @@ export default async function SearchPage({
 
   return (
     <Container size="md" className="py-10">
-      <h1 className="mb-6 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Tìm kiếm</h1>
+      <h1 className="mb-6 flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <Search className="h-6 w-6" aria-hidden="true" />
+        Tìm kiếm
+      </h1>
 
       <SearchBox
         className="mb-8"
@@ -50,7 +54,8 @@ export default async function SearchPage({
         <div className="flex flex-col gap-8">
           {results!.competitions.length > 0 && (
             <section>
-              <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+              <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                <Trophy className="h-4 w-4" aria-hidden="true" />
                 Giải đấu
               </h2>
               <ul className="flex flex-col gap-2">
@@ -92,7 +97,8 @@ export default async function SearchPage({
 
           {results!.teams.length > 0 && (
             <section>
-              <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+              <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                <Shield className="h-4 w-4" aria-hidden="true" />
                 Đội bóng
               </h2>
               <ul className="flex flex-col gap-2">
@@ -127,7 +133,8 @@ export default async function SearchPage({
 
           {results!.players.length > 0 && (
             <section>
-              <h2 className="mb-3 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+              <h2 className="mb-3 flex items-center gap-1.5 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+                <User className="h-4 w-4" aria-hidden="true" />
                 Cầu thủ
               </h2>
               <ul className="flex flex-col gap-2">
