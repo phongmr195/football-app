@@ -112,6 +112,13 @@ export default async function MatchDetailPage({
         </p>
       </Card>
 
+      {match.aiSummary ? (
+        <Card className="mt-6 flex flex-col gap-2 py-6">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Tóm tắt trận đấu</h2>
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">{match.aiSummary.content}</p>
+        </Card>
+      ) : null}
+
       <LiveMatchPanel matchId={match.id} />
     </Container>
   );

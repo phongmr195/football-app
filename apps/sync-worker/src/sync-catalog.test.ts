@@ -9,8 +9,9 @@ import type {
   DataProviderAdapter,
   ExternalRef,
 } from "@football-app/data-provider";
+import type { LlmProvider } from "@football-app/ai-provider";
 import { prisma } from "@football-app/database";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   syncCompetitions,
   syncMatches,
@@ -25,6 +26,24 @@ import {
 // Test chạy against Postgres thật (Docker) — xem CLAUDE.md § Docker để có DATABASE_URL đúng.
 // Dùng mock adapter (không gọi API-Football thật) để verify logic sync/upsert độc lập với
 // việc có API key thật hay không, xem CLAUDE.md ghi chú "chưa có API key".
+
+// syncMatches() tự trigger generateMatchSummaryIfNeeded() khi thấy match chuyển sang FINISHED
+// (Phase 5), và hàm đó mặc định gọi createLlmProvider() thật (AnthropicAdapter, gọi network thật)
+// nếu không được truyền llmProvider qua tham số — syncMatches() không có chỗ để tiêm fake vào, nên
+// phải mock cả module "./ai-provider" ở đây, cùng style với "./provider"/"./realtime" đã mock ở
+// sync-live-matches.test.ts, để test file này không bao giờ gọi network thật.
+const mockLlmProvider: LlmProvider = {
+  providerName: "mock",
+  generateText: vi.fn().mockResolvedValue({
+    content: "mock summary",
+    model: "mock-model",
+    tokensInput: 1,
+    tokensOutput: 1,
+  }),
+};
+vi.mock("./ai-provider", () => ({
+  createLlmProvider: () => mockLlmProvider,
+}));
 
 const PROVIDER = "test-provider";
 const PROVIDER_B = "test-provider-b";

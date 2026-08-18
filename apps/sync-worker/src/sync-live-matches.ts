@@ -1,5 +1,6 @@
 import { prisma } from "@football-app/database";
 import type { GoalEvent } from "@football-app/realtime";
+import { generateMatchSummaryIfNeeded } from "./match-summary";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
 
@@ -118,6 +119,19 @@ export async function syncLiveMatches() {
           err,
         );
       }
+    }
+
+    // Trigger AI match summary khi match VỪA chuyển sang FINISHED (đọc dbMatch.status TRƯỚC
+    // transaction ở trên, giống cách diff score cho goalEvents) — đây là đường "nhanh" (bắt được
+    // ngay nếu provider còn trả match này trong fetchLiveMatches() lúc vừa kết thúc);
+    // sync-catalog.ts's syncMatches() là đường "chắc chắn" (re-sync định kỳ, không phụ thuộc match
+    // có được live-poll đúng lúc hay không). generateMatchSummaryIfNeeded tự idempotent (guard
+    // bằng AiMatchSummary.matchId) nên an toàn khi cả 2 đường cùng trigger. KHÔNG await — job AI
+    // chạy nền, không làm chậm tick sync tiếp theo (xem plan Phase 5 § "không block API").
+    if (dbMatch.status !== "FINISHED" && match.status === "FINISHED") {
+      void generateMatchSummaryIfNeeded(dbMatch.id).catch((err) => {
+        console.error(`syncLiveMatches: generateMatchSummaryIfNeeded thất bại cho match ${dbMatch.id}`, err);
+      });
     }
   }
 
