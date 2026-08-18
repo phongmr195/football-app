@@ -1,5 +1,6 @@
 "use client";
 
+import { Flag } from "lucide-react";
 import { AdminResourcePage } from "@/components/admin/AdminResourcePage";
 
 interface AdminRefereeRow {
@@ -12,6 +13,7 @@ export default function AdminRefereesPage() {
   return (
     <AdminResourcePage<AdminRefereeRow>
       title="Trọng tài"
+      icon={Flag}
       resourcePath="/referees"
       queryKey="admin-referees"
       searchPlaceholder="Tìm theo tên trọng tài..."

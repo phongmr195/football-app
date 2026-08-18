@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Activity, BarChart3, Users } from "lucide-react";
 import { Card } from "@football-app/ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -18,9 +19,18 @@ export function MatchDetailTabs({ eventsSlot, lineupsSlot, statisticsSlot }: Mat
     <Card className="mt-6 p-0">
       <Tabs defaultValue="events" className="p-4">
         <TabsList>
-          <TabsTrigger value="events">Diễn biến</TabsTrigger>
-          <TabsTrigger value="lineups">Đội hình</TabsTrigger>
-          <TabsTrigger value="statistics">Thống kê</TabsTrigger>
+          <TabsTrigger value="events" className="gap-1.5">
+            <Activity className="h-4 w-4" aria-hidden="true" />
+            Diễn biến
+          </TabsTrigger>
+          <TabsTrigger value="lineups" className="gap-1.5">
+            <Users className="h-4 w-4" aria-hidden="true" />
+            Đội hình
+          </TabsTrigger>
+          <TabsTrigger value="statistics" className="gap-1.5">
+            <BarChart3 className="h-4 w-4" aria-hidden="true" />
+            Thống kê
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="events" className="pt-4">
           {eventsSlot}

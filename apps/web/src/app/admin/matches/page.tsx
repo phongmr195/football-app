@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { CalendarClock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -48,7 +49,10 @@ export default function AdminMatchesPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Trận đấu</h1>
+      <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <CalendarClock className="h-6 w-6" aria-hidden="true" />
+        Trận đấu
+      </h1>
 
       <div className="flex flex-wrap items-center gap-3">
         <Input

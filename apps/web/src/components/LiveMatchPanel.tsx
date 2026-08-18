@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Activity } from "lucide-react";
 import { Badge, Card } from "@football-app/ui";
 import { formatMatchEventLabel, matchStatusMeta } from "@/lib/format";
 import { useLiveMatch, useMatchEvents, type MatchEventsResponse } from "@/lib/use-live-match";
@@ -73,7 +74,10 @@ export function LiveMatchPanel({ matchId }: LiveMatchPanelProps) {
       </div>
 
       <div className="flex flex-col gap-2">
-        <h3 className="text-sm font-semibold text-zinc-500 dark:text-zinc-400">Diễn biến</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-500 dark:text-zinc-400">
+          <Activity className="h-4 w-4" aria-hidden="true" />
+          Diễn biến
+        </h3>
         {events.length === 0 ? (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             Chưa có diễn biến nào được ghi nhận.

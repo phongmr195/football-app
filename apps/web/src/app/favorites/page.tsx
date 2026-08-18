@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Bell, Heart, Shield, StarOff, User } from "lucide-react";
 import { Badge, Button, Card, Container } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
 import { listDevices, registerDevice, unregisterDevice } from "@/lib/devices";
@@ -151,10 +152,14 @@ export default function FavoritesPage() {
 
   return (
     <Container size="md" className="py-10">
-      <h1 className="mb-4 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">Yêu thích</h1>
+      <h1 className="mb-4 flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+        <Heart className="h-6 w-6" aria-hidden="true" />
+        Yêu thích
+      </h1>
 
       <Card padding="sm" className="mb-8 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-400">
+          <Bell className="h-4 w-4 shrink-0" aria-hidden="true" />
           Nhận thông báo ngay khi đội bóng bạn theo dõi ghi bàn.
         </p>
         <div className="flex items-center gap-3">
@@ -194,7 +199,10 @@ export default function FavoritesPage() {
         </div>
       </Card>
 
-      <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-50">Đội bóng</h2>
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <Shield className="h-5 w-5" aria-hidden="true" />
+        Đội bóng
+      </h2>
       {loadingData ? (
         <p className="mb-8 text-sm text-zinc-400 dark:text-zinc-600">Đang tải…</p>
       ) : teams.length === 0 ? (
@@ -223,8 +231,10 @@ export default function FavoritesPage() {
                 <Button
                   size="sm"
                   variant="ghost"
+                  className="gap-1.5"
                   onClick={() => unfavoriteTeamMutation.mutate(team.id)}
                 >
+                  <StarOff className="h-4 w-4" aria-hidden="true" />
                   Bỏ theo dõi
                 </Button>
               </Card>
@@ -233,7 +243,10 @@ export default function FavoritesPage() {
         </ul>
       )}
 
-      <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-50">Cầu thủ</h2>
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <User className="h-5 w-5" aria-hidden="true" />
+        Cầu thủ
+      </h2>
       {loadingData ? (
         <p className="text-sm text-zinc-400 dark:text-zinc-600">Đang tải…</p>
       ) : players.length === 0 ? (
@@ -257,8 +270,10 @@ export default function FavoritesPage() {
                     <Button
                       size="sm"
                       variant="ghost"
+                      className="gap-1.5"
                       onClick={() => unfavoritePlayerMutation.mutate(player.id)}
                     >
+                      <StarOff className="h-4 w-4" aria-hidden="true" />
                       Bỏ theo dõi
                     </Button>
                   </div>

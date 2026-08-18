@@ -1,5 +1,6 @@
 "use client";
 
+import { Trophy } from "lucide-react";
 import { AdminResourcePage } from "@/components/admin/AdminResourcePage";
 import { competitionTypeMeta } from "@/lib/format";
 import type { Competition } from "@/lib/types";
@@ -14,6 +15,7 @@ export default function AdminCompetitionsPage() {
   return (
     <AdminResourcePage<Competition>
       title="Giải đấu"
+      icon={Trophy}
       resourcePath="/competitions"
       queryKey="admin-competitions"
       searchPlaceholder="Tìm theo tên giải đấu..."

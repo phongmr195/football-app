@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { UserCog } from "lucide-react";
 import { AdminResourcePage } from "@/components/admin/AdminResourcePage";
 import { apiGetClient, type ApiListResponse } from "@/lib/api-client";
 import { useAdminAuth } from "@/lib/admin-auth-context";
@@ -33,6 +34,7 @@ export default function AdminCoachesPage() {
   return (
     <AdminResourcePage<AdminCoachRow>
       title="HLV"
+      icon={UserCog}
       resourcePath="/coaches"
       queryKey="admin-coaches"
       searchPlaceholder="Tìm theo tên HLV..."

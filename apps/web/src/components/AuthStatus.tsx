@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Heart, LogOut } from "lucide-react";
 import { Button } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
 
@@ -102,6 +103,7 @@ export function AuthStatus() {
             onClick={() => setOpen(false)}
             className="mt-3 flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
+            <Heart className="h-4 w-4" aria-hidden="true" />
             Yêu thích
           </Link>
 
@@ -113,6 +115,7 @@ export function AuthStatus() {
             }}
             className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
             Đăng xuất
           </button>
         </div>

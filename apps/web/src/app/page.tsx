@@ -1,3 +1,4 @@
+import { BarChart3, CalendarClock, Heart, ListOrdered, Trophy } from "lucide-react";
 import { Container } from "@football-app/ui";
 import { Separator } from "@/components/ui/separator";
 import { FavoritesDashboardSection } from "@/components/dashboard/FavoritesDashboardSection";
@@ -65,7 +66,10 @@ export default async function Home() {
       <LiveMatchesTicker />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Đội bóng yêu thích của bạn</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <Heart className="h-5 w-5" aria-hidden="true" />
+          Đội bóng yêu thích của bạn
+        </h2>
         <FavoritesDashboardSection />
       </section>
 
@@ -74,7 +78,10 @@ export default async function Home() {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Các trận đấu sắp diễn ra</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              <CalendarClock className="h-5 w-5" aria-hidden="true" />
+              Các trận đấu sắp diễn ra
+            </h2>
             {defaultCompetition ? (
               <span className="text-xs text-zinc-500 dark:text-zinc-400">{defaultCompetition.name}</span>
             ) : null}
@@ -84,7 +91,10 @@ export default async function Home() {
 
         <section className="flex flex-col gap-3">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Bảng xếp hạng</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+              <ListOrdered className="h-5 w-5" aria-hidden="true" />
+              Bảng xếp hạng
+            </h2>
             {defaultCompetition ? (
               <span className="text-xs text-zinc-500 dark:text-zinc-400">{defaultCompetition.name}</span>
             ) : null}
@@ -100,14 +110,20 @@ export default async function Home() {
       <Separator />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Thống kê cầu thủ</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <BarChart3 className="h-5 w-5" aria-hidden="true" />
+          Thống kê cầu thủ
+        </h2>
         <TopScorersPreviewBlock scorers={topScorers} assists={topAssists} standingsHref={standingsHref} />
       </section>
 
       <Separator />
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Giải đấu nổi bật</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <Trophy className="h-5 w-5" aria-hidden="true" />
+          Giải đấu nổi bật
+        </h2>
         <FeaturedCompetitionsBlock competitions={competitions.slice(0, 8)} />
       </section>
     </Container>

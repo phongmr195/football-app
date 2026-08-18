@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Calendar, ListOrdered, Trophy, type LucideIcon } from "lucide-react";
 import { cn } from "@football-app/ui";
 
-const LINKS = [
-  { href: "/competitions", label: "Giải đấu" },
-  { href: "/standings", label: "Bảng xếp hạng" },
-  { href: "/matches", label: "Lịch thi đấu" },
+const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: "/competitions", label: "Giải đấu", icon: Trophy },
+  { href: "/standings", label: "Bảng xếp hạng", icon: ListOrdered },
+  { href: "/matches", label: "Lịch thi đấu", icon: Calendar },
 ];
 
 /**
@@ -20,19 +21,20 @@ export function NavLinks() {
 
   return (
     <nav className="flex items-center gap-1 text-sm">
-      {LINKS.map(({ href, label }) => {
+      {LINKS.map(({ href, label, icon: Icon }) => {
         const isActive = pathname.startsWith(href);
         return (
           <Link
             key={href}
             href={href}
             className={cn(
-              "rounded-full px-3 py-1.5 transition-colors",
+              "flex items-center gap-1.5 rounded-full px-3 py-1.5 transition-colors",
               isActive
                 ? "bg-zinc-900 text-white dark:bg-zinc-50 dark:text-zinc-900"
                 : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-50"
             )}
           >
+            <Icon className="h-4 w-4" aria-hidden="true" />
             {label}
           </Link>
         );

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { ListOrdered } from "lucide-react";
 import { Card, Container, cn } from "@football-app/ui";
 import { apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
@@ -133,12 +134,14 @@ export default async function StandingsPage({
       <BackButton />
 
       {competition && season ? (
-        <h1 className="mb-6 text-2xl font-bold uppercase tracking-tight text-zinc-900 dark:text-zinc-50">
+        <h1 className="mb-6 flex items-center gap-2 text-2xl font-bold uppercase tracking-tight text-zinc-900 dark:text-zinc-50">
+          <ListOrdered className="h-6 w-6 shrink-0" aria-hidden="true" />
           Bảng xếp hạng {competitionDisplayName(competition)}{" "}
           {formatSeasonRange(season.startDate, season.endDate)}
         </h1>
       ) : (
-        <h1 className="mb-6 text-2xl font-bold uppercase tracking-tight text-zinc-900 dark:text-zinc-50">
+        <h1 className="mb-6 flex items-center gap-2 text-2xl font-bold uppercase tracking-tight text-zinc-900 dark:text-zinc-50">
+          <ListOrdered className="h-6 w-6 shrink-0" aria-hidden="true" />
           Bảng xếp hạng
         </h1>
       )}

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { CalendarRange, ChevronRight } from "lucide-react";
 import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
@@ -64,14 +65,16 @@ export default async function CompetitionDetailPage({
           </div>
           <Link
             href={`/matches?competitionId=${competition.id}`}
-            className="text-sm text-zinc-700 hover:underline dark:text-zinc-300"
+            className="flex items-center gap-1 text-sm text-zinc-700 hover:underline dark:text-zinc-300"
           >
-            Xem lịch thi đấu &rarr;
+            Xem lịch thi đấu
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
           </Link>
         </div>
       </Card>
 
-      <h2 className="mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <CalendarRange className="h-5 w-5" aria-hidden="true" />
         Mùa giải
       </h2>
 
@@ -93,8 +96,9 @@ export default async function CompetitionDetailPage({
                   </span>
                   <div className="flex items-center gap-2">
                     {season.isCurrent ? <Badge variant="success">Đang diễn ra</Badge> : null}
-                    <span className="text-sm text-zinc-500 dark:text-zinc-400">
-                      Xem bảng xếp hạng &rarr;
+                    <span className="flex items-center gap-1 text-sm text-zinc-500 dark:text-zinc-400">
+                      Xem bảng xếp hạng
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
                     </span>
                   </div>
                 </Card>

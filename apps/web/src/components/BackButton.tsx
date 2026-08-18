@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { Button } from "@football-app/ui";
 
 /**
@@ -18,9 +19,10 @@ export function BackButton() {
       variant="ghost"
       size="sm"
       onClick={() => router.back()}
-      className="mb-4 -ml-3"
+      className="mb-4 -ml-3 gap-1"
     >
-      ← Quay lại
+      <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+      Quay lại
     </Button>
   );
 }

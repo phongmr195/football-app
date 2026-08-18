@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { cn } from "@football-app/ui";
 import { apiGetClient } from "@/lib/api-client";
 import { competitionDisplayName, playerPositionMeta } from "@/lib/format";
@@ -90,7 +91,11 @@ export function SearchBox({ className, placeholder, defaultValue, autoFocus }: S
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
-      <form action="/search" method="GET" onSubmit={closeDropdown}>
+      <form action="/search" method="GET" onSubmit={closeDropdown} className="relative">
+        <Search
+          className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
         <Input
           type="text"
           name="q"
@@ -105,6 +110,7 @@ export function SearchBox({ className, placeholder, defaultValue, autoFocus }: S
           placeholder={placeholder ?? "Tìm kiếm..."}
           autoComplete="off"
           autoFocus={autoFocus}
+          className="pl-8"
         />
       </form>
 

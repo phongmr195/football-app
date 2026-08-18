@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { User } from "lucide-react";
 import { AdminResourcePage } from "@/components/admin/AdminResourcePage";
 import { apiGetClient, type ApiListResponse } from "@/lib/api-client";
 import { useAdminAuth } from "@/lib/admin-auth-context";
@@ -38,6 +39,7 @@ export default function AdminPlayersPage() {
   return (
     <AdminResourcePage<AdminPlayerRow>
       title="Cầu thủ"
+      icon={User}
       resourcePath="/players"
       queryKey="admin-players"
       searchPlaceholder="Tìm theo tên cầu thủ..."
