@@ -583,6 +583,9 @@ model PlayerRating {
   playerId String
   player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
   rating   Float
+  // Thống kê chi tiết theo trận (touches/passes/tackles/...) từ nguồn cung cấp — không model hoá
+  // riêng từng field (khác nhau tuỳ nguồn), giống pattern `raw` ở MatchStatistic/AiUsageLog.
+  stats    Json?
 
   @@unique([matchId, playerId])
   @@map("player_ratings")

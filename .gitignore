@@ -28,6 +28,14 @@ infrastructure/terraform/*.tfvars
 .packages
 build/
 
+# Python (apps/scraper-sofascore — component Python đầu tiên, xem CLAUDE.md § Scraper)
+apps/scraper-sofascore/.venv/
+apps/scraper-sofascore/.cache/
+apps/scraper-sofascore/manifest.json
+apps/scraper-sofascore/output/
+__pycache__/
+*.pyc
+
 # OS
 .DS_Store
 
