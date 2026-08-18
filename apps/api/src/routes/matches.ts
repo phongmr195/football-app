@@ -178,13 +178,79 @@ export const matchesRoute = new Hono()
       const { id } = c.req.valid("param");
       const { since_seq: sinceSeq } = c.req.valid("query");
 
+      // Kèm player/relatedPlayer/team (chỉ id+name) — thiếu field này khiến web chỉ hiện được
+      // loại event + phút, không biết AI ghi bàn/bị thẻ/vào sân (bug thật, verify 2026-08-18).
       const items = await prisma.matchEvent.findMany({
         where: { matchId: id, seq: { gt: sinceSeq } },
         orderBy: { seq: "asc" },
         take: 500,
+        include: {
+          player: { select: { id: true, name: true } },
+          relatedPlayer: { select: { id: true, name: true } },
+          team: { select: { id: true, name: true } },
+        },
       });
 
       const lastSeq = items.length > 0 ? items[items.length - 1]!.seq : sinceSeq;
       return c.json({ items, lastSeq });
     },
-  );
+  )
+  // Nguồn: apps/scraper-sofascore (xem CLAUDE.md § Scraper) — chỉ có data cho match đã scrape
+  // (Premier League 2025-2026, chưa full mùa). Trả cấu trúc rỗng hợp lệ (KHÔNG 404) khi match tồn
+  // tại nhưng chưa có lineup, để web render empty-state thay vì phải tự xử lý lỗi.
+  .get("/matches/:id/lineups", zValidator("param", z.object({ id: z.string() })), async (c) => {
+    const { id } = c.req.valid("param");
+    const match = await prisma.match.findUnique({
+      where: { id },
+      select: { homeTeamId: true, awayTeamId: true },
+    });
+    if (!match) return c.json({ error: "not found" }, 404);
+
+    const [lineups, ratings, formations] = await Promise.all([
+      prisma.matchLineup.findMany({
+        where: { matchId: id },
+        include: { player: { select: { id: true, name: true } } },
+      }),
+      prisma.playerRating.findMany({ where: { matchId: id } }),
+      prisma.formation.findMany({ where: { matchId: id } }),
+    ]);
+    const ratingByPlayerId = new Map(ratings.map((r) => [r.playerId, r.rating]));
+    const formationByTeamId = new Map(formations.map((f) => [f.teamId, f.formation]));
+
+    const buildSide = (teamId: string) => ({
+      teamId,
+      formation: formationByTeamId.get(teamId) ?? null,
+      players: lineups
+        .filter((l) => l.teamId === teamId)
+        .sort((a, b) => Number(b.isStarting) - Number(a.isStarting))
+        .map((l) => ({
+          playerId: l.playerId,
+          name: l.player.name,
+          position: l.position,
+          shirtNumber: l.shirtNumber,
+          isStarting: l.isStarting,
+          rating: ratingByPlayerId.get(l.playerId) ?? null,
+        })),
+    });
+
+    return c.json({ home: buildSide(match.homeTeamId), away: buildSide(match.awayTeamId) });
+  })
+  // Field đã model hoá (shotsOnGoal/corners/fouls/offsides) hầu hết rỗng trong data thật (verify
+  // 2026-08-18) — trả cả `raw` (toàn bộ groups/statisticsItems từ Sofascore) để web tự render
+  // generic, không phụ thuộc field nào được map đủ.
+  .get("/matches/:id/statistics", zValidator("param", z.object({ id: z.string() })), async (c) => {
+    const { id } = c.req.valid("param");
+    const match = await prisma.match.findUnique({
+      where: { id },
+      select: { homeTeamId: true, awayTeamId: true },
+    });
+    if (!match) return c.json({ error: "not found" }, 404);
+
+    const stats = await prisma.matchStatistic.findMany({ where: { matchId: id } });
+    const byTeamId = new Map(stats.map((s) => [s.teamId, s]));
+
+    return c.json({
+      home: byTeamId.get(match.homeTeamId) ?? null,
+      away: byTeamId.get(match.awayTeamId) ?? null,
+    });
+  });

@@ -5,8 +5,12 @@ import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
 import { LiveMatchPanel } from "@/components/LiveMatchPanel";
+import { MatchDetailTabs } from "@/components/match/MatchDetailTabs";
+import { MatchEventsTimeline } from "@/components/match/MatchEventsTimeline";
+import { MatchLineups } from "@/components/match/MatchLineups";
+import { MatchStatisticsBars } from "@/components/match/MatchStatisticsBars";
 import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
-import type { MatchDetail } from "@/lib/types";
+import type { MatchDetail, MatchEvent, MatchLineupsResponse, MatchStatisticsResponse } from "@/lib/types";
 
 // A single match's data (score/status) is essentially frozen once FINISHED, so this stays
 // long-window ISR — same window as the list. Live matches are handled separately by
@@ -32,6 +36,15 @@ export default async function MatchDetailPage({
   const match = await getMatch(id);
 
   if (!match) notFound();
+
+  // Chỉ có data cho match đã scrape (apps/scraper-sofascore, Premier League 2025-2026, chưa full
+  // mùa) — 2 endpoint mới trả cấu trúc rỗng hợp lệ (không 404) khi chưa có, các component con tự
+  // render empty-state. Fetch song song, không phụ thuộc nhau.
+  const [events, lineups, statistics] = await Promise.all([
+    apiGet<{ items: MatchEvent[] }>(`/matches/${id}/events`),
+    apiGet<MatchLineupsResponse>(`/matches/${id}/lineups`),
+    apiGet<MatchStatisticsResponse>(`/matches/${id}/statistics`),
+  ]);
 
   const { label, variant } = matchStatusMeta(match.status);
   const hasScore = match.homeScore !== null && match.awayScore !== null;
@@ -118,6 +131,12 @@ export default async function MatchDetailPage({
           <p className="text-sm text-zinc-600 dark:text-zinc-300">{match.aiSummary.content}</p>
         </Card>
       ) : null}
+
+      <MatchDetailTabs
+        eventsSlot={<MatchEventsTimeline events={events.items} />}
+        lineupsSlot={<MatchLineups lineups={lineups} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />}
+        statisticsSlot={<MatchStatisticsBars statistics={statistics} />}
+      />
 
       <LiveMatchPanel matchId={match.id} />
     </Container>

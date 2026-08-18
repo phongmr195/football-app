@@ -110,7 +110,14 @@ export type MatchEventType =
   | "SUBSTITUTION"
   | "VAR";
 
-/** Raw row shape returned by GET /matches/:id/events (see packages/database's MatchEvent model). */
+export interface MatchEventPlayerRef {
+  id: string;
+  name: string;
+}
+
+/** Raw row shape returned by GET /matches/:id/events (see packages/database's MatchEvent model).
+ * `player`/`relatedPlayer`/`team` là `null` khi ID tương ứng là `null` (vd thẻ cho HLV, không
+ * phải cầu thủ — verify thật 2026-08-18) HOẶC khi scraper không khớp được tên cầu thủ. */
 export interface MatchEvent {
   id: string;
   matchId: string;
@@ -120,8 +127,55 @@ export interface MatchEvent {
   teamId: string | null;
   playerId: string | null;
   relatedPlayerId: string | null;
+  player: MatchEventPlayerRef | null;
+  relatedPlayer: MatchEventPlayerRef | null;
+  team: MatchEventPlayerRef | null;
   detail: unknown;
   createdAt: string;
+}
+
+/** GET /matches/:id/lineups — gộp MatchLineup + PlayerRating + Formation.formation phía API. */
+export interface MatchLineupPlayer {
+  playerId: string;
+  name: string;
+  position: string | null;
+  shirtNumber: number | null;
+  isStarting: boolean;
+  rating: number | null;
+}
+
+export interface MatchLineupSide {
+  teamId: string;
+  formation: string | null;
+  players: MatchLineupPlayer[];
+}
+
+export interface MatchLineupsResponse {
+  home: MatchLineupSide;
+  away: MatchLineupSide;
+}
+
+/**
+ * GET /matches/:id/statistics — field đã model hoá (shotsOnGoal/corners/fouls/offsides) hầu hết
+ * `null` trong data thật (scraper Sofascore) — số liệu thật nằm trong `raw.groups[]`, xem
+ * MatchStatisticsBars.tsx cho cách render generic từ đó. `null` khi match chưa có statistics.
+ */
+export interface MatchStatisticSide {
+  id: string;
+  matchId: string;
+  teamId: string;
+  shotsOnGoal: number | null;
+  shotsOffGoal: number | null;
+  possession: number | null;
+  corners: number | null;
+  fouls: number | null;
+  offsides: number | null;
+  raw: unknown;
+}
+
+export interface MatchStatisticsResponse {
+  home: MatchStatisticSide | null;
+  away: MatchStatisticSide | null;
 }
 
 export interface Stadium {
