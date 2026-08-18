@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { Heart, LogOut } from "lucide-react";
+import { Heart, History, LogOut } from "lucide-react";
 import { Button } from "@football-app/ui";
 import { useAuth } from "@/lib/auth-context";
 
@@ -105,6 +105,15 @@ export function AuthStatus() {
           >
             <Heart className="h-4 w-4" aria-hidden="true" />
             Yêu thích
+          </Link>
+
+          <Link
+            href="/compare/history"
+            onClick={() => setOpen(false)}
+            className="mt-1 flex items-center gap-2 rounded-lg px-2 py-2 text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            <History className="h-4 w-4" aria-hidden="true" />
+            Lịch sử so sánh
           </Link>
 
           <button

@@ -27,6 +27,7 @@ model User {
   searchHistories      SearchHistory[]
   aiUsageLogs          AiUsageLog[]
   subscriptions        Subscription[]
+  playerCompareHistories PlayerCompareHistory[]
 
   @@map("users")
 }
@@ -312,6 +313,8 @@ model Player {
   matchLineups      MatchLineup[]
   ratings           PlayerRating[]
   aiSummary         AiPlayerSummary?
+  aiComparisonsAsPlayerA AiPlayerComparison[] @relation("AiPlayerComparisonPlayerA")
+  aiComparisonsAsPlayerB AiPlayerComparison[] @relation("AiPlayerComparisonPlayerB")
   topScorerEntries  TopScorer[]
   topAssistEntries  TopAssist[]
 
@@ -702,6 +705,43 @@ model AiPlayerSummary {
   createdAt DateTime @default(now())
 
   @@map("ai_player_summary")
+}
+
+// So sánh 2 cầu thủ bằng AI (ROADMAP Phase 5) — khác AiMatchSummary/AiPlayerSummary (1 FK
+// @unique), đây là quan hệ 2 FK nên cần canonical order để (A,B) và (B,A) luôn map về đúng 1
+// row: route tự canonicalize (playerAId = min theo string compare) TRƯỚC khi đọc/ghi, không dựa
+// vào caller gửi đúng thứ tự. TTL 7 ngày giống AiPlayerSummary — stats CẢ HAI cầu thủ đổi trong
+// mùa, không đông cứng như match.
+model AiPlayerComparison {
+  id        String   @id @default(cuid())
+  playerAId String
+  playerA   Player   @relation("AiPlayerComparisonPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerBId String
+  playerB   Player   @relation("AiPlayerComparisonPlayerB", fields: [playerBId], references: [id], onDelete: Cascade)
+  content   String
+  model     String
+  createdAt DateTime @default(now())
+
+  @@unique([playerAId, playerBId])
+  histories PlayerCompareHistory[]
+
+  @@map("ai_player_comparison")
+}
+
+// Lịch sử so sánh CỦA TỪNG USER — khác AiPlayerComparison (cache CHUNG, không gắn user). Ghi/bump
+// mỗi lần POST /players/compare trả 200 cho user đó (kể cả cache hit — user vẫn "vừa xem" cặp
+// này), KHÔNG tính vào AiUsageLog cap (đó chỉ tính LLM call thật). unique theo (userId,
+// comparisonId) — re-xem cùng cặp chỉ bump viewedAt, không tạo dòng mới.
+model PlayerCompareHistory {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comparisonId String
+  comparison   AiPlayerComparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  viewedAt     DateTime           @default(now())
+
+  @@unique([userId, comparisonId])
+  @@map("player_compare_history")
 }
 
 enum ChatRole {

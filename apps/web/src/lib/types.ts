@@ -220,6 +220,36 @@ export interface PlayerDetail extends Player {
   aiSummary: AiMatchSummary | null;
 }
 
+/** POST /players/compare response (apps/api/src/routes/player-compare.ts). */
+export interface PlayerCompareSide {
+  id: string;
+  name: string;
+  position: string | null;
+  team: { id: string; name: string; logoUrl: string | null } | null;
+  statistics: Pick<
+    PlayerStatistics,
+    "appearances" | "goals" | "assists" | "yellowCards" | "redCards" | "minutesPlayed"
+  > | null;
+}
+
+export interface PlayerCompareResponse {
+  playerA: PlayerCompareSide;
+  playerB: PlayerCompareSide;
+  // Shape giống AiMatchSummary — tái dùng type đã có, đúng convention PlayerDetail.aiSummary.
+  comparison: AiMatchSummary;
+  cached: boolean;
+}
+
+/** GET /players/compare/history item (apps/api/src/routes/player-compare.ts) — lịch sử so sánh
+ * của user, mới nhất trước. */
+export interface PlayerCompareHistoryEntry {
+  id: string;
+  viewedAt: string;
+  playerA: { id: string; name: string; team: { id: string; name: string; logoUrl: string | null } | null };
+  playerB: { id: string; name: string; team: { id: string; name: string; logoUrl: string | null } | null };
+  comparison: AiMatchSummary;
+}
+
 /**
  * Shapes returned by apps/api's GET /favorites/teams and /favorites/players (piece 6a) — these
  * are deliberately narrower than Team/Player above (just what favorites.ts's `teamSelect`/
