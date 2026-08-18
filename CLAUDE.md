@@ -106,7 +106,7 @@ pnpm docker:down
 - Sau khi sửa schema: `pnpm db:generate`, rồi migration khi có DB thật (`pnpm db:migrate`).
 - **`pnpm db:generate` KHÔNG áp migration vào DB thật** — chỉ sinh lại Prisma Client theo `schema.prisma`. Bug thật gặp 2026-08-17: `schema.prisma` đã có `DevicePlatform.WEB` (merge từ PR khác), `db:generate` chạy bình thường không báo lỗi gì, nhưng DB dev local chưa hề chạy `pnpm db:migrate`/`db:migrate:deploy` nên enum Postgres thật vẫn chỉ có `IOS`/`ANDROID` — lỗi chỉ lộ ra lúc insert thật (`invalid input value for enum`). Sau khi `git pull`/merge PR có đổi schema, luôn chạy `db:migrate:deploy` thật trên DB đang dùng, đừng chỉ tin `db:generate` chạy xong là đủ.
 - Dùng skill `add-prisma-model` khi thêm model mới.
-- Sửa tay data sai từ provider (`/admin` đã có access control thật, nhưng CRUD Competition/Team/Player/... CHƯA build — xem "### Admin" dưới + ROADMAP Phase 4) → `pnpm db:studio` (Prisma Studio, đã verify chạy thật) cho tới khi CRUD xong.
+- Sửa tay data sai từ provider → dùng CRUD `/admin/*` (Competition/Season/Team/Player/Stadium/Coach/Referee đã build, xem "### Admin" dưới). Chỉ dùng `pnpm db:studio` (Prisma Studio) cho việc XOÁ thật (admin CRUD không có nút Delete, có chủ đích) hoặc các model chưa có trang admin.
 
 ### Data provider (`packages/data-provider`)
 - KHÔNG để downstream code (sync-worker, api) biết hình dạng JSON thật của provider — luôn map qua canonical model trong `src/types.ts` trước.
@@ -136,7 +136,11 @@ pnpm docker:down
 - **Không phải app/port riêng** — sống chung `apps/web` (đã cân nhắc và bỏ 1 bản `apps/admin` scaffold độc lập trước đó), chỉ khác ở route `/admin/login`. `ConditionalWebChrome` (`apps/web/src/components/ConditionalWebChrome.tsx`) ẩn `NavBar`/`PushNotificationListener` công khai khi path bắt đầu `/admin` — root layout (`app/layout.tsx`) vẫn 1 Server Component duy nhất, KHÔNG tách route-group 2 root layout (đổi lại đơn giản hơn, không phải di chuyển mọi trang cũ).
 - **Auth hoàn toàn tách biệt khỏi Firebase** (khác mọi nơi khác trong app) — username/password thật, bảng `AdminUser` riêng (`username` + bcrypt `passwordHash`), JWT tự ký (`apps/api/src/middleware/admin-auth.ts`'s `requireAdminSession`, `ADMIN_JWT_SECRET` env, hạn 7 ngày). `AdminAuthProvider`/`useAdminAuth()` (`apps/web/src/lib/admin-auth-context.tsx`) lưu token ở `localStorage` — biết đây là tradeoff so với httpOnly cookie (rủi ro XSS), chấp nhận được cho tool nội bộ quy mô nhỏ. KHÔNG dùng `User`/`firebaseUid`/`requireAuth` — admin không phải end-user (không favorites/notifications/search history).
 - **Không có flow tự đăng ký/cấp quyền admin qua UI** — tạo (hoặc reset password) admin DUY NHẤT qua CLI: `pnpm --filter @football-app/api create-admin <username> <password>` (`apps/api/src/scripts/create-admin.ts`, upsert theo username).
-- CRUD Competition/Team/Player/Match/AppConfig/NotificationLog viewer: **chưa build**, mới có access control + scaffold + sidebar nav (mỗi trang còn là stub "Chưa triển khai") — xem ROADMAP Phase 4 cho breakdown từng phần còn lại.
+- **CRUD đã build cho Competition/Season/Team/Player/Stadium/Coach/Referee** — 1 khung chung tái dùng (`ResourceTable`/`ResourceFormDialog`/`AdminResourcePage`, `apps/web/src/components/admin/`), mỗi trang chỉ khai báo columns/fields. Backend `POST`/`PATCH` (+ `search`) trên route file tương ứng, `requireAdminSession`. KHÔNG có Delete cho model có `onDelete: Cascade` sâu (Competition/Season/Team/Player) — Prisma Studio vẫn là escape hatch xoá thật.
+- **`Match`**: sửa tỉ số/trạng thái/lịch (`PATCH /matches/:id`) + set tay `LiveMatchState` (`PUT /matches/:id/live`, upsert) qua 1 trang riêng (không dùng khung CRUD chung — 1 match sửa 2 endpoint khác nhau).
+- **`AppConfig`** (feature flags): trang riêng (không dùng khung CRUD chung — `key` là primary key admin tự đặt, không phải cuid server sinh như model khác), value JSON sửa qua textarea.
+- **`NotificationLog`**: trang read-only, lọc theo userId/status/channel.
+- Chưa làm (optional, không bắt buộc theo exit criteria): xem danh sách `User` + favorites.
 
 ### Mobile (`apps/mobile`) — tạm pause, quy ước vẫn giữ cho khi resume
 - Feature mới → folder riêng trong `lib/features/<feature>/` (theo mẫu `lib/features/health/`), gồm 1 Riverpod provider gọi qua `dioProvider` + 1 screen.

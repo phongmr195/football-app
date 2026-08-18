@@ -13,6 +13,11 @@ import { devicesRoute } from "./routes/devices";
 import { searchRoute } from "./routes/search";
 import { adminRoute } from "./routes/admin";
 import { stadiumsRoute } from "./routes/stadiums";
+import { coachesRoute } from "./routes/coaches";
+import { refereesRoute } from "./routes/referees";
+import { seasonsRoute } from "./routes/seasons";
+import { appConfigRoute } from "./routes/app-config";
+import { notificationLogsRoute } from "./routes/notification-logs";
 
 export const app = new Hono();
 
@@ -51,5 +56,10 @@ app.route("/", devicesRoute);
 app.route("/", searchRoute);
 app.route("/", adminRoute);
 app.route("/", stadiumsRoute);
+app.route("/", coachesRoute);
+app.route("/", refereesRoute);
+app.route("/", seasonsRoute);
+app.route("/", appConfigRoute);
+app.route("/", notificationLogsRoute);
 
 export type App = typeof app;
