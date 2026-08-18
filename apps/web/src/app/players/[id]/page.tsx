@@ -109,6 +109,13 @@ export default async function PlayerDetailPage({
         </Card>
       ) : null}
 
+      {player.aiSummary ? (
+        <Card className="mt-6 flex flex-col gap-2 py-6">
+          <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Tóm tắt cầu thủ</h2>
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">{player.aiSummary.content}</p>
+        </Card>
+      ) : null}
+
       <h2 className="mt-8 mb-4 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
         Câu lạc bộ
       </h2>

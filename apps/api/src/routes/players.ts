@@ -60,7 +60,7 @@ export const playersRoute = new Hono()
     const { id } = c.req.valid("param");
     const player = await prisma.player.findUnique({
       where: { id },
-      include: { team: true },
+      include: { team: true, aiSummary: { select: { content: true, model: true, createdAt: true } } },
     });
     if (!player) return c.json({ error: "not found" }, 404);
     return c.json(player);
