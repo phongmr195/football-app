@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Badge, Card } from "@football-app/ui";
-import { matchEventTypeLabel, matchStatusMeta } from "@/lib/format";
+import { formatMatchEventLabel, matchStatusMeta } from "@/lib/format";
 import { useLiveMatch, useMatchEvents, type MatchEventsResponse } from "@/lib/use-live-match";
 import type { MatchEvent } from "@/lib/types";
 
@@ -88,7 +88,7 @@ export function LiveMatchPanel({ matchId }: LiveMatchPanelProps) {
                 <span className="w-8 shrink-0 text-zinc-500 dark:text-zinc-400">
                   {event.minute}&apos;
                 </span>
-                <span>{matchEventTypeLabel(event.type)}</span>
+                <span>{formatMatchEventLabel(event)}</span>
               </li>
             ))}
           </ul>

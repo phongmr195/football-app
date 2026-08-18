@@ -1,5 +1,5 @@
 import type { BadgeVariant } from "@football-app/ui";
-import type { CompetitionType, ExternalRef, MatchEventType, MatchResult, MatchStatus } from "@/lib/types";
+import type { CompetitionType, ExternalRef, MatchEvent, MatchEventType, MatchResult, MatchStatus } from "@/lib/types";
 
 /** Circle symbol + color for a MatchResult (WIN/DRAW/LOSS), used in standings "form" strips. */
 export function matchResultMeta(result: MatchResult): { symbol: string; className: string } {
@@ -97,6 +97,31 @@ export function matchEventTypeLabel(type: MatchEventType): string {
   }
 }
 
+/**
+ * Nhãn đầy đủ cho 1 MatchEvent, gồm cả tên cầu thủ/đội — trước đây `MatchEventsTimeline`/
+ * `LiveMatchPanel` chỉ hiện `matchEventTypeLabel(event.type)` (vd "Bàn thắng") mà KHÔNG hiện tên
+ * cầu thủ, dù API đã trả `player`/`relatedPlayer`/`team` (bug thật, verify 2026-08-18 — dữ liệu
+ * ghi đúng playerId ở scraper, chỉ là chưa render). `player`/`relatedPlayer` có thể `null` (vd thẻ
+ * cho HLV thay vì cầu thủ, hoặc scraper không khớp được tên) — luôn fallback về nhãn gốc.
+ */
+export function formatMatchEventLabel(event: MatchEvent): string {
+  const base = matchEventTypeLabel(event.type);
+  const team = event.team ? ` (${event.team.name})` : "";
+
+  let detail = "";
+  if (event.type === "SUBSTITUTION") {
+    const out = event.relatedPlayer?.name;
+    const in_ = event.player?.name;
+    if (out && in_) detail = `: ${out} ra, ${in_} vào sân`;
+    else if (in_) detail = `: ${in_} vào sân`;
+  } else if (event.player) {
+    const assist = event.relatedPlayer ? ` (kiến tạo: ${event.relatedPlayer.name})` : "";
+    detail = `: ${event.player.name}${assist}`;
+  }
+
+  return `${base}${detail}${team}`;
+}
+
 /** vi-VN formatted kickoff date/time, e.g. "21:00, 11/08/2023". */
 export function formatKickoffAt(kickoffAt: string): string {
   const date = new Date(kickoffAt);
@@ -143,12 +168,14 @@ export function playerPositionMeta(position: string | null): {
 } {
   switch (position) {
     case "Goalkeeper":
+    case "G": // Sofascore (apps/scraper-sofascore) dùng mã 1 ký tự, khác tên đầy đủ của football-data.org/api-football
       return { label: "Thủ môn", variant: "warning" };
     case "Defender":
     case "Defence":
     case "Centre-Back":
     case "Right-Back":
     case "Left-Back":
+    case "D":
       return { label: "Hậu vệ", variant: "info" };
     case "Midfielder":
     case "Midfield":
@@ -157,6 +184,7 @@ export function playerPositionMeta(position: string | null): {
     case "Attacking Midfield":
     case "Right Midfield":
     case "Left Midfield":
+    case "M":
       return { label: "Tiền vệ", variant: "success" };
     case "Forward":
     case "Attacker":
@@ -164,6 +192,7 @@ export function playerPositionMeta(position: string | null): {
     case "Centre-Forward":
     case "Right Winger":
     case "Left Winger":
+    case "F":
       return { label: "Tiền đạo", variant: "danger" };
     default:
       return { label: position ?? "Chưa rõ", variant: "default" };
