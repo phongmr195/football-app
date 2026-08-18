@@ -6,6 +6,8 @@
     "dev": "tsx src/local.ts",
     "poll": "tsx src/poll.ts",
     "backfill-match-summaries": "tsx src/scripts/backfill-match-summaries.ts",
+    "generate-sofascore-manifest": "tsx src/scripts/generate-sofascore-manifest.ts",
+    "ingest-sofascore": "tsx src/scripts/ingest-sofascore.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
