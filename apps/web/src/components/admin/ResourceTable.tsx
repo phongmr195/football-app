@@ -10,12 +10,14 @@ export interface ResourceColumn<T> {
 export interface ResourceTableProps<T> {
   columns: ResourceColumn<T>[];
   rows: T[];
-  onRowClick: (row: T) => void;
+  /** Bỏ qua cho bảng chỉ-xem (vd NotificationLog viewer) — không có action nào khi click row. */
+  onRowClick?: (row: T) => void;
   emptyMessage?: string;
 }
 
-/** Generic paginated-list table for admin CRUD pages (AdminResourcePage.tsx) — column config
- * decides what to render per row, click anywhere on a row opens the edit dialog. */
+/** Generic paginated-list table for admin pages (AdminResourcePage.tsx + read-only viewers) —
+ * column config decides what to render per row, click anywhere on a row opens the edit dialog
+ * when `onRowClick` is provided. */
 export function ResourceTable<T extends { id: string }>({
   columns,
   rows,
@@ -39,8 +41,8 @@ export function ResourceTable<T extends { id: string }>({
         {rows.map((row) => (
           <TableRow
             key={row.id}
-            onClick={() => onRowClick(row)}
-            className="cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900"
+            onClick={onRowClick ? () => onRowClick(row) : undefined}
+            className={onRowClick ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900" : undefined}
           >
             {columns.map((col) => (
               <TableCell key={col.key}>

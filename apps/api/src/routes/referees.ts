@@ -5,53 +5,49 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { requireAdminSession } from "../middleware/admin-auth";
 
-const stadiumsQuerySchema = paginationQuerySchema.extend({
+const refereesQuerySchema = paginationQuerySchema.extend({
   search: z.string().optional(),
 });
 
-// KHÔNG có DELETE — Team.stadiumId tham chiếu tới đây, giữ cùng quy ước "không xoá" đã dùng cho
-// Competition/Team/Player (xem ghi chú tương tự ở teams.ts) dù quan hệ này không cascade.
 const optionalNullableString = () => z.string().optional().transform((v) => (v === "" ? null : v));
 
-const stadiumCreateSchema = z.object({
+const refereeCreateSchema = z.object({
   name: z.string().min(1),
-  city: optionalNullableString(),
-  countryCode: optionalNullableString(),
-  capacity: z.number().int().nullable().optional(),
+  nationality: optionalNullableString(),
 });
-const stadiumUpdateSchema = stadiumCreateSchema.partial();
+const refereeUpdateSchema = refereeCreateSchema.partial();
 
-export const stadiumsRoute = new Hono()
-  .get("/stadiums", zValidator("query", stadiumsQuerySchema), async (c) => {
+export const refereesRoute = new Hono()
+  .get("/referees", zValidator("query", refereesQuerySchema), async (c) => {
     const { page, pageSize, search } = c.req.valid("query");
     const where = search ? { name: { contains: search, mode: "insensitive" as const } } : {};
     const [items, total] = await Promise.all([
-      prisma.stadium.findMany({
+      prisma.referee.findMany({
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
         orderBy: { name: "asc" },
       }),
-      prisma.stadium.count({ where }),
+      prisma.referee.count({ where }),
     ]);
     return c.json({ items, page, pageSize, total });
   })
-  .post("/stadiums", requireAdminSession, zValidator("json", stadiumCreateSchema), async (c) => {
+  .post("/referees", requireAdminSession, zValidator("json", refereeCreateSchema), async (c) => {
     const data = c.req.valid("json");
-    const stadium = await prisma.stadium.create({ data });
-    return c.json(stadium, 201);
+    const referee = await prisma.referee.create({ data });
+    return c.json(referee, 201);
   })
   .patch(
-    "/stadiums/:id",
+    "/referees/:id",
     requireAdminSession,
     zValidator("param", z.object({ id: z.string() })),
-    zValidator("json", stadiumUpdateSchema),
+    zValidator("json", refereeUpdateSchema),
     async (c) => {
       const { id } = c.req.valid("param");
       const data = c.req.valid("json");
-      const existing = await prisma.stadium.findUnique({ where: { id } });
+      const existing = await prisma.referee.findUnique({ where: { id } });
       if (!existing) return c.json({ error: "not found" }, 404);
-      const stadium = await prisma.stadium.update({ where: { id }, data });
-      return c.json(stadium);
+      const referee = await prisma.referee.update({ where: { id }, data });
+      return c.json(referee);
     },
   );

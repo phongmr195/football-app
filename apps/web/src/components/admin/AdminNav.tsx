@@ -9,8 +9,12 @@ import { cn } from "@football-app/ui";
 const LINKS = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/competitions", label: "Giải đấu" },
+  { href: "/admin/seasons", label: "Mùa giải" },
   { href: "/admin/teams", label: "Đội bóng" },
   { href: "/admin/players", label: "Cầu thủ" },
+  { href: "/admin/stadiums", label: "Sân vận động" },
+  { href: "/admin/coaches", label: "HLV" },
+  { href: "/admin/referees", label: "Trọng tài" },
   { href: "/admin/matches", label: "Trận đấu" },
   { href: "/admin/config", label: "Cấu hình" },
   { href: "/admin/notifications", label: "Nhật ký thông báo" },
