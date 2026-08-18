@@ -123,6 +123,7 @@ export const matchesRoute = new Hono()
         awayTeam: { select: teamSelect },
         competition: { select: { id: true, name: true, logoUrl: true, externalRef: true } },
         liveState: true,
+        aiSummary: { select: { content: true, model: true, createdAt: true } },
       },
     });
     if (!match) return c.json({ error: "not found" }, 404);

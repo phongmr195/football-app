@@ -90,8 +90,15 @@ export interface LiveMatchState {
   updatedAt: string;
 }
 
+export interface AiMatchSummary {
+  content: string;
+  model: string;
+  createdAt: string;
+}
+
 export interface MatchDetail extends Match {
   liveState: LiveMatchState | null;
+  aiSummary: AiMatchSummary | null;
 }
 
 export type MatchEventType =

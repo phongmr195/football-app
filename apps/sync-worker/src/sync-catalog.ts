@@ -1,5 +1,6 @@
 import type { DataProviderAdapter, ExternalRef } from "@football-app/data-provider";
 import { prisma } from "@football-app/database";
+import { generateMatchSummaryIfNeeded } from "./match-summary";
 
 // Thứ tự phụ thuộc bắt buộc: syncCompetitions -> syncSeasons -> syncTeams -> syncPlayers,
 // syncStandings/syncMatches cần competition+season đã sync, syncMatches cần team đã sync.
@@ -250,10 +251,23 @@ export async function syncMatches(
       awayScore: m.awayScore,
       externalRef: m.externalRef as object,
     };
+    let matchId: string;
     if (existing) {
       await prisma.match.update({ where: { id: existing.id }, data });
+      matchId = existing.id;
     } else {
-      await prisma.match.create({ data });
+      const created = await prisma.match.create({ data });
+      matchId = created.id;
+    }
+
+    // Đường "chắc chắn" bắt transition sang FINISHED — xem ghi chú tương tự ở
+    // sync-live-matches.ts (đường "nhanh"). syncMatches() re-sync định kỳ toàn bộ lịch mùa giải
+    // nên chắc chắn bắt được match FINISHED kể cả khi sync-worker down lúc trận đấu diễn ra.
+    // generateMatchSummaryIfNeeded tự idempotent, an toàn khi cả 2 đường cùng trigger. KHÔNG await.
+    if (existing?.status !== "FINISHED" && m.status === "FINISHED") {
+      void generateMatchSummaryIfNeeded(matchId).catch((err) => {
+        console.error(`syncMatches: generateMatchSummaryIfNeeded thất bại cho match ${matchId}`, err);
+      });
     }
   }
 

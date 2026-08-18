@@ -1,3 +1,4 @@
+import type { LlmProvider } from "@football-app/ai-provider";
 import type { CanonicalMatch, DataProviderAdapter, ExternalRef } from "@football-app/data-provider";
 import type { RealtimeTransport } from "@football-app/realtime";
 import { prisma } from "@football-app/database";
@@ -29,6 +30,23 @@ const mockPublisher: RealtimeTransport = {
 };
 vi.mock("./realtime", () => ({
   createPublisher: () => mockPublisher,
+}));
+
+// syncLiveMatches() tự trigger generateMatchSummaryIfNeeded() khi match chuyển sang FINISHED
+// (Phase 5) — mock "./ai-provider" cùng style 2 module trên, tránh test file này gọi network thật
+// tới Anthropic (generateMatchSummaryIfNeeded mặc định dùng createLlmProvider() thật nếu không
+// mock module này).
+const mockLlmProvider: LlmProvider = {
+  providerName: "mock",
+  generateText: vi.fn().mockResolvedValue({
+    content: "mock summary",
+    model: "mock-model",
+    tokensInput: 1,
+    tokensOutput: 1,
+  }),
+};
+vi.mock("./ai-provider", () => ({
+  createLlmProvider: () => mockLlmProvider,
 }));
 
 function makeMockAdapter(overrides: Partial<DataProviderAdapter> = {}): DataProviderAdapter {
