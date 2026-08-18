@@ -65,6 +65,9 @@ async function cleanupTestData() {
   await prisma.aiMatchSummary.deleteMany({ where: { match: { externalRef: { path: ["provider"], equals: PROVIDER } } } });
   await prisma.standing.deleteMany({ where: { season: { competition: { externalRef: { path: ["provider"], equals: PROVIDER } } } } });
   await prisma.match.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
+  // Player.team KHÔNG có onDelete: Cascade (xem schema.prisma) — phải xoá tay trước khi xoá Team,
+  // nếu không prisma.team.deleteMany bên dưới sẽ lỗi FK violation (player còn trỏ teamId).
+  await prisma.player.deleteMany({ where: { team: { externalRef: { path: ["provider"], equals: PROVIDER } } } });
   await prisma.team.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
   await prisma.season.deleteMany({ where: { competition: { externalRef: { path: ["provider"], equals: PROVIDER } } } });
   await prisma.competition.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
@@ -118,5 +121,32 @@ describe("generateMatchSummaryIfNeeded", () => {
     await expect(generateMatchSummaryIfNeeded(match.id, llmProvider)).rejects.toThrow(/500/);
     const saved = await prisma.aiMatchSummary.findUnique({ where: { matchId: match.id } });
     expect(saved).toBeNull();
+  });
+
+  it("match có MatchEvent (từ scraper Sofascore) — đưa diễn biến vào prompt, đổi system prompt cho phép nhắc chi tiết", async () => {
+    const match = await seedFinishedMatch();
+    const scorer = await prisma.player.create({ data: { name: "Cầu Thủ X", teamId: match.homeTeamId } });
+    await prisma.matchEvent.create({
+      data: { matchId: match.id, seq: 1, minute: 23, type: "GOAL", teamId: match.homeTeamId, playerId: scorer.id },
+    });
+    const llmProvider = makeFakeLlmProvider();
+
+    await generateMatchSummaryIfNeeded(match.id, llmProvider);
+
+    const call = vi.mocked(llmProvider.generateText).mock.calls[0]![0];
+    expect(call.prompt).toContain("Diễn biến chính:");
+    expect(call.prompt).toContain("23' Bàn thắng: Cầu Thủ X");
+    expect(call.system).not.toContain("không có dữ liệu chi tiết theo phút");
+  });
+
+  it("match KHÔNG có MatchEvent — prompt không có mục diễn biến, system giữ cảnh báo không bịa chi tiết", async () => {
+    const match = await seedFinishedMatch();
+    const llmProvider = makeFakeLlmProvider();
+
+    await generateMatchSummaryIfNeeded(match.id, llmProvider);
+
+    const call = vi.mocked(llmProvider.generateText).mock.calls[0]![0];
+    expect(call.prompt).not.toContain("Diễn biến chính:");
+    expect(call.system).toContain("không có dữ liệu chi tiết theo phút");
   });
 });
