@@ -311,7 +311,7 @@ model Player {
   relatedMatchEvents MatchEvent[]     @relation("EventRelatedPlayer")
   matchLineups      MatchLineup[]
   ratings           PlayerRating[]
-  aiSummaries       AiPlayerSummary[]
+  aiSummary         AiPlayerSummary?
   topScorerEntries  TopScorer[]
   topAssistEntries  TopAssist[]
 
@@ -695,7 +695,7 @@ model AiMatchSummary {
 
 model AiPlayerSummary {
   id        String   @id @default(cuid())
-  playerId  String
+  playerId  String   @unique
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   content   String
   model     String

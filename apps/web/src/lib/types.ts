@@ -214,6 +214,10 @@ export interface Player {
 
 export interface PlayerDetail extends Player {
   team: Team | null;
+  // Shape giống AiMatchSummary ({content, model, createdAt}) — tái dùng type đã có thay vì tạo
+  // interface riêng. `null` khi cầu thủ chưa có PlayerStatistics/chưa được backfill, xem
+  // apps/sync-worker/src/player-summary.ts.
+  aiSummary: AiMatchSummary | null;
 }
 
 /**
