@@ -204,11 +204,52 @@ describe("POST /admin/scraper-runs", () => {
       body: JSON.stringify({ competitionKey: "premier-league", seasonId: season.id, limit: 30 }),
     });
     expect(res.status).toBe(201);
-    const body = (await res.json()) as { id: string; status: string; requestedLimit: number };
+    const body = (await res.json()) as { id: string; status: string; requestedLimit: number; dataTypes: string[] };
     expect(body.status).toBe("PENDING");
     expect(body.requestedLimit).toBe(30);
+    // Không truyền dataTypes -> fallback DEFAULT_SCRAPER_DATA_TYPES (3 loại cũ), giữ đúng hành vi
+    // trước piece "chọn loại data" cho client cũ/chưa cập nhật UI.
+    expect(body.dataTypes).toEqual(["events", "lineups", "statistics"]);
     expect(runScraperPipeline).toHaveBeenCalledTimes(1);
     expect(runScraperPipeline).toHaveBeenCalledWith(body.id);
+  });
+
+  it("400 khi dataTypes chứa giá trị không hợp lệ", async () => {
+    const admin = await seedAdmin();
+    const token = signAdminToken(admin.id);
+    const { season } = await getPremierLeagueSeason();
+
+    const res = await app.request("/admin/scraper-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        competitionKey: "premier-league",
+        seasonId: season.id,
+        limit: 20,
+        dataTypes: ["shotmap", "not-a-real-type"],
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("201 với dataTypes tuỳ chỉnh — lưu đúng giá trị đã chọn (chỉ shotmap+commentary)", async () => {
+    const admin = await seedAdmin();
+    const token = signAdminToken(admin.id);
+    const { season } = await getPremierLeagueSeason();
+
+    const res = await app.request("/admin/scraper-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        competitionKey: "premier-league",
+        seasonId: season.id,
+        limit: 20,
+        dataTypes: ["shotmap", "commentary"],
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { dataTypes: string[] };
+    expect(body.dataTypes).toEqual(["shotmap", "commentary"]);
   });
 });
 
@@ -222,7 +263,7 @@ describe("GET /admin/scraper-runs", () => {
     const admin = await seedAdmin();
     const token = signAdminToken(admin.id);
     const { competition, season } = await getPremierLeagueSeason();
-    await prisma.scraperRun.create({
+    const successRun = await prisma.scraperRun.create({
       data: {
         competitionId: competition.id,
         seasonId: season.id,
@@ -241,14 +282,17 @@ describe("GET /admin/scraper-runs", () => {
       },
     });
 
-    // Lọc thêm theo competitionId — DB dev thật có thể đã có ScraperRun khác từ trước (chạy tay
-    // qua UI thật), chỉ lọc status không đủ cô lập test này khỏi data đó.
-    const res = await app.request(`/admin/scraper-runs?status=SUCCESS&competitionId=${competition.id}`, {
+    // Lọc thêm theo competitionId — DB dev thật có thể đã có ScraperRun khác từ trước (chạy tay qua
+    // UI thật, vd verify thật piece "chọn loại data" 2026-08-19 để lại row SUCCESS thật cho đúng
+    // Premier League này) — KHÔNG assert `total === 1` tuyệt đối (bug thật gặp lại đúng lần verify
+    // đó: total lên 2 vì có sẵn 1 SUCCESS run thật khác). Assert đúng: row vừa tạo CÓ trong kết quả
+    // + MỌI row trả về đều đúng status filter — không cần giả định DB rỗng ngoài chính test này.
+    const res = await app.request(`/admin/scraper-runs?status=SUCCESS&competitionId=${competition.id}&pageSize=50`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(200);
-    const data = (await res.json()) as { items: { status: string }[]; total: number };
-    expect(data.total).toBe(1);
-    expect(data.items[0]?.status).toBe("SUCCESS");
+    const data = (await res.json()) as { items: { id: string; status: string }[]; total: number };
+    expect(data.items.some((item) => item.id === successRun.id)).toBe(true);
+    expect(data.items.every((item) => item.status === "SUCCESS")).toBe(true);
   });
 });

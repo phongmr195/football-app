@@ -20,6 +20,24 @@ const DEFAULT_SOFASCORE_COMPETITION_KEY = "ENG-Premier League";
 const DEFAULT_SOFASCORE_SEASON = "2025-26";
 const DEFAULT_LIMIT = 5;
 const DEFAULT_OUT = "manifest.json";
+// 3 loại cũ mặc định khi không truyền --data-types (CLI thủ công, khác trang admin luôn truyền
+// đủ) — khớp DEFAULT_SCRAPER_DATA_TYPES ở apps/api/src/scraper-competitions.ts (không import
+// chung được — 2 app riêng, xem CLAUDE.md § Scraper/AI về convention "duplicate nhỏ hơn coupling").
+const DEFAULT_DATA_TYPES = ["events", "lineups", "statistics"];
+
+// Mỗi loại data map tới 1 Prisma relation rỗng — dùng để lọc "match nào cần scrape CHO LOẠI NÀY".
+// Key PHẢI khớp 9 giá trị ở SCRAPER_DATA_TYPES (apps/api/src/scraper-competitions.ts).
+const NEEDS_SCRAPE_RELATION: Record<string, string> = {
+  events: "events",
+  lineups: "lineups",
+  statistics: "statistics",
+  commentary: "commentaries",
+  shotmap: "shots",
+  highlights: "highlights",
+  averagePositions: "averagePositions",
+  momentum: "momentum",
+  odds: "odds",
+};
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -29,6 +47,7 @@ function parseArgs() {
   let seasonId: string | undefined;
   let sofascoreKey: string | undefined;
   let sofascoreSeason: string | undefined;
+  let dataTypes = DEFAULT_DATA_TYPES;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--limit") limit = Number(args[++i]);
     if (args[i] === "--out") out = args[++i]!;
@@ -36,8 +55,14 @@ function parseArgs() {
     if (args[i] === "--season-id") seasonId = args[++i];
     if (args[i] === "--sofascore-key") sofascoreKey = args[++i];
     if (args[i] === "--sofascore-season") sofascoreSeason = args[++i];
+    if (args[i] === "--data-types") dataTypes = args[++i]!.split(",");
   }
-  return { limit, out, competitionId, seasonId, sofascoreKey, sofascoreSeason };
+  for (const type of dataTypes) {
+    if (!(type in NEEDS_SCRAPE_RELATION)) {
+      throw new Error(`--data-types chứa giá trị không hợp lệ: "${type}"`);
+    }
+  }
+  return { limit, out, competitionId, seasonId, sofascoreKey, sofascoreSeason, dataTypes };
 }
 
 async function loadRoster(teamId: string) {
@@ -46,7 +71,7 @@ async function loadRoster(teamId: string) {
 }
 
 async function main() {
-  const { limit, out, competitionId, seasonId, sofascoreKey, sofascoreSeason } = parseArgs();
+  const { limit, out, competitionId, seasonId, sofascoreKey, sofascoreSeason, dataTypes } = parseArgs();
 
   const competition = competitionId
     ? await prisma.competition.findUnique({ where: { id: competitionId } })
@@ -65,10 +90,16 @@ async function main() {
   const resolvedSofascoreKey = sofascoreKey ?? DEFAULT_SOFASCORE_COMPETITION_KEY;
   const resolvedSofascoreSeason = sofascoreSeason ?? DEFAULT_SOFASCORE_SEASON;
 
-  // Match FINISHED chưa có MatchEvent nào — coi là "chưa scrape Sofascore", tránh sinh lại manifest
-  // cho match đã ingest xong ở lần chạy trước.
+  // "Match cần scrape" = FINISHED VÀ thiếu data cho ÍT NHẤT 1 loại đang được yêu cầu (OR) — KHÔNG
+  // cố định theo `events` như trước (bug thật nếu giữ nguyên: admin chỉ chọn lại "shotmap" cho
+  // match ĐÃ có `events` từ lần chạy trước sẽ không bao giờ được chọn, dù chưa hề có MatchShot).
   const matches = await prisma.match.findMany({
-    where: { competitionId: competition.id, seasonId: season.id, status: "FINISHED", events: { none: {} } },
+    where: {
+      competitionId: competition.id,
+      seasonId: season.id,
+      status: "FINISHED",
+      OR: dataTypes.map((type) => ({ [NEEDS_SCRAPE_RELATION[type]!]: { none: {} } })),
+    },
     orderBy: { kickoffAt: "desc" },
     take: limit,
     include: { homeTeam: { select: { id: true, name: true } }, awayTeam: { select: { id: true, name: true } } },

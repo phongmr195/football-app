@@ -14,6 +14,12 @@ async function main() {
     lineupsUpserted: summary.lineupsUpserted,
     ratingsUpserted: summary.ratingsUpserted,
     statisticsUpserted: summary.statisticsUpserted,
+    commentaryCreated: summary.commentaryCreated,
+    shotsCreated: summary.shotsCreated,
+    highlightsCreated: summary.highlightsCreated,
+    averagePositionsUpserted: summary.averagePositionsUpserted,
+    momentumCreated: summary.momentumCreated,
+    oddsUpserted: summary.oddsUpserted,
   });
   if (summary.unmatchedPlayers.length > 0) {
     console.warn(`${summary.unmatchedPlayers.length} cầu thủ không khớp được (bỏ qua):`);

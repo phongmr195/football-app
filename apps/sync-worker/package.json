@@ -9,6 +9,8 @@
     "backfill-player-summaries": "tsx src/scripts/backfill-player-summaries.ts",
     "generate-sofascore-manifest": "tsx src/scripts/generate-sofascore-manifest.ts",
     "ingest-sofascore": "tsx src/scripts/ingest-sofascore.ts",
+    "generate-roster-backfill-manifest": "tsx src/scripts/generate-roster-backfill-manifest.ts",
+    "ingest-sofascore-roster": "tsx src/scripts/ingest-sofascore-roster.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",

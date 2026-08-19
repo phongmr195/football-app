@@ -218,6 +218,8 @@ model Team {
   matchLineups     MatchLineup[]
   formations       Formation[]
   teamRatings      TeamRating[]
+  matchShots            MatchShot[]
+  matchAveragePositions MatchAveragePosition[]
   playerTransfersFrom PlayerTransfer[] @relation("TransferFromTeam")
   playerTransfersTo   PlayerTransfer[] @relation("TransferToTeam")
   playerCareers    PlayerCareer[]
@@ -316,6 +318,8 @@ model Player {
   relatedMatchEvents MatchEvent[]     @relation("EventRelatedPlayer")
   matchLineups      MatchLineup[]
   ratings           PlayerRating[]
+  matchShots            MatchShot[]
+  matchAveragePositions MatchAveragePosition[]
   aiSummary         AiPlayerSummary?
   aiComparisonsAsPlayerA AiPlayerComparison[] @relation("AiPlayerComparisonPlayerA")
   aiComparisonsAsPlayerB AiPlayerComparison[] @relation("AiPlayerComparisonPlayerB")
@@ -473,15 +477,20 @@ model Match {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  liveState     LiveMatchState?
-  statistics    MatchStatistic[]
-  events        MatchEvent[]
-  lineups       MatchLineup[]
-  formations    Formation[]
-  playerRatings PlayerRating[]
-  teamRatings   TeamRating[]
-  commentaries  Commentary[]
-  aiSummary     AiMatchSummary?
+  liveState        LiveMatchState?
+  statistics       MatchStatistic[]
+  events           MatchEvent[]
+  lineups          MatchLineup[]
+  formations       Formation[]
+  playerRatings    PlayerRating[]
+  teamRatings      TeamRating[]
+  commentaries     Commentary[]
+  shots            MatchShot[]
+  highlights       MatchHighlight[]
+  averagePositions MatchAveragePosition[]
+  momentum         MatchMomentum[]
+  odds             MatchOdds[]
+  aiSummary        AiMatchSummary?
 
   @@index([status, kickoffAt])
   @@map("matches")
@@ -620,6 +629,95 @@ model Commentary {
 
   @@unique([matchId, seq])
   @@map("commentaries")
+}
+
+// Từng cú sút trong trận (Sofascore's /event/{id}/shotmap, verify thật 2026-08-19) — xg/xgot theo
+// cú sút (khác PlayerRating.stats's xG/xA TỔNG theo trận). `playerId` nullable — cùng convention
+// MatchEvent.player (match_player() trong scraper.py có thể không khớp được tên).
+model MatchShot {
+  id        String  @id @default(cuid())
+  matchId   String
+  match     Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId  String?
+  player    Player? @relation(fields: [playerId], references: [id])
+  minute    Int
+  shotType  String // "goal" | "save" | "miss" | "block" (verify thật 2026-08-19)
+  situation String?
+  bodyPart  String?
+  xg        Float?
+  xgot      Float?
+  x         Float
+  y         Float
+  raw       Json
+
+  @@index([matchId])
+  @@map("match_shots")
+}
+
+// Link video highlight YouTube thật (Sofascore's /event/{id}/highlights) — chỉ lưu link, KHÔNG
+// host video. `url`/`sourceUrl` trong response thật thường trùng giá trị (verify 2026-08-19) —
+// chỉ giữ `url`, không thêm field trùng lặp.
+model MatchHighlight {
+  id           String  @id @default(cuid())
+  matchId      String
+  match        Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  title        String
+  url          String
+  thumbnailUrl String?
+
+  @@unique([matchId, url])
+  @@map("match_highlights")
+}
+
+// Vị trí trung bình mỗi cầu thủ trên sân (Sofascore's /event/{id}/average-positions) — khác
+// Formation.formation (chuỗi sơ đồ vd "4-3-3"), đây là toạ độ (x,y) thật để vẽ sơ đồ trực quan.
+model MatchAveragePosition {
+  id       String @id @default(cuid())
+  matchId  String
+  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  averageX Float
+  averageY Float
+
+  @@unique([matchId, playerId])
+  @@map("match_average_positions")
+}
+
+// Đường "momentum" trận đấu theo phút (Sofascore's /event/{id}/graph) — `minute` là Float, KHÔNG
+// phải Int (verify thật 2026-08-19: có điểm ở phút bù giờ dạng "90.5").
+model MatchMomentum {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  minute  Float
+  value   Int
+
+  @@unique([matchId, minute])
+  @@map("match_momentum")
+}
+
+// Tỉ lệ cược nhà cái (Sofascore's /event/{id}/odds/1/all) — admin-only, CHƯA có UI public hiển thị
+// (xem CLAUDE.md § Scraper). 1 dòng/market (KHÔNG phải 1 dòng/choice — verify thật 2026-08-19: 1
+// trận có 18 market, nhiều market TRÙNG `marketName` — vd "Match goals" lặp lại ứng với nhiều mốc
+// Over/Under khác nhau — nên `marketName` một mình KHÔNG unique, phải dùng `sofascoreMarketId`
+// (Sofascore's `id` riêng từng market) làm khoá. `raw` giữ nguyên cả object market (gồm
+// `choices`/`marketGroup`/`marketPeriod`) — không tách field, phù hợp mức độ ưu tiên thấp của loại
+// data này.
+model MatchOdds {
+  id                String @id @default(cuid())
+  matchId           String
+  match             Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sofascoreMarketId Int
+  marketName        String
+  raw               Json
+
+  @@unique([matchId, sofascoreMarketId])
+  @@map("match_odds")
 }
 
 // ==================== Standing Module ====================
@@ -858,6 +956,11 @@ model ScraperRun {
   seasonId             String
   season               Season           @relation(fields: [seasonId], references: [id])
   requestedLimit       Int
+  // Loại data admin chọn scrape (vd "events","lineups","statistics","commentary","shotmap",
+  // "highlights","averagePositions","momentum","odds") — xem SCRAPER_DATA_TYPES trong
+  // apps/api/src/scraper-competitions.ts. Default 3 loại cũ — giữ đúng hành vi các ScraperRun đã
+  // tồn tại trước migration này (Prisma 6 hỗ trợ default list literal trên Postgres).
+  dataTypes            String[] @default(["events", "lineups", "statistics"])
   status               ScraperRunStatus @default(PENDING)
   matchesFound         Int?
   matchesScraped       Int?

@@ -25,3 +25,28 @@ export function toSofascoreSeasonString(dbSeasonName: string): string {
   const endYearShort = ((startYear + 1) % 100).toString().padStart(2, "0");
   return `${dbSeasonName}-${endYearShort}`;
 }
+
+// 9 loại data admin chọn được ở trang scraper — 3 loại cũ (events/lineups/statistics, cố định từ
+// piece đầu) + 6 loại mới (verify thật 2026-08-19, xem CLAUDE.md § Scraper cho inventory đầy đủ đã
+// probe từ Sofascore). Key này dùng CHUNG cho: Zod validation ở admin-scraper.ts, CLI arg
+// `--data-types` truyền xuống generate-sofascore-manifest.ts/scraper.py (string y hệt, KHÔNG qua
+// mapping riêng — giữ đơn giản, chỉ 1 tầng key duy nhất xuyên suốt pipeline).
+export const SCRAPER_DATA_TYPES = {
+  events: "Events (diễn biến)",
+  lineups: "Lineups + Ratings (đội hình)",
+  statistics: "Statistics (thống kê trận)",
+  commentary: "Commentary (bình luận theo phút)",
+  shotmap: "Shotmap (bản đồ cú sút, xG)",
+  highlights: "Highlights (link video)",
+  averagePositions: "Average positions (vị trí trung bình)",
+  momentum: "Momentum graph (biểu đồ áp lực trận)",
+  odds: "Odds (tỉ lệ cược — admin-only, chưa hiển thị public)",
+} as const;
+
+export type ScraperDataType = keyof typeof SCRAPER_DATA_TYPES;
+
+export const SCRAPER_DATA_TYPE_KEYS = Object.keys(SCRAPER_DATA_TYPES) as ScraperDataType[];
+
+// 3 loại cũ — default cho ScraperRun.dataTypes ở schema.prisma, và fallback nếu client cũ (chưa
+// cập nhật UI) không gửi field này.
+export const DEFAULT_SCRAPER_DATA_TYPES: ScraperDataType[] = ["events", "lineups", "statistics"];
