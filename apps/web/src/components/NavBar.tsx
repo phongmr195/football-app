@@ -8,9 +8,11 @@ import { SearchBox } from "./SearchBox";
  * Minimal top nav — not a full site-wide nav design, just enough to reach the browse
  * pages (competitions/standings) from the home page. Extend as more sections land.
  *
- * Stays a Server Component: only `<AuthStatus />` (sign-in state) and `<NavLinks />`
- * (active-route highlighting) need client-side hooks, so those are split into their own
- * "use client" components rather than converting the whole header.
+ * Stays a Server Component: only `<AuthStatus />` (sign-in state), `<NavLinks />`
+ * (active-route highlighting), and `<SearchBox />` (query/dropdown state) need client-side
+ * hooks, so those are split into their own "use client" components rather than converting
+ * the whole header. `<SearchBox />` sits in its own full-width row below the main menu row
+ * (was previously a fixed `w-56` input squeezed into the menu row itself).
  */
 export function NavBar() {
   return (
@@ -25,11 +27,13 @@ export function NavBar() {
           </Link>
           <NavLinks />
         </div>
-        <div className="flex items-center gap-4">
-          <SearchBox className="hidden w-56 sm:block" />
-          <AuthStatus />
-        </div>
+        <AuthStatus />
       </Container>
+      <div className="border-t border-zinc-100 py-2.5 dark:border-zinc-900">
+        <Container size="lg">
+          <SearchBox className="w-full" />
+        </Container>
+      </div>
     </header>
   );
 }

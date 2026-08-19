@@ -68,8 +68,10 @@ function TeamLineup({ teamName, lineup }: { teamName: string; lineup: MatchLineu
   );
 }
 
-// Server Component thuần — nhận data đã fetch (GET /matches/:id/lineups) qua props. Rating hiện
-// INLINE trong danh sách (không phải tab riêng) — đúng cách Sofascore/FotMob làm, tránh dư section.
+// Server Component thuần — nhận data đã fetch (GET /matches/:id/lineups) qua props, dùng cho tab
+// "Đội hình" (thứ tự theo đội hình thật, starter/sub). Rating vẫn hiện inline ở đây (không chỉ ở
+// tab "Rating" riêng, xem MatchPlayerRatings.tsx) — 2 tab phục vụ mục đích khác nhau: tab này trả
+// lời "ai đá vị trí nào", tab Rating trả lời "ai chơi tốt nhất" (sort theo điểm).
 export function MatchLineups({ lineups, homeTeam, awayTeam }: MatchLineupsProps) {
   return (
     <div className="flex flex-col gap-6 sm:flex-row sm:gap-8">
