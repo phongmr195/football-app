@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, ListOrdered, Scale, Trophy, type LucideIcon } from "lucide-react";
+import { Calendar, ListOrdered, MessageCircle, Scale, Trophy, type LucideIcon } from "lucide-react";
 import { cn } from "@football-app/ui";
 
 const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
@@ -10,6 +10,7 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/standings", label: "Bảng xếp hạng", icon: ListOrdered },
   { href: "/matches", label: "Lịch thi đấu", icon: Calendar },
   { href: "/compare", label: "So sánh cầu thủ", icon: Scale },
+  { href: "/chat", label: "Chat AI", icon: MessageCircle },
 ];
 
 /**

@@ -20,6 +20,7 @@ import { seasonsRoute } from "./routes/seasons";
 import { appConfigRoute } from "./routes/app-config";
 import { notificationLogsRoute } from "./routes/notification-logs";
 import { adminScraperRoute } from "./routes/admin-scraper";
+import { chatRoute } from "./routes/chat";
 
 export const app = new Hono();
 
@@ -65,5 +66,6 @@ app.route("/", seasonsRoute);
 app.route("/", appConfigRoute);
 app.route("/", notificationLogsRoute);
 app.route("/", adminScraperRoute);
+app.route("/", chatRoute);
 
 export type App = typeof app;
