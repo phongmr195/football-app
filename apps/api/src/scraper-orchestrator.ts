@@ -107,6 +107,7 @@ export async function runScraperPipeline(runId: string): Promise<void> {
 
   // Bước 1 — generate manifest, gọi thẳng tsx (KHÔNG qua pnpm --filter, xem comment ở
   // SYNC_WORKER_TSX_BIN), cwd = apps/sync-worker để khớp đúng đường dẫn script tương đối.
+  const dataTypesArg = run.dataTypes.join(",");
   const step1 = await runProcess(
     SYNC_WORKER_TSX_BIN,
     [
@@ -123,6 +124,8 @@ export async function runScraperPipeline(runId: string): Promise<void> {
       sofascoreKey,
       "--sofascore-season",
       sofascoreSeason,
+      "--data-types",
+      dataTypesArg,
     ],
     SYNC_WORKER_DIR,
     5 * 60 * 1000,
@@ -141,10 +144,17 @@ export async function runScraperPipeline(runId: string): Promise<void> {
     return;
   }
 
-  // Bước 2 — scraper.py qua venv Python. Timeout an toàn theo limit (REQUEST_DELAY_SECONDS=3s/trận
-  // + xử lý network, cộng đệm 5 phút) — tự kill nếu treo, tránh leak tiến trình vô thời hạn.
-  const step2TimeoutMs = run.requestedLimit * 15 * 1000 + 5 * 60 * 1000;
-  const step2 = await runProcess(SCRAPER_VENV_PYTHON, ["scraper.py", manifestPath, outputDir], SCRAPER_DIR, step2TimeoutMs);
+  // Bước 2 — scraper.py qua venv Python. Timeout an toàn theo limit × số loại data được chọn (mỗi
+  // loại data = 1 request/trận thêm, REQUEST_DELAY_SECONDS=3s/request + xử lý network), cộng đệm 5
+  // phút — tự kill nếu treo, tránh leak tiến trình vô thời hạn. `run.dataTypes.length` thay hằng số
+  // cố định cũ (trước đây luôn đúng 3 loại nên "limit * 15s" == "limit * 3 loại * 5s").
+  const step2TimeoutMs = run.requestedLimit * run.dataTypes.length * 5 * 1000 + 5 * 60 * 1000;
+  const step2 = await runProcess(
+    SCRAPER_VENV_PYTHON,
+    ["scraper.py", manifestPath, outputDir, "--data-types", dataTypesArg],
+    SCRAPER_DIR,
+    step2TimeoutMs,
+  );
   const matchesScraped = existsSync(outputDir) ? readdirSync(outputDir).length : 0;
   await prisma.scraperRun.update({ where: { id: runId }, data: { matchesScraped } });
 

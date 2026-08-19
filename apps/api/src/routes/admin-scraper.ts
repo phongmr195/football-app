@@ -4,13 +4,26 @@ import { prisma } from "@football-app/database";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAdminSession } from "../middleware/admin-auth";
-import { SCRAPER_COMPETITION_KEYS, SCRAPER_COMPETITIONS, type ScraperCompetitionKey } from "../scraper-competitions";
+import {
+  DEFAULT_SCRAPER_DATA_TYPES,
+  SCRAPER_COMPETITION_KEYS,
+  SCRAPER_COMPETITIONS,
+  SCRAPER_DATA_TYPE_KEYS,
+  type ScraperCompetitionKey,
+  type ScraperDataType,
+} from "../scraper-competitions";
 import { runScraperPipeline } from "../scraper-orchestrator";
 
 const createRunBodySchema = z.object({
   competitionKey: z.enum(SCRAPER_COMPETITION_KEYS as [ScraperCompetitionKey, ...ScraperCompetitionKey[]]),
   seasonId: z.string(),
   limit: z.number().int().min(10).max(100),
+  // Optional — client cũ (chưa có checkbox chọn loại data) không gửi field này, fallback về 3 loại
+  // cũ (đúng default ở schema.prisma's ScraperRun.dataTypes).
+  dataTypes: z
+    .array(z.enum(SCRAPER_DATA_TYPE_KEYS as [ScraperDataType, ...ScraperDataType[]]))
+    .min(1)
+    .optional(),
 });
 
 const listRunsQuerySchema = paginationQuerySchema.extend({
@@ -68,7 +81,7 @@ export const adminScraperRoute = new Hono()
     return c.json({ items: results });
   })
   .post("/admin/scraper-runs", requireAdminSession, zValidator("json", createRunBodySchema), async (c) => {
-    const { competitionKey, seasonId, limit } = c.req.valid("json");
+    const { competitionKey, seasonId, limit, dataTypes } = c.req.valid("json");
     const adminUserId = c.get("adminUserId");
 
     const competition = await resolveCompetition(competitionKey);
@@ -90,6 +103,7 @@ export const adminScraperRoute = new Hono()
         competitionId: competition.id,
         seasonId: season.id,
         requestedLimit: limit,
+        dataTypes: dataTypes ?? DEFAULT_SCRAPER_DATA_TYPES,
         createdByAdminUserId: adminUserId,
       },
     });
