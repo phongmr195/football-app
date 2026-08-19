@@ -9,6 +9,7 @@ import { LiveMatchPanel } from "@/components/LiveMatchPanel";
 import { MatchDetailTabs } from "@/components/match/MatchDetailTabs";
 import { MatchEventsTimeline } from "@/components/match/MatchEventsTimeline";
 import { MatchLineups } from "@/components/match/MatchLineups";
+import { MatchPlayerRatings } from "@/components/match/MatchPlayerRatings";
 import { MatchStatisticsBars } from "@/components/match/MatchStatisticsBars";
 import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
 import type { MatchDetail, MatchEvent, MatchLineupsResponse, MatchStatisticsResponse } from "@/lib/types";
@@ -140,6 +141,7 @@ export default async function MatchDetailPage({
       <MatchDetailTabs
         eventsSlot={<MatchEventsTimeline events={events.items} />}
         lineupsSlot={<MatchLineups lineups={lineups} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />}
+        ratingsSlot={<MatchPlayerRatings lineups={lineups} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />}
         statisticsSlot={<MatchStatisticsBars statistics={statistics} />}
       />
 

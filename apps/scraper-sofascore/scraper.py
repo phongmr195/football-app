@@ -77,7 +77,7 @@ def normalize(text: str) -> str:
 TEAM_NAME_ALIASES = {
     # EPL
     "wolverhampton wanderers": "wolverhampton",
-    # Bundesliga
+    # Bundesliga    
     "1  heidenheim 1846": "1  heidenheim",
     "st pauli 1910": "st pauli",
     "tsg 1899 hoffenheim": "tsg hoffenheim",
