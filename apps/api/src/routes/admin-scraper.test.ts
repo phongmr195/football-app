@@ -129,6 +129,10 @@ describe("POST /admin/scraper-runs", () => {
   it("400 khi seasonId không thuộc competition đã chọn", async () => {
     const admin = await seedAdmin();
     const token = signAdminToken(admin.id);
+    // Phải đảm bảo Premier League tồn tại TRƯỚC — nếu không, route's resolveCompetition() trả
+    // null trước khi kịp tới bước check season, thành 404 chứ không phải 400 (bug thật gặp ở CI:
+    // DB rỗng, competitionKey="premier-league" không resolve được vì test này không tự tạo).
+    await getPremierLeagueSeason();
     const { season: otherSeason } = await seedOtherCompetitionSeason();
 
     const res = await app.request("/admin/scraper-runs", {
