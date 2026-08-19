@@ -250,6 +250,27 @@ export interface PlayerCompareHistoryEntry {
   comparison: AiMatchSummary;
 }
 
+/** apps/api/src/routes/chat.ts — Chat AI (RAG-lite qua SQL retrieval, không embedding/pgvector). */
+export type ChatMessageRole = "USER" | "ASSISTANT";
+
+export interface ChatMessage {
+  id: string;
+  role: ChatMessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatSendResponse {
+  sessionId: string;
+  reply: { content: string; createdAt: string };
+}
+
+export interface ChatSessionSummary {
+  sessionId: string;
+  lastActivityAt: string;
+  messageCount: number;
+}
+
 /**
  * Shapes returned by apps/api's GET /favorites/teams and /favorites/players (piece 6a) — these
  * are deliberately narrower than Team/Player above (just what favorites.ts's `teamSelect`/
