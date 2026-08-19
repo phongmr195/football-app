@@ -43,6 +43,8 @@ model AdminUser {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  scraperRuns ScraperRun[]
+
   @@map("admin_users")
 }
 
@@ -131,8 +133,9 @@ model Competition {
   // DSL không hỗ trợ expression index). Xem CLAUDE.md § Database.
   externalRef Json?
 
-  seasons Season[]
-  matches Match[]
+  seasons     Season[]
+  matches     Match[]
+  scraperRuns ScraperRun[]
 
   @@map("competitions")
 }
@@ -156,6 +159,7 @@ model Season {
   topScorers         TopScorer[]
   topAssists         TopAssist[]
   cleanSheets        CleanSheet[]
+  scraperRuns        ScraperRun[]
 
   @@unique([competitionId, name])
   @@map("seasons")
@@ -835,6 +839,37 @@ model NotificationLog {
   sentAt         DateTime               @default(now())
 
   @@map("notification_logs")
+}
+
+// Lịch sử chạy pipeline scrape Sofascore từ trang admin (ROADMAP — trước đó chỉ chạy tay 3 bước
+// CLI, xem apps/scraper-sofascore). Mỗi row là 1 lần admin bấm "Áp dụng" — apps/api spawn 3
+// subprocess (generate-manifest -> python scraper.py -> ingest) và cập nhật row này theo tiến độ.
+enum ScraperRunStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model ScraperRun {
+  id                   String           @id @default(cuid())
+  competitionId        String
+  competition          Competition      @relation(fields: [competitionId], references: [id])
+  seasonId             String
+  season               Season           @relation(fields: [seasonId], references: [id])
+  requestedLimit       Int
+  status               ScraperRunStatus @default(PENDING)
+  matchesFound         Int?
+  matchesScraped       Int?
+  ingestSummary        Json?
+  errorMessage         String?
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?       @relation(fields: [createdByAdminUserId], references: [id])
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime         @default(now())
+
+  @@map("scraper_runs")
 }
 
 model Subscription {

@@ -32,6 +32,9 @@ build/
 apps/scraper-sofascore/.venv/
 apps/scraper-sofascore/.cache/
 apps/scraper-sofascore/manifest.json
+# manifests/<runId>.json — sinh bởi apps/api's scraper-orchestrator.ts (trang admin scraper),
+# khác manifest.json (CLI thủ công) ở trên — mỗi run 1 file riêng, không commit.
+apps/scraper-sofascore/manifests/
 apps/scraper-sofascore/output/
 __pycache__/
 *.pyc

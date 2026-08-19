@@ -1,17 +1,23 @@
 /**
  * Sinh manifest.json cho apps/scraper-sofascore/scraper.py — chạy:
  *   pnpm --filter @football-app/sync-worker generate-sofascore-manifest [--limit N] [--out path]
+ *     [--competition-id id --season-id id --sofascore-key key --sofascore-season str]
  *
- * Chỉ scope Premier League, mùa giải 2025-2026 (đúng yêu cầu piece này) — KHÔNG generic hoá cho
- * giải/mùa khác. football-data.org đặt tên season theo NĂM BẮT ĐẦU (verify thật: season "2025" =
+ * Mặc định (không truyền 4 flag mới) vẫn giữ hành vi cũ — chỉ scope Premier League, mùa giải
+ * 2025-2026 — để lệnh CLI thủ công đã ghi trong README/CLAUDE.md không đổi. 4 flag mới cho phép
+ * chọn giải/mùa khác (dùng bởi apps/api's scraper-orchestrator.ts khi admin trigger qua UI, xem
+ * ROADMAP — trang admin Sofascore scraper) — truyền ID trực tiếp, bỏ qua lookup theo tên.
+ * football-data.org đặt tên season theo NĂM BẮT ĐẦU (verify thật: season "2025" =
  * 2025-08-15 → 2026-05-24 = "mùa 2025-2026" thật, KHÔNG PHẢI season "2026" — season đó là
  * 2026-08-21 → 2027-05-30, mùa TIẾP THEO, dù được đánh dấu isCurrent=true tại thời điểm chạy).
  */
 import { prisma } from "@football-app/database";
 import { writeFileSync } from "node:fs";
 
-const SOFASCORE_COMPETITION_KEY = "ENG-Premier League";
-const SOFASCORE_SEASON = "2025-26";
+const DEFAULT_COMPETITION_NAME = "Premier League";
+const DEFAULT_SEASON_NAME = "2025";
+const DEFAULT_SOFASCORE_COMPETITION_KEY = "ENG-Premier League";
+const DEFAULT_SOFASCORE_SEASON = "2025-26";
 const DEFAULT_LIMIT = 5;
 const DEFAULT_OUT = "manifest.json";
 
@@ -19,11 +25,19 @@ function parseArgs() {
   const args = process.argv.slice(2);
   let limit = DEFAULT_LIMIT;
   let out = DEFAULT_OUT;
+  let competitionId: string | undefined;
+  let seasonId: string | undefined;
+  let sofascoreKey: string | undefined;
+  let sofascoreSeason: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--limit") limit = Number(args[++i]);
     if (args[i] === "--out") out = args[++i]!;
+    if (args[i] === "--competition-id") competitionId = args[++i];
+    if (args[i] === "--season-id") seasonId = args[++i];
+    if (args[i] === "--sofascore-key") sofascoreKey = args[++i];
+    if (args[i] === "--sofascore-season") sofascoreSeason = args[++i];
   }
-  return { limit, out };
+  return { limit, out, competitionId, seasonId, sofascoreKey, sofascoreSeason };
 }
 
 async function loadRoster(teamId: string) {
@@ -32,17 +46,24 @@ async function loadRoster(teamId: string) {
 }
 
 async function main() {
-  const { limit, out } = parseArgs();
+  const { limit, out, competitionId, seasonId, sofascoreKey, sofascoreSeason } = parseArgs();
 
-  const competition = await prisma.competition.findFirst({
-    where: { name: "Premier League", externalRef: { path: ["provider"], equals: "football-data" } },
-  });
-  if (!competition) throw new Error('Không tìm thấy Competition "Premier League" (provider football-data)');
+  const competition = competitionId
+    ? await prisma.competition.findUnique({ where: { id: competitionId } })
+    : await prisma.competition.findFirst({
+        where: { name: DEFAULT_COMPETITION_NAME, externalRef: { path: ["provider"], equals: "football-data" } },
+      });
+  if (!competition) throw new Error(`Không tìm thấy Competition (id=${competitionId ?? "default"})`);
 
-  const season = await prisma.season.findUnique({
-    where: { competitionId_name: { competitionId: competition.id, name: "2025" } },
-  });
-  if (!season) throw new Error('Không tìm thấy Season "2025" (mùa 2025-2026) cho Premier League');
+  const season = seasonId
+    ? await prisma.season.findUnique({ where: { id: seasonId } })
+    : await prisma.season.findUnique({
+        where: { competitionId_name: { competitionId: competition.id, name: DEFAULT_SEASON_NAME } },
+      });
+  if (!season) throw new Error(`Không tìm thấy Season (id=${seasonId ?? "default"})`);
+
+  const resolvedSofascoreKey = sofascoreKey ?? DEFAULT_SOFASCORE_COMPETITION_KEY;
+  const resolvedSofascoreSeason = sofascoreSeason ?? DEFAULT_SOFASCORE_SEASON;
 
   // Match FINISHED chưa có MatchEvent nào — coi là "chưa scrape Sofascore", tránh sinh lại manifest
   // cho match đã ingest xong ở lần chạy trước.
@@ -69,8 +90,8 @@ async function main() {
   );
 
   const manifest = {
-    competitionKey: SOFASCORE_COMPETITION_KEY,
-    season: SOFASCORE_SEASON,
+    competitionKey: resolvedSofascoreKey,
+    season: resolvedSofascoreSeason,
     matches: manifestMatches,
   };
   writeFileSync(out, JSON.stringify(manifest, null, 2));

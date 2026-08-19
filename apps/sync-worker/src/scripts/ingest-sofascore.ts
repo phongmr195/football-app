@@ -19,6 +19,11 @@ async function main() {
     console.warn(`${summary.unmatchedPlayers.length} cầu thủ không khớp được (bỏ qua):`);
     for (const line of summary.unmatchedPlayers) console.warn(`  - ${line}`);
   }
+
+  // Dòng có prefix riêng, dễ parse bằng regex — apps/api's scraper-orchestrator.ts đọc dòng này từ
+  // stdout khi spawn script này như subprocess (trang admin Sofascore scraper), thay vì phải parse
+  // toàn bộ log text phía trên.
+  console.log(`INGEST_SUMMARY_JSON ${JSON.stringify(summary)}`);
 }
 
 main()

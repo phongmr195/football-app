@@ -53,8 +53,69 @@ def normalize(text: str) -> str:
 # chỉ khác biệt suffix, TEAM_SUFFIX_RE đã xử lý đúng. Thêm alias mới ở đây nếu gặp case tương tự
 # (không dùng substring/prefix match chung — rủi ro nhầm lẫn thật, vd "Manchester United" vs
 # "Manchester City" cùng chứa "manchester").
+#
+# Bundesliga (verify thật 2026-08-18, admin scraper piece, limit=10 mùa 2025-26): football-data.org
+# thêm năm thành lập vào tên 1 số đội Đức mà Sofascore không có (hoặc thêm ở vị trí khác trong
+# tên) — 3/18 đội gặp case này, cộng 1 đội bị viết tắt khác hẳn:
+# - "1. FC Heidenheim 1846" vs Sofascore "1. FC Heidenheim" (năm ở cuối, không phải suffix fc/afc/cf)
+# - "FC St. Pauli 1910" vs Sofascore "FC St. Pauli" (tương tự)
+# - "TSG 1899 Hoffenheim" vs Sofascore "TSG Hoffenheim" (năm chèn GIỮA tên, không phải đầu/cuối)
+# - "Borussia Mönchengladbach" vs Sofascore "Borussia M'gladbach" (viết tắt hẳn "Mönchengladbach"
+#   thành "M'gladbach", không liên quan gì tới suffix/năm)
+# Giá trị đúng bằng key/value SAU khi qua TEAM_SUFFIX_RE.sub()+normalize() (bao gồm khoảng trắng
+# đôi còn sót lại khi "fc" bị xoá giữa chuỗi, vd "1  heidenheim 1846") — verify bằng cách gọi trực
+# tiếp normalize_team_name(), không gõ tay để tránh sai lệch.
+#
+# La Liga/Serie A/Ligue 1 (verify thật 2026-08-19, đối chiếu toàn bộ đội mùa 2025-26 thật giữa
+# football-data.org và Sofascore) — khác Premier League/Bundesliga (lệch lẻ tẻ vài đội), ở 3 giải
+# này football-data.org dùng tên CLB ĐẦY ĐỦ (kèm hậu tố quốc gia như "RC"/"RCD"/"CA"/"AC"/"SS"/
+# "US"/"OGC"/"AJ", "Calcio"/"CFC"/"BC"/"SCO"/"OSC", hoặc "de Madrid"/"de Vigo"/"de Barcelona"),
+# Sofascore dùng tên rút gọn thông dụng — lệch GẦN NỬA số đội mỗi giải (La Liga 8/20, Serie A
+# 14/20, Ligue 1 9/18), không phải ngoại lệ hiếm như Wolves/Bundesliga. Các hậu tố này KHÔNG thêm
+# vào TEAM_SUFFIX_RE (generic hoá rủi ro nhầm lẫn thật, đúng nguyên tắc đã ghi ở trên) — vẫn liệt
+# kê alias tường minh dù số lượng nhiều hơn.
 TEAM_NAME_ALIASES = {
+    # EPL
     "wolverhampton wanderers": "wolverhampton",
+    # Bundesliga
+    "1  heidenheim 1846": "1  heidenheim",
+    "st pauli 1910": "st pauli",
+    "tsg 1899 hoffenheim": "tsg hoffenheim",
+    "borussia monchengladbach": "borussia m gladbach",
+    # La Liga
+    "ca osasuna": "osasuna",
+    "club atletico de madrid": "atletico madrid",
+    "rayo vallecano de madrid": "rayo vallecano",
+    "rc celta de vigo": "celta vigo",
+    "rcd espanyol de barcelona": "espanyol",
+    "rcd mallorca": "mallorca",
+    "real betis balompie": "real betis",
+    "real sociedad de futbol": "real sociedad",
+    # Serie A
+    "ac pisa 1909": "pisa",
+    "acf fiorentina": "fiorentina",
+    "atalanta bc": "atalanta",
+    "bologna  1909": "bologna",
+    "cagliari calcio": "cagliari",
+    "como 1907": "como",
+    "genoa cfc": "genoa",
+    "internazionale milano": "inter",
+    "parma calcio 1913": "parma",
+    "ss lazio": "lazio",
+    "udinese calcio": "udinese",
+    "us cremonese": "cremonese",
+    "us lecce": "lecce",
+    "us sassuolo calcio": "sassuolo",
+    # Ligue 1
+    "aj auxerre": "auxerre",
+    "angers sco": "angers",
+    "le havre ac": "le havre",
+    "lille osc": "lille",
+    "ogc nice": "nice",
+    "racing club de lens": "rc lens",
+    "rc strasbourg alsace": "rc strasbourg",
+    "stade brestois 29": "stade brestois",
+    "stade rennais  1901": "stade rennais",
 }
 
 
