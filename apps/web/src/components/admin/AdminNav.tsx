@@ -6,6 +6,7 @@ import {
   Bell,
   CalendarClock,
   CalendarRange,
+  Download,
   Flag,
   Landmark,
   LayoutDashboard,
@@ -33,6 +34,7 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/matches", label: "Trận đấu", icon: CalendarClock },
   { href: "/admin/config", label: "Cấu hình", icon: Settings },
   { href: "/admin/notifications", label: "Nhật ký thông báo", icon: Bell },
+  { href: "/admin/scraper", label: "Scraper dữ liệu", icon: Download },
 ];
 
 export function AdminNav() {
