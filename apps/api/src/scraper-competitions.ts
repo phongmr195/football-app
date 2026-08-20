@@ -26,11 +26,14 @@ export function toSofascoreSeasonString(dbSeasonName: string): string {
   return `${dbSeasonName}-${endYearShort}`;
 }
 
-// 9 loại data admin chọn được ở trang scraper — 3 loại cũ (events/lineups/statistics, cố định từ
-// piece đầu) + 6 loại mới (verify thật 2026-08-19, xem CLAUDE.md § Scraper cho inventory đầy đủ đã
-// probe từ Sofascore). Key này dùng CHUNG cho: Zod validation ở admin-scraper.ts, CLI arg
-// `--data-types` truyền xuống generate-sofascore-manifest.ts/scraper.py (string y hệt, KHÔNG qua
-// mapping riêng — giữ đơn giản, chỉ 1 tầng key duy nhất xuyên suốt pipeline).
+// 10 loại data admin chọn được ở trang scraper — 3 loại cũ (events/lineups/statistics, cố định từ
+// piece đầu) + 6 loại match-level (verify thật 2026-08-19, xem CLAUDE.md § Scraper cho inventory
+// đầy đủ đã probe từ Sofascore) + 1 loại SEASON-level (playerSeasonStats, 2026-08-20 — khác hẳn 9
+// loại trên: 1 lần fetch/mùa giải, KHÔNG theo từng match, xem scraper-orchestrator.ts's
+// runPlayerSeasonStatsPipeline()). Key này dùng CHUNG cho: Zod validation ở admin-scraper.ts, CLI
+// arg `--data-types` truyền xuống generate-sofascore-manifest.ts/scraper.py cho 9 loại match-level
+// (string y hệt, KHÔNG qua mapping riêng) — `playerSeasonStats` KHÔNG đi qua đường đó, orchestrator
+// tự lọc riêng.
 export const SCRAPER_DATA_TYPES = {
   events: "Events (diễn biến)",
   lineups: "Lineups + Ratings (đội hình)",
@@ -41,6 +44,7 @@ export const SCRAPER_DATA_TYPES = {
   averagePositions: "Average positions (vị trí trung bình)",
   momentum: "Momentum graph (biểu đồ áp lực trận)",
   odds: "Odds (tỉ lệ cược — admin-only, chưa hiển thị public)",
+  playerSeasonStats: "Player season stats (chỉ số nâng cao cả mùa — rating/xG/xA/thẻ/...)",
 } as const;
 
 export type ScraperDataType = keyof typeof SCRAPER_DATA_TYPES;

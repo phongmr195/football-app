@@ -24,9 +24,12 @@ async function getPlayer(id: string) {
 
 // Không truyền seasonId — trả về mùa giải gần nhất có dữ liệu (xem
 // apps/api/src/routes/statistics.ts). 404 nghĩa là cầu thủ này chưa từng lọt top scorers/assists
-// của mùa nào (nguồn duy nhất hiện có cho PlayerStatistics, xem sync-catalog.ts's
-// syncTopScorers()) — ẩn card, không coi là lỗi. yellowCards/redCards/minutesPlayed KHÔNG hiện
-// (luôn 0, cần dữ liệu match-event cấp cầu thủ mà provider hiện tại không có — xem ROADMAP Phase 3).
+// của football-data.org LẪN chưa lọt top-50 bất kỳ category nào của Sofascore's season
+// top-players (2 nguồn duy nhất hiện có cho PlayerStatistics, xem sync-catalog.ts's
+// syncTopScorers() + apps/sync-worker/src/ingest-player-season-stats.ts) — ẩn card, không coi là
+// lỗi. `minutesPlayed` vẫn luôn 0 (không nguồn nào hiện có trả field này) — KHÔNG hiện trong UI.
+// `rating`/`yellowCards`/`redCards`/... (2026-08-20) chỉ Sofascore điền được, hiện có điều kiện khi
+// `rating !== null` (xem PlayerStatistics's doc comment ở lib/types.ts).
 async function getPlayerStatistics(id: string) {
   try {
     return await apiGet<PlayerStatistics>(`/statistics/players/${id}`);
@@ -105,6 +108,15 @@ export default async function PlayerDetailPage({
               { label: "Ra sân", value: statistics.appearances },
               { label: "Bàn thắng", value: statistics.goals },
               { label: "Kiến tạo", value: statistics.assists },
+              // Chỉ Sofascore điền được (xem doc comment getPlayerStatistics ở trên) — hiện thêm
+              // khi có, không thay thế 3 field cơ bản ở trên (luôn có nếu card này hiện ra).
+              ...(statistics.rating !== null
+                ? [
+                    { label: "Rating TB", value: statistics.rating.toFixed(1) },
+                    { label: "Thẻ vàng", value: statistics.yellowCards },
+                    { label: "Thẻ đỏ", value: statistics.redCards },
+                  ]
+                : []),
             ].map((stat) => (
               <div key={stat.label} className="flex flex-col items-center gap-1">
                 <span className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
