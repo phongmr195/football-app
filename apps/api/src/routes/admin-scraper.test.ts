@@ -2,6 +2,7 @@ import { prisma } from "@football-app/database";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../app";
 import { signAdminToken } from "../middleware/admin-auth";
+import { SCRAPER_COMPETITIONS } from "../scraper-competitions";
 
 // runScraperPipeline spawn 3 subprocess thật (pnpm/python) — mock hẳn module này để test route
 // (validate/concurrency-guard) không chạy gì thật, đúng pattern sync-worker mock "./ai-provider".
@@ -17,27 +18,41 @@ async function seedAdmin() {
   return prisma.adminUser.create({ data: { username: ADMIN_USERNAME, passwordHash: "unused" } });
 }
 
-// Route resolve competition qua findFirst({name:"Premier League", provider:"football-data"}) —
-// dùng ĐÚNG row đã có sẵn nếu DB đã sync thật (dev/local), tránh tạo bản trùng gây match không
-// xác định. Nhưng KHÔNG thể giả định row này luôn tồn tại — CI chạy trên DB rỗng (không sync
-// football-data thật), findFirstOrThrow từng fail ở CI dù pass ở local. Fallback: tự tạo 1 row
-// nếu chưa có, đánh dấu bằng externalRef.id riêng (KHÔNG dùng PROVIDER chung — provider PHẢI là
-// "football-data" để khớp đúng query của route) để cleanup xoá được đúng row này, không đụng data
-// thật nếu nó tồn tại từ trước.
-const PREMIER_LEAGUE_FALLBACK_ID = "admin-scraper-test-premier-league-fallback";
+// Route resolve competition qua resolveCompetition() (admin-scraper.ts) — match theo
+// externalRef.id ỔN ĐỊNH (xem scraper-competitions.ts's readExternalRefId/externalRefId, đổi từ
+// match-theo-name sau bug thật 2026-08-20: admin rename Competition.name làm mất khớp), KHÔNG
+// theo Competition.name. Test này PHẢI dùng ĐÚNG cùng khoá lookup (externalRef.id) — dùng lại
+// name để tìm/tạo fixture (như bản cũ) sẽ tự stale y hệt bug gốc bất cứ khi nào không có data
+// thật trong DB (CI, DB rỗng): tạo fallback row với externalRef.id KHÁC "2021" thật, route vẫn
+// resolveCompetition() ra null -> 404, dù test tưởng đã setup đúng.
+//
+// Dùng ĐÚNG row có sẵn nếu DB đã sync thật (dev/local, externalRef.id="2021") — tránh tạo bản
+// trùng gây vi phạm unique index (provider,id). Nếu chưa có (CI/DB rỗng), tự tạo 1 row MỚI với
+// externalRef.id="2021" (khớp thật với SCRAPER_COMPETITIONS, không phải giá trị giả tuỳ ý) —
+// track theo `id` (cuid) THẬT của row vừa tạo, không phải theo externalRef.id chung, để cleanup
+// chỉ xoá đúng row TEST NÀY tự tạo, không bao giờ đụng tới row thật đã sync sẵn (dù trùng
+// externalRef.id) khi row đó đã được TÌM THẤY thay vì tạo mới.
+let fallbackCompetitionId: string | null = null;
 
 async function getPremierLeagueSeason() {
+  const externalRefId = SCRAPER_COMPETITIONS["premier-league"].externalRefId;
   let competition = await prisma.competition.findFirst({
-    where: { name: "Premier League", externalRef: { path: ["provider"], equals: "football-data" } },
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: "football-data" } },
+        { externalRef: { path: ["id"], equals: externalRefId } },
+      ],
+    },
   });
   if (!competition) {
     competition = await prisma.competition.create({
       data: {
         name: "Premier League",
         type: "LEAGUE",
-        externalRef: { provider: "football-data", id: PREMIER_LEAGUE_FALLBACK_ID },
+        externalRef: { provider: "football-data", id: externalRefId },
       },
     });
+    fallbackCompetitionId = competition.id;
   }
   let season = await prisma.season.findFirst({ where: { competitionId: competition.id } });
   if (!season) {
@@ -67,12 +82,14 @@ async function cleanupTestData() {
   await prisma.scraperRun.deleteMany({ where: { createdByAdminUser: { username: ADMIN_USERNAME } } });
   await prisma.season.deleteMany({ where: { competition: { externalRef: { path: ["provider"], equals: PROVIDER } } } });
   await prisma.competition.deleteMany({ where: { externalRef: { path: ["provider"], equals: PROVIDER } } });
-  // Chỉ xoá đúng row fallback do TEST NÀY tự tạo (khớp chính xác externalRef.id) — không đụng
-  // Premier League thật nếu DB đã có sync data thật (externalRef.id sẽ khác, vd "2021").
-  await prisma.season.deleteMany({
-    where: { competition: { externalRef: { path: ["id"], equals: PREMIER_LEAGUE_FALLBACK_ID } } },
-  });
-  await prisma.competition.deleteMany({ where: { externalRef: { path: ["id"], equals: PREMIER_LEAGUE_FALLBACK_ID } } });
+  // Chỉ xoá đúng row fallback do TEST NÀY tự tạo — track theo `id` (cuid) THẬT của chính row đó,
+  // KHÔNG theo externalRef.id chung (nếu Premier League thật đã tồn tại từ trước, getPremierLeagueSeason()
+  // sẽ TÌM THẤY nó thay vì tạo mới, fallbackCompetitionId vẫn null, và ta không được đụng tới row đó).
+  if (fallbackCompetitionId) {
+    await prisma.season.deleteMany({ where: { competitionId: fallbackCompetitionId } });
+    await prisma.competition.deleteMany({ where: { id: fallbackCompetitionId } });
+    fallbackCompetitionId = null;
+  }
   await prisma.adminUser.deleteMany({ where: { username: ADMIN_USERNAME } });
 }
 

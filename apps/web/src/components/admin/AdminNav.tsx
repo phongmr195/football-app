@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
   Bell,
   CalendarClock,
   CalendarRange,
@@ -27,6 +28,7 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/competitions", label: "Giải đấu", icon: Trophy },
   { href: "/admin/seasons", label: "Mùa giải", icon: CalendarRange },
   { href: "/admin/teams", label: "Đội bóng", icon: Shield },
+  { href: "/admin/team-statistics", label: "Thống kê đội", icon: BarChart3 },
   { href: "/admin/players", label: "Cầu thủ", icon: User },
   { href: "/admin/stadiums", label: "Sân vận động", icon: Landmark },
   { href: "/admin/coaches", label: "HLV", icon: UserCog },

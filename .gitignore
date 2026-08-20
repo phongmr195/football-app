@@ -47,6 +47,11 @@ __pycache__/
 npm-debug.log*
 pnpm-debug.log*
 
+# pnpm local store — chỉ xuất hiện nếu ai đó dùng --store-dir trỏ vào đây (workaround cho lỗi
+# ERR_PNPM_UNEXPECTED_STORE khi global store config lệch máy) — có thể lên tới hàng trăm MB/hàng
+# chục nghìn file, không bao giờ nên commit.
+.pnpm-store/
+
 # IDE
 .vscode/*
 !.vscode/extensions.json

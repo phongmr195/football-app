@@ -9,6 +9,11 @@ const teamsQuerySchema = paginationQuerySchema.extend({
   // ROADMAP Phase 4 — trang admin list toàn bộ team (hàng nghìn dòng) không dùng được nếu thiếu
   // tìm kiếm, khác các trang browse công khai vốn luôn lọc theo competition/season trước.
   search: z.string().optional(),
+  // Optional — cho trang /admin/team-statistics (2026-08-20): danh sách team KHÔNG lọc theo gì cả
+  // là bug thật đã gặp (admin phải tìm giữa hàng nghìn team toàn cầu để chọn 1 đội cho 1 season cụ
+  // thể, dễ chọn nhầm đội chưa từng đá season đó -> 400 "no finished matches"). Lọc theo team có
+  // ít nhất 1 match (home hoặc away) trong season này.
+  seasonId: z.string().optional(),
 });
 
 // KHÔNG có DELETE — Team có rất nhiều quan hệ onDelete: Cascade (matches/statistics/lineups/...
@@ -30,8 +35,13 @@ const teamUpdateSchema = teamCreateSchema.partial();
 
 export const teamsRoute = new Hono()
   .get("/teams", zValidator("query", teamsQuerySchema), async (c) => {
-    const { page, pageSize, search } = c.req.valid("query");
-    const where = search ? { name: { contains: search, mode: "insensitive" as const } } : {};
+    const { page, pageSize, search, seasonId } = c.req.valid("query");
+    const where = {
+      ...(search ? { name: { contains: search, mode: "insensitive" as const } } : {}),
+      ...(seasonId
+        ? { OR: [{ homeMatches: { some: { seasonId } } }, { awayMatches: { some: { seasonId } } }] }
+        : {}),
+    };
     const [items, total] = await Promise.all([
       prisma.team.findMany({
         where,

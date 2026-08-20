@@ -3,7 +3,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { prisma } from "@football-app/database";
 import type { Prisma } from "@football-app/database";
-import { SCRAPER_COMPETITIONS, toSofascoreSeasonString, type ScraperCompetitionKey } from "./scraper-competitions";
+import {
+  readExternalRefId,
+  SCRAPER_COMPETITIONS,
+  toSofascoreSeasonString,
+  type ScraperCompetitionKey,
+} from "./scraper-competitions";
 
 // apps/api luôn chạy với cwd = apps/api (dev qua tsx watch, prod qua node dist/index.js — cả 2 đều
 // invoke từ trong thư mục này, xem package.json's "dev"/"start" script) — an toàn để resolve theo
@@ -254,8 +259,11 @@ export async function runScraperPipeline(runId: string): Promise<void> {
 
   await prisma.scraperRun.update({ where: { id: runId }, data: { status: "RUNNING", startedAt: new Date() } });
 
+  // Match theo externalRef.id (ổn định) — KHÔNG theo Competition.name (admin sửa được qua CRUD,
+  // xem comment ở scraper-competitions.ts).
+  const competitionExternalRefId = readExternalRefId(run.competition.externalRef);
   const competitionKey = (Object.keys(SCRAPER_COMPETITIONS) as ScraperCompetitionKey[]).find(
-    (key) => SCRAPER_COMPETITIONS[key].dbName === run.competition.name,
+    (key) => SCRAPER_COMPETITIONS[key].externalRefId === competitionExternalRefId,
   );
   if (!competitionKey) {
     await failRun(runId, `Không tìm thấy sofascoreKey cho giải "${run.competition.name}"`);

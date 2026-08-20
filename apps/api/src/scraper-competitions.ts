@@ -3,17 +3,31 @@
 // (cần tự viết league_dict.json override + verify read_schedule() hoạt động đúng với format vòng
 // bảng/knockout khác giải quốc gia — chưa làm ở piece này).
 //
-// `dbName` đã verify khớp đúng Competition.name thật trong Postgres (provider football-data) — La
-// Liga lưu trong DB là "Primera Division", KHÔNG PHẢI "La Liga".
+// `externalRefId` — id football-data.org THẬT (ổn định, KHÔNG đổi) — KHÔNG dùng `Competition.name`
+// để match nữa (bug thật đã gặp 2026-08-20: admin đổi tên hiển thị "Primera Division" -> "Laliga"
+// qua /admin/competitions, lookup theo tên cũ ("dbName") lập tức mất khớp — trang scraper hiện
+// "Chọn mùa" rỗng cho La Liga vì resolveCompetition() không tìm thấy competition nào tên khớp,
+// và nếu tạo được run thì scraper-orchestrator.ts cũng fail vì cùng lý do). `name` là field admin
+// SỬA ĐƯỢC qua CRUD, không bao giờ nên dùng làm khoá lookup ổn định — id provider mới đúng vai đó
+// (xem CLAUDE.md § Database's nguyên tắc externalRef).
 export const SCRAPER_COMPETITIONS = {
-  "premier-league": { label: "Premier League", dbName: "Premier League", sofascoreKey: "ENG-Premier League" },
-  "la-liga": { label: "La Liga", dbName: "Primera Division", sofascoreKey: "ESP-La Liga" },
-  bundesliga: { label: "Bundesliga", dbName: "Bundesliga", sofascoreKey: "GER-Bundesliga" },
-  "serie-a": { label: "Serie A", dbName: "Serie A", sofascoreKey: "ITA-Serie A" },
-  "ligue-1": { label: "Ligue 1", dbName: "Ligue 1", sofascoreKey: "FRA-Ligue 1" },
+  "premier-league": { label: "Premier League", externalRefId: "2021", sofascoreKey: "ENG-Premier League" },
+  "la-liga": { label: "La Liga", externalRefId: "2014", sofascoreKey: "ESP-La Liga" },
+  bundesliga: { label: "Bundesliga", externalRefId: "2002", sofascoreKey: "GER-Bundesliga" },
+  "serie-a": { label: "Serie A", externalRefId: "2019", sofascoreKey: "ITA-Serie A" },
+  "ligue-1": { label: "Ligue 1", externalRefId: "2015", sofascoreKey: "FRA-Ligue 1" },
 } as const;
 
 export type ScraperCompetitionKey = keyof typeof SCRAPER_COMPETITIONS;
+
+// Đọc an toàn field `id` từ Competition.externalRef (Prisma Json, hình dạng thật luôn
+// `{ provider: string, id: string }` — xem packages/data-provider/src/types.ts's ExternalRef,
+// KHÔNG import package đó vào apps/api chỉ để lấy 1 type, tự khai báo tối thiểu ở đây).
+export function readExternalRefId(externalRef: unknown): string | null {
+  if (typeof externalRef !== "object" || externalRef === null) return null;
+  const id = (externalRef as { id?: unknown }).id;
+  return typeof id === "string" ? id : null;
+}
 
 export const SCRAPER_COMPETITION_KEYS = Object.keys(SCRAPER_COMPETITIONS) as ScraperCompetitionKey[];
 
