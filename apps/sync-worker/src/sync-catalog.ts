@@ -1,5 +1,6 @@
 import type { DataProviderAdapter, ExternalRef } from "@football-app/data-provider";
 import { prisma } from "@football-app/database";
+import { calculateTeamSeasonStatistics, rankCleanSheetTeams } from "@football-app/shared";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 
 // Thứ tự phụ thuộc bắt buộc: syncCompetitions -> syncSeasons -> syncTeams -> syncPlayers,
@@ -353,68 +354,47 @@ export async function syncTeamAggregates(seasonId: string) {
     where: { seasonId, status: "FINISHED" },
     select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
   });
+  const { statsByTeamId, skippedMatches } = calculateTeamSeasonStatistics(matches);
+  const activeTeamIds = [...statsByTeamId.keys()];
 
-  interface Agg {
-    wins: number;
-    draws: number;
-    losses: number;
-    goalsFor: number;
-    goalsAgainst: number;
-    cleanSheets: number;
-  }
-  const stats = new Map<string, Agg>();
-  function ensure(teamId: string): Agg {
-    let agg = stats.get(teamId);
-    if (!agg) {
-      agg = { wins: 0, draws: 0, losses: 0, goalsFor: 0, goalsAgainst: 0, cleanSheets: 0 };
-      stats.set(teamId, agg);
-    }
-    return agg;
-  }
+  // Xoá TeamStatistics của đội KHÔNG còn trận FINISHED-có-tỉ-số nào trong season này (vd match bị
+  // sửa lại status/tỉ số) — nếu không, row cũ đứng yên mãi với số liệu stale, KHÔNG có gì tự zero
+  // nó (bug thật đã gặp 2026-08-20: recompute cho 1 đội đã hết trận hợp lệ không có tác dụng gì vì
+  // vòng lặp upsert chỉ đụng tới teamId có trong statsByTeamId). Cùng logic dọn stale row đã áp
+  // dụng cho CleanSheet dưới đây.
+  await Promise.all([
+    Promise.all(
+      activeTeamIds.map((teamId) =>
+        prisma.teamStatistics.upsert({
+          where: { teamId_seasonId: { teamId, seasonId } },
+          create: { teamId, seasonId, ...statsByTeamId.get(teamId)! },
+          update: { ...statsByTeamId.get(teamId)! },
+        }),
+      ),
+    ),
+    activeTeamIds.length === 0
+      ? prisma.teamStatistics.deleteMany({ where: { seasonId } })
+      : prisma.teamStatistics.deleteMany({ where: { seasonId, teamId: { notIn: activeTeamIds } } }),
+  ]);
 
-  for (const m of matches) {
-    if (m.homeScore === null || m.awayScore === null) continue; // FINISHED nhưng thiếu tỉ số — dữ liệu bất thường, bỏ qua
-    const home = ensure(m.homeTeamId);
-    const away = ensure(m.awayTeamId);
-    home.goalsFor += m.homeScore;
-    home.goalsAgainst += m.awayScore;
-    away.goalsFor += m.awayScore;
-    away.goalsAgainst += m.homeScore;
-    if (m.homeScore > m.awayScore) {
-      home.wins++;
-      away.losses++;
-    } else if (m.homeScore < m.awayScore) {
-      away.wins++;
-      home.losses++;
-    } else {
-      home.draws++;
-      away.draws++;
-    }
-    if (m.awayScore === 0) home.cleanSheets++;
-    if (m.homeScore === 0) away.cleanSheets++;
-  }
+  const ranked = rankCleanSheetTeams(statsByTeamId);
+  const cleanSheetTeamIds = ranked.map((entry) => entry.teamId);
+  await Promise.all([
+    Promise.all(
+      ranked.map((entry) =>
+        prisma.cleanSheet.upsert({
+          where: { seasonId_teamId: { seasonId, teamId: entry.teamId } },
+          create: { seasonId, teamId: entry.teamId, count: entry.count, rank: entry.rank },
+          update: { count: entry.count, rank: entry.rank },
+        }),
+      ),
+    ),
+    cleanSheetTeamIds.length === 0
+      ? prisma.cleanSheet.deleteMany({ where: { seasonId } })
+      : prisma.cleanSheet.deleteMany({ where: { seasonId, teamId: { notIn: cleanSheetTeamIds } } }),
+  ]);
 
-  for (const [teamId, s] of stats) {
-    await prisma.teamStatistics.upsert({
-      where: { teamId_seasonId: { teamId, seasonId } },
-      create: { teamId, seasonId, ...s },
-      update: { ...s },
-    });
-  }
-
-  const ranked = [...stats.entries()]
-    .filter(([, s]) => s.cleanSheets > 0)
-    .sort((a, b) => b[1].cleanSheets - a[1].cleanSheets);
-  for (let i = 0; i < ranked.length; i++) {
-    const [teamId, s] = ranked[i]!;
-    await prisma.cleanSheet.upsert({
-      where: { seasonId_teamId: { seasonId, teamId } },
-      create: { seasonId, teamId, count: s.cleanSheets, rank: i + 1 },
-      update: { count: s.cleanSheets, rank: i + 1 },
-    });
-  }
-
-  return { teamsProcessed: stats.size, cleanSheetTeams: ranked.length };
+  return { teamsProcessed: statsByTeamId.size, cleanSheetTeams: ranked.length, skippedMatches };
 }
 
 // Đồng bộ toàn bộ 1 giải đấu cho 1 season: teams -> players (từng team) -> standings + matches

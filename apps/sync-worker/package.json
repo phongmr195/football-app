@@ -23,6 +23,7 @@
     "@football-app/data-provider": "workspace:*",
     "@football-app/database": "workspace:*",
     "@football-app/realtime": "workspace:*",
+    "@football-app/shared": "workspace:*",
     "ioredis": "^6.0.0"
   },
   "devDependencies": {
