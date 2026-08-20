@@ -33,8 +33,16 @@ const listRunsQuerySchema = paginationQuerySchema.extend({
 
 async function resolveCompetition(competitionKey: ScraperCompetitionKey) {
   const config = SCRAPER_COMPETITIONS[competitionKey];
+  // Match theo externalRef.id (ổn định) — KHÔNG theo Competition.name (admin sửa được qua CRUD,
+  // xem comment ở scraper-competitions.ts). Luôn filter cả provider VÀ id (nguyên tắc externalRef
+  // lookup ở CLAUDE.md § Database).
   return prisma.competition.findFirst({
-    where: { name: config.dbName, externalRef: { path: ["provider"], equals: "football-data" } },
+    where: {
+      AND: [
+        { externalRef: { path: ["provider"], equals: "football-data" } },
+        { externalRef: { path: ["id"], equals: config.externalRefId } },
+      ],
+    },
   });
 }
 
@@ -62,9 +70,11 @@ async function reconcileStaleRuns(): Promise<void> {
 }
 
 export const adminScraperRoute = new Hono()
-  // Cầu nối competitionKey (client chỉ biết key+label, không biết Competition.name thật trong DB —
-  // vd La Liga lưu là "Primera Division") -> competitionId + danh sách mùa giải thật, để trang admin
-  // không cần tự tra cứu/duplicate mapping tên DB ở phía client.
+  // Cầu nối competitionKey (client chỉ biết key+label, không biết Competition.id thật trong DB) ->
+  // competitionId + danh sách mùa giải thật, để trang admin không cần tự tra cứu/duplicate mapping
+  // ở phía client. resolveCompetition() match theo externalRef.id (ổn định), không theo
+  // Competition.name (admin sửa được qua CRUD /admin/competitions — tên hiển thị có thể đổi bất kỳ
+  // lúc nào, xem comment ở scraper-competitions.ts).
   .get("/admin/scraper-competitions", requireAdminSession, async (c) => {
     const results = await Promise.all(
       SCRAPER_COMPETITION_KEYS.map(async (key) => {
