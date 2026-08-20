@@ -67,9 +67,13 @@ async function main() {
   console.log(`Đã ghi ${out} (${emptyTeams.length} team).`);
 }
 
+// `process.exitCode` (KHÔNG `process.exit()`) — xem comment ở
+// apps/sync-worker/src/scripts/ingest-player-season-stats.ts (cùng bug class).
 main()
-  .then(() => process.exit(0))
+  .then(() => {
+    process.exitCode = 0;
+  })
   .catch((err) => {
     console.error("generate-roster-backfill-manifest failed:", err);
-    process.exit(1);
+    process.exitCode = 1;
   });
