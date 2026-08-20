@@ -9,6 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResourceTable } from "@/components/admin/ResourceTable";
 import { ApiError, apiGetClient, apiMutateClient, type ApiListResponse } from "@/lib/api-client";
 import { useAdminAuth } from "@/lib/admin-auth-context";
@@ -24,9 +25,11 @@ const COMPETITION_OPTIONS = [
   { key: "ligue-1", label: "Ligue 1" },
 ];
 
-// 9 loại data khớp SCRAPER_DATA_TYPES (apps/api/src/scraper-competitions.ts) — duplicate label ở
-// đây thay vì gọi thêm 1 endpoint riêng, cùng convention COMPETITION_OPTIONS phía trên (danh sách
-// nhỏ, ít đổi, không cần round-trip network chỉ để lấy label hiển thị).
+// 9 loại data MATCH-LEVEL khớp SCRAPER_DATA_TYPES (apps/api/src/scraper-competitions.ts) —
+// duplicate label ở đây thay vì gọi thêm 1 endpoint riêng, cùng convention COMPETITION_OPTIONS
+// phía trên. KHÔNG gồm "playerSeasonStats" — loại đó SEASON-level (1 lần fetch/mùa, không theo
+// từng trận, không cần Limit) nên tách hẳn thành tab riêng bên dưới, không lẫn vào checkbox list
+// này (tránh admin tưởng nó cũng theo Limit/theo trận như 9 loại còn lại).
 const DATA_TYPE_OPTIONS = [
   { key: "events", label: "Events (diễn biến)" },
   { key: "lineups", label: "Lineups + Ratings (đội hình)" },
@@ -39,6 +42,12 @@ const DATA_TYPE_OPTIONS = [
   { key: "odds", label: "Odds (tỉ lệ cược — admin-only)" },
 ];
 const DEFAULT_DATA_TYPES = ["events", "lineups", "statistics"];
+
+// Season-level, tab riêng — xem SCRAPER_DATA_TYPES's playerSeasonStats + scraper-orchestrator.ts's
+// runPlayerSeasonStatsPipeline(). Backend vẫn yêu cầu `limit` (Zod schema chung cho mọi
+// dataTypes) nhưng loại này KHÔNG dùng tới giá trị này — gửi hằng số cố định, không hỏi admin.
+const PLAYER_SEASON_STATS_KEY = "playerSeasonStats";
+const PLAYER_SEASON_STATS_PLACEHOLDER_LIMIT = 10;
 
 const DEFAULT_LIMIT = 50;
 const MIN_LIMIT = 10;
@@ -67,6 +76,10 @@ interface IngestSummary {
   momentumCreated: number;
   oddsUpserted: number;
   unmatchedPlayers: string[];
+  // playerSeasonStats (season-level, tên field riêng tránh đè lên unmatchedPlayers ở trên khi cả 2
+  // pipeline cùng chạy 1 run — xem apps/api/src/scraper-orchestrator.ts)
+  playerSeasonStatsUpserted?: number;
+  playerSeasonStatsUnmatchedPlayers?: string[];
 }
 
 interface ScraperRunRow {
@@ -130,9 +143,12 @@ function TruncatedListCell({ text }: { text: string }) {
 
 /**
  * Trang admin trigger pipeline scrape Sofascore (trước đó chỉ chạy tay 3 bước CLI, xem
- * apps/scraper-sofascore) — chọn giải/mùa/limit, "Áp dụng" gọi POST /admin/scraper-runs
- * (apps/api spawn subprocess, không block response), rồi poll GET /admin/scraper-runs/:id mỗi 5s
- * trong lúc PENDING/RUNNING, đúng pattern use-live-match.ts's refetchInterval.
+ * apps/scraper-sofascore) — 2 tab tách theo loại pipeline (2026-08-20): "Scrape theo trận" (9
+ * loại match-level, cần Limit) và "Player season stats" (season-level, 1 lần fetch/mùa, không
+ * cần Limit — xem scraper-orchestrator.ts's runPlayerSeasonStatsPipeline()). Cả 2 tab dùng chung
+ * giải đấu/mùa giải đã chọn, cùng gọi POST /admin/scraper-runs (apps/api spawn subprocess, không
+ * block response), rồi poll GET /admin/scraper-runs/:id mỗi 5s trong lúc PENDING/RUNNING, đúng
+ * pattern use-live-match.ts's refetchInterval.
  */
 export default function AdminScraperPage() {
   const { token } = useAdminAuth();
@@ -193,15 +209,12 @@ export default function AdminScraperPage() {
     setDataTypes((prev) => (prev.includes(key) ? prev.filter((t) => t !== key) : [...prev, key]));
   }
 
-  async function handleApply() {
+  // Dùng chung cho cả 2 tab (Scrape theo trận / Player season stats) — chỉ khác nhau ở dataTypes +
+  // limit truyền vào, còn lại (gọi API, xử lý lỗi 409, set activeRunId) giống nhau hoàn toàn.
+  async function submitRun(runDataTypes: string[], runLimit: number) {
     setSubmitError(null);
-    const limitNum = Number(limit);
     if (!seasonId) {
       setSubmitError("Chọn mùa giải trước khi áp dụng.");
-      return;
-    }
-    if (dataTypes.length === 0) {
-      setSubmitError("Chọn ít nhất 1 loại dữ liệu trước khi áp dụng.");
       return;
     }
     setSubmitting(true);
@@ -209,7 +222,7 @@ export default function AdminScraperPage() {
       const run = await apiMutateClient<ScraperRunRow>(
         "/admin/scraper-runs",
         "POST",
-        { competitionKey, seasonId, limit: limitNum, dataTypes },
+        { competitionKey, seasonId, limit: runLimit, dataTypes: runDataTypes },
         { idToken: token },
       );
       setActiveRunId(run.id);
@@ -222,6 +235,18 @@ export default function AdminScraperPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function handleApplyMatchLevel() {
+    if (dataTypes.length === 0) {
+      setSubmitError("Chọn ít nhất 1 loại dữ liệu trước khi áp dụng.");
+      return;
+    }
+    await submitRun(dataTypes, Number(limit));
+  }
+
+  async function handleApplySeasonStats() {
+    await submitRun([PLAYER_SEASON_STATS_KEY], PLAYER_SEASON_STATS_PLACEHOLDER_LIMIT);
   }
 
   const run = activeRunQuery.data;
@@ -288,41 +313,68 @@ export default function AdminScraperPage() {
               </SelectContent>
             </Select>
           </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="scraper-limit">Số trận (10-100)</Label>
-            <Input
-              id="scraper-limit"
-              type="number"
-              min={MIN_LIMIT}
-              max={MAX_LIMIT}
-              value={limit}
-              onChange={(e) => setLimit(e.target.value)}
-              className="w-28"
-            />
-          </div>
-
-          <Button onClick={() => void handleApply()} disabled={submitting || isBusy}>
-            {submitting ? "Đang bắt đầu..." : "Apply"}
-          </Button>
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label>Loại dữ liệu</Label>
-          <div className="flex flex-wrap gap-x-5 gap-y-2">
-            {DATA_TYPE_OPTIONS.map((opt) => (
-              <label key={opt.key} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                <Checkbox checked={dataTypes.includes(opt.key)} onCheckedChange={() => toggleDataType(opt.key)} />
-                {opt.label}
-              </label>
-            ))}
-          </div>
-        </div>
+        {/* 2 tab tách hẳn — "Player season stats" chạy độc lập (season-level, 1 lần fetch/mùa,
+            KHÔNG theo Limit/theo trận) khỏi "Scrape theo trận" (9 loại match-level còn lại, luôn
+            cần Limit). Giải đấu/mùa giải ở trên dùng CHUNG cho cả 2 tab. */}
+        <Tabs defaultValue="match-level">
+          <TabsList>
+            <TabsTrigger value="match-level">Scrape theo trận</TabsTrigger>
+            <TabsTrigger value="season-stats">Player season stats</TabsTrigger>
+          </TabsList>
 
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Mùa giải &ldquo;hiện tại&rdquo; thường CHƯA có trận đấu xong — mùa đã kết thúc (không đánh
-          dấu hiện tại) mới thường có trận cần scrape.
-        </p>
+          <TabsContent value="match-level" className="flex flex-col gap-3 pt-3">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="scraper-limit">Số trận (10-100)</Label>
+                <Input
+                  id="scraper-limit"
+                  type="number"
+                  min={MIN_LIMIT}
+                  max={MAX_LIMIT}
+                  value={limit}
+                  onChange={(e) => setLimit(e.target.value)}
+                  className="w-28"
+                />
+              </div>
+
+              <Button onClick={() => void handleApplyMatchLevel()} disabled={submitting || isBusy}>
+                {submitting ? "Đang bắt đầu..." : "Apply"}
+              </Button>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <Label>Loại dữ liệu</Label>
+              <div className="flex flex-wrap gap-x-5 gap-y-2">
+                {DATA_TYPE_OPTIONS.map((opt) => (
+                  <label key={opt.key} className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <Checkbox checked={dataTypes.includes(opt.key)} onCheckedChange={() => toggleDataType(opt.key)} />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Mùa giải &ldquo;hiện tại&rdquo; thường CHƯA có trận đấu xong — mùa đã kết thúc (không
+              đánh dấu hiện tại) mới thường có trận cần scrape.
+            </p>
+          </TabsContent>
+
+          <TabsContent value="season-stats" className="flex flex-col gap-3 pt-3">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              Lấy chỉ số nâng cao (rating/xG/xA/thẻ vàng-đỏ/tackles/...) cho MỌI cầu thủ lọt top-50
+              ít nhất 1 trong 34 chỉ số của mùa giải đã chọn — 1 lần fetch cho cả giải, không theo
+              từng trận nên không cần chọn Limit.
+            </p>
+            <div>
+              <Button onClick={() => void handleApplySeasonStats()} disabled={submitting || isBusy}>
+                {submitting ? "Đang bắt đầu..." : "Apply"}
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
 
         {submitError ? <p className="text-sm text-red-600 dark:text-red-400">{submitError}</p> : null}
 
@@ -347,7 +399,9 @@ export default function AdminScraperPage() {
             {run.ingestSummary ? (
               <span>
                 {/* Chỉ hiện loại > 0 — run chỉ chọn 1-2 loại data thì các loại còn lại luôn = 0,
-                    không cần liệt kê hết 9 loại mỗi lần. */}
+                    không cần liệt kê hết 10 loại mỗi lần. `unmatchedPlayers` có thể undefined nếu
+                    run CHỈ chọn playerSeasonStats (pipeline match-level không chạy) — optional
+                    chaining, không giả định luôn có mặt. */}
                 Đã ghi:{" "}
                 {[
                   [run.ingestSummary.eventsCreated, "event"],
@@ -360,12 +414,16 @@ export default function AdminScraperPage() {
                   [run.ingestSummary.averagePositionsUpserted, "average position"],
                   [run.ingestSummary.momentumCreated, "momentum point"],
                   [run.ingestSummary.oddsUpserted, "odds market"],
+                  [run.ingestSummary.playerSeasonStatsUpserted, "player season stats"],
                 ]
                   .filter(([count]) => (count as number) > 0)
                   .map(([count, label]) => `${count} ${label}`)
                   .join(", ") || "không có gì mới"}
-                {run.ingestSummary.unmatchedPlayers.length > 0
+                {(run.ingestSummary.unmatchedPlayers?.length ?? 0) > 0
                   ? ` (${run.ingestSummary.unmatchedPlayers.length} cầu thủ không khớp được)`
+                  : ""}
+                {(run.ingestSummary.playerSeasonStatsUnmatchedPlayers?.length ?? 0) > 0
+                  ? ` (${run.ingestSummary.playerSeasonStatsUnmatchedPlayers!.length} player season stats không khớp được)`
                   : ""}
                 .
               </span>
@@ -391,7 +449,17 @@ export default function AdminScraperPage() {
                 },
                 { key: "competition", label: "Giải đấu", className: "w-36", render: (row) => row.competition.name },
                 { key: "season", label: "Mùa", className: "w-16", render: (row) => row.season.name },
-                { key: "requestedLimit", label: "Limit", className: "w-14" },
+                {
+                  key: "requestedLimit",
+                  label: "Limit",
+                  className: "w-14",
+                  // playerSeasonStats không dùng Limit — hiện "—" thay vì số giả (xem
+                  // PLAYER_SEASON_STATS_PLACEHOLDER_LIMIT) để không gây hiểu nhầm.
+                  render: (row) =>
+                    row.dataTypes.length === 1 && row.dataTypes[0] === PLAYER_SEASON_STATS_KEY
+                      ? "—"
+                      : row.requestedLimit,
+                },
                 {
                   key: "dataTypes",
                   label: "Loại data",
@@ -419,6 +487,7 @@ export default function AdminScraperPage() {
                       [row.ingestSummary.averagePositionsUpserted, "avg. position"],
                       [row.ingestSummary.momentumCreated, "momentum"],
                       [row.ingestSummary.oddsUpserted, "odds"],
+                      [row.ingestSummary.playerSeasonStatsUpserted, "season stats"],
                     ]
                       .filter(([count]) => (count as number) > 0)
                       .map(([count, label]) => `${count} ${label}`)

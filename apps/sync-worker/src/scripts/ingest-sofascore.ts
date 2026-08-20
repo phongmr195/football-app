@@ -32,9 +32,14 @@ async function main() {
   console.log(`INGEST_SUMMARY_JSON ${JSON.stringify(summary)}`);
 }
 
+// `process.exitCode` (KHÔNG `process.exit()`) — xem comment tương tự ở
+// ingest-player-season-stats.ts (cùng bug class: process.exit() có thể cắt cụt
+// console.log("INGEST_SUMMARY_JSON ...") khi output lớn chưa flush hết ra pipe).
 main()
-  .then(() => process.exit(0))
+  .then(() => {
+    process.exitCode = 0;
+  })
   .catch((err) => {
     console.error("ingest-sofascore failed:", err);
-    process.exit(1);
+    process.exitCode = 1;
   });

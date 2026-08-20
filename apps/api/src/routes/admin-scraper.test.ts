@@ -251,6 +251,26 @@ describe("POST /admin/scraper-runs", () => {
     const body = (await res.json()) as { dataTypes: string[] };
     expect(body.dataTypes).toEqual(["shotmap", "commentary"]);
   });
+
+  it("201 với dataTypes chỉ chọn playerSeasonStats (loại season-level, không cần match-level nào)", async () => {
+    const admin = await seedAdmin();
+    const token = signAdminToken(admin.id);
+    const { season } = await getPremierLeagueSeason();
+
+    const res = await app.request("/admin/scraper-runs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        competitionKey: "premier-league",
+        seasonId: season.id,
+        limit: 20,
+        dataTypes: ["playerSeasonStats"],
+      }),
+    });
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { dataTypes: string[] };
+    expect(body.dataTypes).toEqual(["playerSeasonStats"]);
+  });
 });
 
 describe("GET /admin/scraper-runs", () => {

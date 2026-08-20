@@ -341,6 +341,22 @@ model PlayerStatistics {
   yellowCards    Int     @default(0)
   redCards       Int     @default(0)
   minutesPlayed  Int     @default(0)
+  // Field nâng cao (2026-08-20) — chỉ Sofascore's season top-players điền được (football-data.org's
+  // top-scorers không có), xem apps/sync-worker/src/ingest-player-season-stats.ts. Nullable vì
+  // KHÔNG phải cầu thủ nào cũng lọt top-50 mỗi category (xem CLAUDE.md § Scraper) — thiếu field
+  // nghĩa là "không có data", KHÔNG phải "giá trị = 0" (khác appearances/goals/assists/...ở trên,
+  // vốn @default(0) vì luôn tính được từ football-data.org's top-scorers list nếu có row).
+  rating             Float?
+  expectedGoals      Float?
+  expectedAssists    Float?
+  tackles            Int?
+  interceptions      Int?
+  keyPasses          Int?
+  successfulDribbles Int?
+  kilometersCovered  Float?
+  topSpeed           Float?
+  saves              Int?
+  cleanSheet         Int?
   raw            Json?
 
   @@unique([playerId, seasonId])

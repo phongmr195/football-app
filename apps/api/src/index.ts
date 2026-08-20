@@ -1,3 +1,4 @@
+import "./load-env";
 import type { Server as HttpServer } from "node:http";
 import { serve } from "@hono/node-server";
 import { app } from "./app";

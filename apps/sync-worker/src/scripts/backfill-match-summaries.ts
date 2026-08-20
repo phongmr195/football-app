@@ -54,9 +54,13 @@ async function main() {
   console.log("backfill-match-summaries: xong.");
 }
 
+// `process.exitCode` (KHÔNG `process.exit()`) — xem comment ở
+// apps/sync-worker/src/scripts/ingest-player-season-stats.ts (cùng bug class).
 main()
-  .then(() => process.exit(0))
+  .then(() => {
+    process.exitCode = 0;
+  })
   .catch((err) => {
     console.error("backfill-match-summaries failed:", err);
-    process.exit(1);
+    process.exitCode = 1;
   });

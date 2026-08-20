@@ -38,21 +38,26 @@ export const requireAdminSession: MiddlewareHandler = createMiddleware(async (c,
     return c.json({ error: "missing bearer token" }, 401);
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, getAdminJwtSecret());
-    if (typeof decoded === "string" || !decoded.sub) {
-      return c.json({ error: "invalid token" }, 401);
-    }
-
-    const adminUser = await prisma.adminUser.findUnique({ where: { id: decoded.sub } });
-    if (!adminUser) {
-      return c.json({ error: "invalid token" }, 401);
-    }
-
-    c.set("adminUserId", adminUser.id);
+    decoded = jwt.verify(token, getAdminJwtSecret());
   } catch {
     return c.json({ error: "invalid token" }, 401);
   }
+  if (typeof decoded === "string" || !decoded.sub) {
+    return c.json({ error: "invalid token" }, 401);
+  }
+
+  // Lỗi TỪ ĐÂY (DB) không liên quan gì tới việc JWT có hợp lệ hay không — để throw ra ngoài
+  // thay vì báo nhầm "invalid token" 401, cùng lý do requireAuth (middleware/auth.ts) — bug thật
+  // đã gặp (2026-08-20): native Postgres giành mất port 5432 khỏi Docker, mọi request tưởng
+  // "token sai" trong lúc DB đang trỏ sai (xem CLAUDE.md § Docker).
+  const adminUser = await prisma.adminUser.findUnique({ where: { id: decoded.sub } });
+  if (!adminUser) {
+    return c.json({ error: "invalid token" }, 401);
+  }
+
+  c.set("adminUserId", adminUser.id);
 
   await next();
 });

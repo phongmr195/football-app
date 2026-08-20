@@ -386,4 +386,19 @@ export interface PlayerStatistics {
   yellowCards: number;
   redCards: number;
   minutesPlayed: number;
+  /** Chỉ Sofascore's season top-players điền được (football-data.org's top-scorers không có) —
+   * `rating !== null` là dấu hiệu ĐÁNG TIN CẬY nhất để biết row này đã được Sofascore enrich hay
+   * chưa (yellowCards/redCards có @default(0) nên không tự phân biệt được "0 thẻ thật" với "chưa
+   * có data" — xem apps/sync-worker/src/ingest-player-season-stats.ts). */
+  rating: number | null;
+  expectedGoals: number | null;
+  expectedAssists: number | null;
+  tackles: number | null;
+  interceptions: number | null;
+  keyPasses: number | null;
+  successfulDribbles: number | null;
+  kilometersCovered: number | null;
+  topSpeed: number | null;
+  saves: number | null;
+  cleanSheet: number | null;
 }

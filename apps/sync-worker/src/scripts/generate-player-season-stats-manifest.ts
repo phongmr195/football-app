@@ -1,17 +1,17 @@
 /**
- * Sinh manifest cho apps/scraper-sofascore/backfill-roster.py — chạy:
- *   pnpm --filter @football-app/sync-worker generate-roster-backfill-manifest -- \
+ * Sinh manifest cho apps/scraper-sofascore/scrape-player-season-stats.py — chạy:
+ *   pnpm --filter @football-app/sync-worker generate-player-season-stats-manifest -- \
  *     --competition-id id --season-id id --sofascore-key key --sofascore-season str [--out path]
  *
- * Chỉ chọn team CÓ THAM GIA competition/season này (qua Match) và roster ĐANG RỖNG (0 player) —
- * đây là gap-fill cho case football-data.org 403 khi lấy squad (team đã rời giải free-tier "hiện
- * tại" — verify thật 2026-08-19: Girona FC/RCD Mallorca/Real Oviedo, xem CLAUDE.md § Scraper),
- * KHÔNG phải nguồn thay thế football-data.org cho team đã có data.
+ * KHÁC generate-sofascore-manifest.ts (theo TỪNG match) — đây là 1 lần fetch DUY NHẤT cho cả
+ * competition/season (Sofascore's /unique-tournament/{id}/season/{id}/top-players/overall, xem
+ * CLAUDE.md § Scraper), nên cần roster ĐẦY ĐỦ CỦA MỌI team (không chỉ team roster rỗng như
+ * generate-roster-backfill-manifest.ts) để so khớp tên cầu thủ theo đúng team Sofascore trả về.
  */
 import { prisma } from "@football-app/database";
 import { writeFileSync } from "node:fs";
 
-const DEFAULT_OUT = "roster-manifest.json";
+const DEFAULT_OUT = "player-season-stats-manifest.json";
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -54,17 +54,19 @@ async function main() {
     teamsById.set(m.awayTeamId, m.awayTeam.name);
   }
 
-  const emptyTeams: { ourTeamId: string; teamName: string }[] = [];
-  for (const [id, name] of teamsById) {
-    const count = await prisma.player.count({ where: { teamId: id } });
-    if (count === 0) emptyTeams.push({ ourTeamId: id, teamName: name });
-  }
+  const teams = await Promise.all(
+    [...teamsById].map(async ([id, name]) => ({
+      teamId: id,
+      teamName: name,
+      roster: await prisma.player.findMany({ where: { teamId: id }, select: { id: true, name: true } }),
+    })),
+  );
 
-  console.log(`Tổng ${teamsById.size} team trong competition/season này, ${emptyTeams.length} team roster rỗng.`);
+  console.log(`Sinh manifest cho ${teams.length} team (season ${seasonId}).`);
 
-  const manifest = { competitionKey: sofascoreKey, season: sofascoreSeason, teams: emptyTeams };
+  const manifest = { competitionKey: sofascoreKey, season: sofascoreSeason, seasonId, teams };
   writeFileSync(out, JSON.stringify(manifest, null, 2));
-  console.log(`Đã ghi ${out} (${emptyTeams.length} team).`);
+  console.log(`Đã ghi ${out}.`);
 }
 
 // `process.exitCode` (KHÔNG `process.exit()`) — xem comment ở
@@ -74,6 +76,6 @@ main()
     process.exitCode = 0;
   })
   .catch((err) => {
-    console.error("generate-roster-backfill-manifest failed:", err);
+    console.error("generate-player-season-stats-manifest failed:", err);
     process.exitCode = 1;
   });
