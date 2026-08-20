@@ -48,10 +48,15 @@ export function MultiCombobox({
 }: MultiComboboxProps) {
   const [open, setOpen] = useState(false);
   const [inputValue, setInputValue] = useState(search);
-
-  useEffect(() => {
+  // Đồng bộ lại khi `search` bị đổi TỪ BÊN NGOÀI (vd reset khi season đổi) — cập nhật NGAY LÚC
+  // RENDER (KHÔNG qua useEffect, tránh setState-trong-effect gây thêm 1 vòng render thừa), theo
+  // đúng pattern React khuyến nghị cho "adjust state when a prop changes"
+  // (react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes).
+  const [prevSearch, setPrevSearch] = useState(search);
+  if (search !== prevSearch) {
+    setPrevSearch(search);
     setInputValue(search);
-  }, [search]);
+  }
 
   useEffect(() => {
     const timeout = setTimeout(() => {
