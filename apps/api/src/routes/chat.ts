@@ -25,8 +25,37 @@ function estimateCostUsd(model: string, tokensInput: number, tokensOutput: numbe
 // User-triggered, on-demand (khác ai_match_summary/ai_player_summary — job hệ thống backfill
 // trước) — bắt buộc đồng bộ trong request có auth, giống player-compare. AiUsageLog consumer thứ
 // 2 (sau player_compare) — cùng pattern cap theo user.
-const DAILY_CAP = 30;
+const DEFAULT_DAILY_CAP = 30;
 const HISTORY_TURNS = 10;
+
+// AppConfig (packages/database/prisma/schema.prisma) đã có sẵn CRUD đầy đủ qua /admin/config
+// (apps/web/src/app/admin/config/page.tsx) từ ROADMAP Phase 4, nhưng CHƯA có consumer thật nào đọc
+// nó lúc runtime — đây là consumer ĐẦU TIÊN. Admin tự đổi cap qua UI đó (sửa value của key này),
+// KHÔNG cần code mới cho UI. Lazy-provision (giống resolveOrCreateUserId ở auth.ts's
+// just-in-time provisioning) — row tự xuất hiện trong /admin/config từ lần chat đầu tiên sau khi
+// deploy, admin không cần biết trước key này tồn tại.
+export const DAILY_CAP_CONFIG_KEY = "chat_daily_cap";
+
+async function getDailyCap(): Promise<number> {
+  let config = await prisma.appConfig.findUnique({ where: { key: DAILY_CAP_CONFIG_KEY } });
+  if (!config) {
+    try {
+      config = await prisma.appConfig.create({
+        data: {
+          key: DAILY_CAP_CONFIG_KEY,
+          value: DEFAULT_DAILY_CAP,
+          description: "Số lượt chat AI tối đa mỗi user trong 24h — sửa value để đổi giới hạn.",
+        },
+      });
+    } catch {
+      // Race hiếm — 2 request đầu tiên cùng thấy null, cùng tạo, request thua vi phạm unique
+      // constraint trên key (PK) — fetch lại, chắc chắn request thắng đã tạo xong.
+      config = await prisma.appConfig.findUniqueOrThrow({ where: { key: DAILY_CAP_CONFIG_KEY } });
+    }
+  }
+  if (!config.isEnabled) return DEFAULT_DAILY_CAP;
+  return typeof config.value === "number" && config.value > 0 ? config.value : DEFAULT_DAILY_CAP;
+}
 
 const sendMessageBodySchema = z.object({
   sessionId: z.string().optional(),
@@ -51,12 +80,12 @@ export async function sendChatMessage(
   message: string,
   llmProvider: LlmProvider = createLlmProvider(),
 ): Promise<SendMessageResult> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [dailyCap, since] = [await getDailyCap(), new Date(Date.now() - 24 * 60 * 60 * 1000)];
   const usedToday = await prisma.aiUsageLog.count({
     where: { userId, feature: "chat", createdAt: { gte: since } },
   });
-  if (usedToday >= DAILY_CAP) {
-    return { status: 429, body: { error: "chat_limit_exceeded", limitPerDay: DAILY_CAP } };
+  if (usedToday >= dailyCap) {
+    return { status: 429, body: { error: "chat_limit_exceeded", limitPerDay: dailyCap } };
   }
 
   const resolvedSessionId = sessionId ?? randomUUID();
