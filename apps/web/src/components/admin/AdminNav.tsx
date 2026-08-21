@@ -7,6 +7,7 @@ import {
   Bell,
   CalendarClock,
   CalendarRange,
+  Coins,
   Download,
   Flag,
   Landmark,
@@ -36,6 +37,7 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/matches", label: "Trận đấu", icon: CalendarClock },
   { href: "/admin/config", label: "Cấu hình", icon: Settings },
   { href: "/admin/notifications", label: "Nhật ký thông báo", icon: Bell },
+  { href: "/admin/ai-usage-logs", label: "Nhật ký sử dụng AI", icon: Coins },
   { href: "/admin/scraper", label: "Scraper dữ liệu", icon: Download },
 ];
 
