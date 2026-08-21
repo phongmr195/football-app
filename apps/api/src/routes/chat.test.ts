@@ -2,7 +2,7 @@ import type { LlmProvider } from "@football-app/ai-provider";
 import { prisma } from "@football-app/database";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../app";
-import { sendChatMessage } from "./chat";
+import { DAILY_CAP_CONFIG_KEY, sendChatMessage } from "./chat";
 
 // requireAuth gọi getFirebaseAuth().verifyIdToken(token) — mock "firebase-admin/auth" cùng pattern
 // devices.test.ts/player-compare.test.ts. 2 token khác nhau (khác player-compare.test.ts chỉ cần
@@ -32,6 +32,18 @@ vi.mock("../ai-provider", () => ({
       tokensInput: 100,
       tokensOutput: 20,
     }),
+  }),
+}));
+
+// buildChatContext() (chat-retrieval.ts) giờ có vectorFallback() khi ILIKE không khớp gì — message
+// test "Xin chào" không khớp team/player nào cả nên SẼ rơi vào fallback, gọi embed() thật qua
+// createEmbeddingProvider() mặc định nếu không mock. Cùng lý do/pattern mock "../ai-provider" ở
+// trên — test DB không có dòng embeddings nào của các test này nên fallback trả rỗng dù mock trả
+// vector gì, mock chỉ để chặn network call thật.
+vi.mock("../embedding-provider", () => ({
+  createEmbeddingProvider: () => ({
+    providerName: "fake",
+    embed: vi.fn().mockResolvedValue({ embedding: new Array(768).fill(0), model: "fake-embedding-model" }),
   }),
 }));
 
@@ -86,6 +98,9 @@ async function seedTeamWithSummary(name: string) {
 }
 
 async function cleanupTestData() {
+  // Safety net cho trường hợp 1 test set chat_daily_cap rồi crash trước khi chạy được finally của
+  // nó — không để giá trị test (vd 2) rò rỉ ra ảnh hưởng cap thật của DB đang chạy test suite.
+  await prisma.appConfig.deleteMany({ where: { key: DAILY_CAP_CONFIG_KEY } });
   await prisma.chatHistory.deleteMany({ where: { user: { firebaseUid: { in: [FIREBASE_UID_A, FIREBASE_UID_B] } } } });
   await prisma.aiUsageLog.deleteMany({ where: { user: { firebaseUid: { in: [FIREBASE_UID_A, FIREBASE_UID_B] } } } });
   await prisma.match.deleteMany({ where: { competition: { externalRef: { path: ["provider"], equals: PROVIDER } } } });
@@ -115,6 +130,54 @@ describe("sendChatMessage", () => {
     expect(llmProvider.generateText).not.toHaveBeenCalled();
     const messages = await prisma.chatHistory.findMany({ where: { userId: user.id } });
     expect(messages).toHaveLength(0);
+  });
+
+  it("cap đọc từ AppConfig (chat_daily_cap) nếu admin đã set, không dùng mặc định 30", async () => {
+    // AppConfig.key là global, KHÔNG scoped theo test user (khác cleanupTestData) — phải tự dọn
+    // trong try/finally để không làm lệch cap thật của DB dev sau khi test này chạy xong.
+    const user = await seedUser(FIREBASE_UID_A, "chat-test-a@example.com");
+    await prisma.aiUsageLog.createMany({
+      data: Array.from({ length: 2 }, () => ({ userId: user.id, feature: "chat", tokensInput: 10, tokensOutput: 10, costUsd: 0 })),
+    });
+    await prisma.appConfig.upsert({
+      where: { key: DAILY_CAP_CONFIG_KEY },
+      create: { key: DAILY_CAP_CONFIG_KEY, value: 2 },
+      update: { value: 2 },
+    });
+
+    try {
+      const llmProvider = makeFakeLlmProvider();
+      const result = await sendChatMessage(user.id, undefined, "Xin chào", llmProvider);
+
+      expect(result.status).toBe(429);
+      if (result.status === 429) {
+        expect(result.body.limitPerDay).toBe(2);
+      }
+      expect(llmProvider.generateText).not.toHaveBeenCalled();
+    } finally {
+      await prisma.appConfig.delete({ where: { key: DAILY_CAP_CONFIG_KEY } });
+    }
+  });
+
+  it("isEnabled=false ở AppConfig thì fallback về mặc định 30, không dùng value đã set", async () => {
+    const user = await seedUser(FIREBASE_UID_A, "chat-test-a@example.com");
+    await prisma.aiUsageLog.createMany({
+      data: Array.from({ length: 2 }, () => ({ userId: user.id, feature: "chat", tokensInput: 10, tokensOutput: 10, costUsd: 0 })),
+    });
+    await prisma.appConfig.upsert({
+      where: { key: DAILY_CAP_CONFIG_KEY },
+      create: { key: DAILY_CAP_CONFIG_KEY, value: 2, isEnabled: false },
+      update: { value: 2, isEnabled: false },
+    });
+
+    try {
+      const llmProvider = makeFakeLlmProvider();
+      const result = await sendChatMessage(user.id, undefined, "Xin chào", llmProvider);
+
+      expect(result.status).toBe(200);
+    } finally {
+      await prisma.appConfig.delete({ where: { key: DAILY_CAP_CONFIG_KEY } });
+    }
   });
 
   it("happy path — không truyền sessionId thì tự tạo mới, ghi đúng 2 dòng ChatHistory + 1 AiUsageLog", async () => {
