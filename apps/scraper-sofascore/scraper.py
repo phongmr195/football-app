@@ -121,6 +121,15 @@ TEAM_NAME_ALIASES = {
     "rcd mallorca": "mallorca",
     "real betis balompie": "real betis",
     "real sociedad de futbol": "real sociedad",
+    # 2 đội mới lên hạng La Liga mùa 2026-27 (verify thật 2026-08-21, đối chiếu
+    # soccerdata.Sofascore.read_schedule() thật cho "ESP-La Liga"/"2026-27" — bảng alias trên được
+    # xây cho mùa 2025-26, chưa có đội mới lên hạng nên 2 trận của 2 đội này (RC Deportivo La Coruña
+    # vs Elche CF 2026-08-17, Real Racing Club de Santander vs Villarreal CF 2026-08-16) không
+    # resolve được game_id, bị scraper.py bỏ qua lặng lẽ — verify: ScraperRun ghi matchesFound=7 nhưng
+    # matchesScraped=5, không có errorMessage vì scraper.py vẫn exit 0 (chỉ log stderr "KHÔNG tìm thấy
+    # game_id" per-match, không phải lỗi fatal):
+    "rc deportivo la coruna": "deportivo de a coruna",
+    "real racing club de santander": "real racing club",
     # Serie A
     "ac pisa 1909": "pisa",
     "acf fiorentina": "fiorentina",
