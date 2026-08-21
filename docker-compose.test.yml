@@ -2,7 +2,8 @@ name: football-app-test
 
 services:
   postgres-test:
-    image: postgres:15-alpine
+    # pgvector/pgvector:pg15 — xem comment tương tự ở docker-compose.yml's postgres service.
+    image: pgvector/pgvector:pg15
     environment:
       POSTGRES_DB: football_app_test
       POSTGRES_USER: postgres
@@ -24,4 +25,12 @@ services:
     depends_on:
       postgres-test:
         condition: service_healthy
-    command: sh -c "pnpm --filter @football-app/database exec prisma db push --skip-generate && pnpm test"
+    # `db push` build schema fresh từ schema.prisma, KHÔNG replay migration history — nên
+    # `CREATE EXTENSION vector` (không biểu diễn được qua schema.prisma DSL, xem migration
+    # add_pgvector_embedding_column) không tự chạy, cột `embedding vector(768)` sẽ lỗi "type vector
+    # does not exist" nếu thiếu bước bootstrap này trước `db push`.
+    command: >
+      sh -c "echo 'CREATE EXTENSION IF NOT EXISTS vector;' |
+      pnpm --filter @football-app/database exec prisma db execute --schema prisma/schema.prisma --stdin &&
+      pnpm --filter @football-app/database exec prisma db push --skip-generate &&
+      pnpm test"

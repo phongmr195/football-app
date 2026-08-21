@@ -8,6 +8,7 @@
     "backfill-match-summaries": "tsx src/scripts/backfill-match-summaries.ts",
     "backfill-player-summaries": "tsx src/scripts/backfill-player-summaries.ts",
     "backfill-player-comparisons": "tsx src/scripts/backfill-player-comparisons.ts",
+    "backfill-embeddings": "tsx src/scripts/backfill-embeddings.ts",
     "generate-sofascore-manifest": "tsx src/scripts/generate-sofascore-manifest.ts",
     "ingest-sofascore": "tsx src/scripts/ingest-sofascore.ts",
     "generate-roster-backfill-manifest": "tsx src/scripts/generate-roster-backfill-manifest.ts",

@@ -891,13 +891,24 @@ model PromptTemplate {
 
 model Embedding {
   id         String   @id @default(cuid())
-  sourceType String   // ví dụ "match_summary", "commentary"
+  sourceType String   // "match_summary" | "player_summary" | "player_comparison"
   sourceId   String
   content    String
   model      String
+  // vector(768) — Gemini gemini-embedding-001 với outputDimensionality=768 (Phase 1 chat RAG,
+  // 2026-08-21, xem packages/ai-provider/src/adapters/gemini-embedding.adapter.ts — model gốc
+  // "text-embedding-004" lúc thiết kế đã không còn khả dụng, verify thật đã đổi model). Xem
+  // docs/architecture/PROJECT_PLAN.md). Prisma không có cú pháp native cho kiểu `vector` (pgvector
+  // extension) — Unsupported(...) field này KHÔNG xuất hiện trong create/update/select types của
+  // Prisma Client, mọi đọc/ghi cột này đều qua $queryRaw/$executeRaw. Migration tay
+  // (packages/database/prisma/migrations/<timestamp>_add_pgvector_embedding_column) tạo
+  // CREATE EXTENSION vector + cột này, không biểu diễn được qua schema DSL.
+  embedding  Unsupported("vector(768)")?
   createdAt  DateTime @default(now())
 
-  @@index([sourceType, sourceId])
+  // Đổi từ @@index thường sang @@unique — cho phép backfill-embeddings.ts (apps/sync-worker)
+  // upsert an toàn theo (sourceType, sourceId), chạy lại không tạo dòng trùng.
+  @@unique([sourceType, sourceId])
   @@map("embeddings")
 }
 

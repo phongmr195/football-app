@@ -4,3 +4,6 @@ export * from "./fallback-provider";
 export * from "./adapters/anthropic.adapter";
 export * from "./adapters/gemini.adapter";
 export * from "./adapters/groq.adapter";
+export * from "./embedding-types";
+export * from "./embedding-provider.interface";
+export * from "./adapters/gemini-embedding.adapter";

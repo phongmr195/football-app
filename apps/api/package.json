@@ -9,7 +9,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
     "test": "vitest run --passWithNoTests",
-    "create-admin": "tsx src/scripts/create-admin.ts"
+    "create-admin": "tsx src/scripts/create-admin.ts",
+    "compare-retrieval": "tsx src/scripts/compare-retrieval.ts"
   },
   "dependencies": {
     "@football-app/ai-provider": "workspace:*",

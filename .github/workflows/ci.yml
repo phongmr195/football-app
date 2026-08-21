@@ -13,7 +13,8 @@ jobs:
       # sync-catalog.test.ts chạy against Postgres thật (xem CLAUDE.md § Docker) — cần service
       # tương đương ở CI, không mock Prisma.
       postgres:
-        image: postgres:15-alpine
+        # pgvector/pgvector:pg15 — xem comment tương tự ở docker-compose.yml's postgres service.
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_DB: football_app
           POSTGRES_USER: postgres

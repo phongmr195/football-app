@@ -3,7 +3,11 @@ name: football-app
 services:
   # ---- data ----
   postgres:
-    image: postgres:15-alpine
+    # pgvector/pgvector:pg15 — built FROM official postgres:15 (Debian, không phải Alpine — image
+    # nặng hơn 1 chút, đổi lấy pgvector extension bundle sẵn) — cùng env var/entrypoint/healthcheck
+    # convention, drop-in an toàn. Đổi 2026-08-21 để dùng pgvector cho Knowledge corpus (chat RAG
+    # Phase 1) — xem docs/architecture/PROJECT_PLAN.md.
+    image: pgvector/pgvector:pg15
     restart: unless-stopped
     environment:
       POSTGRES_DB: football_app
