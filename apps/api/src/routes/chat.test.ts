@@ -35,6 +35,18 @@ vi.mock("../ai-provider", () => ({
   }),
 }));
 
+// buildChatContext() (chat-retrieval.ts) giờ có vectorFallback() khi ILIKE không khớp gì — message
+// test "Xin chào" không khớp team/player nào cả nên SẼ rơi vào fallback, gọi embed() thật qua
+// createEmbeddingProvider() mặc định nếu không mock. Cùng lý do/pattern mock "../ai-provider" ở
+// trên — test DB không có dòng embeddings nào của các test này nên fallback trả rỗng dù mock trả
+// vector gì, mock chỉ để chặn network call thật.
+vi.mock("../embedding-provider", () => ({
+  createEmbeddingProvider: () => ({
+    providerName: "fake",
+    embed: vi.fn().mockResolvedValue({ embedding: new Array(768).fill(0), model: "fake-embedding-model" }),
+  }),
+}));
+
 const PROVIDER = "chat-test-provider";
 const ref = (id: string) => ({ provider: PROVIDER, id });
 
