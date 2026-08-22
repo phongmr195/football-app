@@ -25,11 +25,11 @@ const COMPETITION_OPTIONS = [
   { key: "ligue-1", label: "Ligue 1" },
 ];
 
-// 9 loại data MATCH-LEVEL khớp SCRAPER_DATA_TYPES (apps/api/src/scraper-competitions.ts) —
-// duplicate label ở đây thay vì gọi thêm 1 endpoint riêng, cùng convention COMPETITION_OPTIONS
-// phía trên. KHÔNG gồm "playerSeasonStats" — loại đó SEASON-level (1 lần fetch/mùa, không theo
-// từng trận, không cần Limit) nên tách hẳn thành tab riêng bên dưới, không lẫn vào checkbox list
-// này (tránh admin tưởng nó cũng theo Limit/theo trận như 9 loại còn lại).
+// 8 loại data MATCH-LEVEL "hậu trận" khớp SCRAPER_DATA_TYPES (apps/api/src/scraper-competitions.ts)
+// — duplicate label ở đây thay vì gọi thêm 1 endpoint riêng, cùng convention COMPETITION_OPTIONS
+// phía trên. KHÔNG gồm "playerSeasonStats" (SEASON-level) hay "odds" (tách tab riêng bên dưới —
+// xem ODDS_KEY) — cả 2 đều tránh lẫn vào checkbox list này vì khác hẳn 8 loại còn lại về ngữ
+// nghĩa Limit/trạng thái match cần thiết.
 const DATA_TYPE_OPTIONS = [
   { key: "events", label: "Events (diễn biến)" },
   { key: "lineups", label: "Lineups + Ratings (đội hình)" },
@@ -39,7 +39,6 @@ const DATA_TYPE_OPTIONS = [
   { key: "highlights", label: "Highlights (link video)" },
   { key: "averagePositions", label: "Average positions (vị trí trung bình)" },
   { key: "momentum", label: "Momentum graph (biểu đồ áp lực trận)" },
-  { key: "odds", label: "Odds (tỉ lệ cược — admin-only)" },
 ];
 const DEFAULT_DATA_TYPES = ["events", "lineups", "statistics"];
 
@@ -48,6 +47,13 @@ const DEFAULT_DATA_TYPES = ["events", "lineups", "statistics"];
 // dataTypes) nhưng loại này KHÔNG dùng tới giá trị này — gửi hằng số cố định, không hỏi admin.
 const PLAYER_SEASON_STATS_KEY = "playerSeasonStats";
 const PLAYER_SEASON_STATS_PLACEHOLDER_LIMIT = 10;
+
+// Tab riêng (2026-08-22) — KHÁC 8 loại "hậu trận" ở chỗ nhắm tới match SCHEDULED/LIVE (sắp đá/đang
+// đá), không phải FINISHED (xem generate-sofascore-manifest.ts's isOddsOnly — backend CHỈ áp dụng
+// nhánh "sắp diễn ra" khi dataTypes gửi lên là ĐÚNG 1 phần tử "odds" — tách hẳn tab để không còn
+// cách nào lẫn odds vào 1 request cùng loại khác qua UI nữa, đúng phản hồi admin). Vẫn per-match
+// (khác playerSeasonStats) nên vẫn cần Limit riêng.
+const ODDS_KEY = "odds";
 
 const DEFAULT_LIMIT = 50;
 const MIN_LIMIT = 10;
@@ -143,12 +149,14 @@ function TruncatedListCell({ text }: { text: string }) {
 
 /**
  * Trang admin trigger pipeline scrape Sofascore (trước đó chỉ chạy tay 3 bước CLI, xem
- * apps/scraper-sofascore) — 2 tab tách theo loại pipeline (2026-08-20): "Scrape theo trận" (9
- * loại match-level, cần Limit) và "Player season stats" (season-level, 1 lần fetch/mùa, không
- * cần Limit — xem scraper-orchestrator.ts's runPlayerSeasonStatsPipeline()). Cả 2 tab dùng chung
- * giải đấu/mùa giải đã chọn, cùng gọi POST /admin/scraper-runs (apps/api spawn subprocess, không
- * block response), rồi poll GET /admin/scraper-runs/:id mỗi 5s trong lúc PENDING/RUNNING, đúng
- * pattern use-live-match.ts's refetchInterval.
+ * apps/scraper-sofascore) — 3 tab tách theo loại pipeline: "Scrape theo trận" (8 loại match-level
+ * hậu trận, cần Limit, nhắm match FINISHED), "Odds" (2026-08-22, per-match nhưng nhắm match
+ * SCHEDULED/LIVE — xem generate-sofascore-manifest.ts's isOddsOnly), và "Player season stats"
+ * (season-level, 1 lần fetch/mùa, không cần Limit — xem scraper-orchestrator.ts's
+ * runPlayerSeasonStatsPipeline()). Cả 3 tab dùng chung giải đấu/mùa giải đã chọn, cùng gọi POST
+ * /admin/scraper-runs (apps/api spawn subprocess, không block response), rồi poll GET
+ * /admin/scraper-runs/:id mỗi 5s trong lúc PENDING/RUNNING, đúng pattern use-live-match.ts's
+ * refetchInterval.
  */
 export default function AdminScraperPage() {
   const { token } = useAdminAuth();
@@ -157,6 +165,7 @@ export default function AdminScraperPage() {
   const [seasonId, setSeasonId] = useState<string>("");
   const [limit, setLimit] = useState(String(DEFAULT_LIMIT));
   const [dataTypes, setDataTypes] = useState<string[]>(DEFAULT_DATA_TYPES);
+  const [oddsLimit, setOddsLimit] = useState(String(DEFAULT_LIMIT));
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -249,6 +258,10 @@ export default function AdminScraperPage() {
     await submitRun([PLAYER_SEASON_STATS_KEY], PLAYER_SEASON_STATS_PLACEHOLDER_LIMIT);
   }
 
+  async function handleApplyOdds() {
+    await submitRun([ODDS_KEY], Number(oddsLimit));
+  }
+
   const run = activeRunQuery.data;
   const isBusy = run?.status === "PENDING" || run?.status === "RUNNING";
 
@@ -315,12 +328,14 @@ export default function AdminScraperPage() {
           </div>
         </div>
 
-        {/* 2 tab tách hẳn — "Player season stats" chạy độc lập (season-level, 1 lần fetch/mùa,
-            KHÔNG theo Limit/theo trận) khỏi "Scrape theo trận" (9 loại match-level còn lại, luôn
-            cần Limit). Giải đấu/mùa giải ở trên dùng CHUNG cho cả 2 tab. */}
+        {/* 3 tab tách hẳn — "Player season stats" chạy độc lập (season-level, 1 lần fetch/mùa,
+            KHÔNG theo Limit/theo trận), "Odds" nhắm match SCHEDULED/LIVE (sắp đá/đang đá, khác 8
+            loại "hậu trận" còn lại nhắm FINISHED) — cả 2 tách khỏi "Scrape theo trận" để không còn
+            cách nào lẫn vào cùng 1 request qua UI. Giải đấu/mùa giải ở trên dùng CHUNG cho cả 3 tab. */}
         <Tabs defaultValue="match-level">
           <TabsList>
             <TabsTrigger value="match-level">Scrape theo trận</TabsTrigger>
+            <TabsTrigger value="odds">Odds (tỉ lệ cược)</TabsTrigger>
             <TabsTrigger value="season-stats">Player season stats</TabsTrigger>
           </TabsList>
 
@@ -359,6 +374,33 @@ export default function AdminScraperPage() {
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
               Mùa giải &ldquo;hiện tại&rdquo; thường CHƯA có trận đấu xong — mùa đã kết thúc (không
               đánh dấu hiện tại) mới thường có trận cần scrape.
+            </p>
+          </TabsContent>
+
+          <TabsContent value="odds" className="flex flex-col gap-3 pt-3">
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="odds-limit">Số trận (10-100)</Label>
+                <Input
+                  id="odds-limit"
+                  type="number"
+                  min={MIN_LIMIT}
+                  max={MAX_LIMIT}
+                  value={oddsLimit}
+                  onChange={(e) => setOddsLimit(e.target.value)}
+                  className="w-28"
+                />
+              </div>
+
+              <Button onClick={() => void handleApplyOdds()} disabled={submitting || isBusy}>
+                {submitting ? "Đang bắt đầu..." : "Apply"}
+              </Button>
+            </div>
+
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Lấy tỉ lệ cược cho các trận SẮP diễn ra hoặc đang LIVE (mùa hiện tại) — không cần đợi
+              kết thúc. Có thể chạy lại nhiều lần để cập nhật tỉ lệ mới nhất, an toàn (upsert, không
+              tạo trùng).
             </p>
           </TabsContent>
 

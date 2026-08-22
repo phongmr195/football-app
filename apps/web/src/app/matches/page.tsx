@@ -5,6 +5,7 @@ import { Calendar, Clock } from "lucide-react";
 import { Badge, Card, Container, Pagination } from "@football-app/ui";
 import { apiGet, type ApiListResponse } from "@/lib/api-client";
 import { MatchFilters } from "@/components/MatchFilters";
+import { MatchOddsPreview } from "@/components/match/MatchOddsPreview";
 import {
   getFilterableCompetitions,
   pickDefaultCompetition,
@@ -231,9 +232,17 @@ export default async function MatchesPage({
                     </Link>
                   </div>
 
-                  <Link href={`/matches/${match.id}`} className="self-start">
-                    <Badge variant={variant}>{label}</Badge>
-                  </Link>
+                  <div className="flex items-center justify-between gap-2">
+                    <Link href={`/matches/${match.id}`} className="self-start">
+                      <Badge variant={variant}>{label}</Badge>
+                    </Link>
+                    {(match.status === "SCHEDULED" || match.status === "LIVE" || match.status === "HALFTIME") &&
+                    match.primaryOdds ? (
+                      <div className="min-w-0 flex-1">
+                        <MatchOddsPreview matchId={match.id} primaryOdds={match.primaryOdds} />
+                      </div>
+                    ) : null}
+                  </div>
                 </Card>
               </li>
             );

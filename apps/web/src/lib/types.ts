@@ -65,6 +65,12 @@ export interface MatchCompetition {
   externalRef: ExternalRef;
 }
 
+export interface PrimaryOdds {
+  home: number;
+  draw: number;
+  away: number;
+}
+
 export interface Match {
   id: string;
   competitionId: string;
@@ -78,6 +84,9 @@ export interface Match {
   status: MatchStatus;
   homeScore: number | null;
   awayScore: number | null;
+  // null khi chưa scrape odds cho match này, hoặc match đã FINISHED (loại khỏi batch tính ở
+  // apps/api's attachPrimaryOdds — xem apps/api/src/routes/matches.ts).
+  primaryOdds: PrimaryOdds | null;
 }
 
 export interface LiveMatchState {
@@ -176,6 +185,16 @@ export interface MatchStatisticSide {
 export interface MatchStatisticsResponse {
   home: MatchStatisticSide | null;
   away: MatchStatisticSide | null;
+}
+
+export interface MatchOddsItem {
+  sofascoreMarketId: number;
+  marketName: string;
+  raw: unknown;
+}
+
+export interface MatchOddsResponse {
+  items: MatchOddsItem[];
 }
 
 export interface Stadium {

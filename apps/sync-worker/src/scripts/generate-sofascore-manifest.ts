@@ -93,14 +93,27 @@ async function main() {
   // "Match cần scrape" = FINISHED VÀ thiếu data cho ÍT NHẤT 1 loại đang được yêu cầu (OR) — KHÔNG
   // cố định theo `events` như trước (bug thật nếu giữ nguyên: admin chỉ chọn lại "shotmap" cho
   // match ĐÃ có `events` từ lần chạy trước sẽ không bao giờ được chọn, dù chưa hề có MatchShot).
+  //
+  // Ngoại lệ: chọn ĐÚNG 1 loại "odds" — verify thật 2026-08-22 (gọi trực tiếp Sofascore's
+  // /event/{id}/odds/1/all cho 1 trận SCHEDULED thật) xác nhận odds pre-match có sẵn TRƯỚC khi đá,
+  // không cần đợi FINISHED. Khác 9 loại còn lại, KHÔNG lọc theo "thiếu data" (odds.none) — cho
+  // phép chạy lại nhiều lần để cập nhật tỉ lệ mới nhất, đúng ý định đã ghi sẵn ở
+  // ingest-sofascore.ts's odds upsert ("odds hợp lệ để UPDATE lại khi re-scrape"). Sort theo
+  // kickoffAt TĂNG dần (trận sắp đá sớm nhất trước) — ngược hướng "desc" (mới kết thúc trước) của
+  // nhánh FINISHED. Chỉ áp dụng khi CHỌN DUY NHẤT odds — chọn kèm loại khác vẫn giữ hành vi cũ
+  // (FINISHED-only), vì không có cách sort/limit kết hợp rõ nghĩa giữa 2 tập "sắp đá" và "mới đá
+  // xong" trong 1 query.
+  const isOddsOnly = dataTypes.length === 1 && dataTypes[0] === "odds";
   const matches = await prisma.match.findMany({
-    where: {
-      competitionId: competition.id,
-      seasonId: season.id,
-      status: "FINISHED",
-      OR: dataTypes.map((type) => ({ [NEEDS_SCRAPE_RELATION[type]!]: { none: {} } })),
-    },
-    orderBy: { kickoffAt: "desc" },
+    where: isOddsOnly
+      ? { competitionId: competition.id, seasonId: season.id, status: { in: ["SCHEDULED", "LIVE"] } }
+      : {
+          competitionId: competition.id,
+          seasonId: season.id,
+          status: "FINISHED",
+          OR: dataTypes.map((type) => ({ [NEEDS_SCRAPE_RELATION[type]!]: { none: {} } })),
+        },
+    orderBy: { kickoffAt: isOddsOnly ? "asc" : "desc" },
     take: limit,
     include: { homeTeam: { select: { id: true, name: true } }, awayTeam: { select: { id: true, name: true } } },
   });

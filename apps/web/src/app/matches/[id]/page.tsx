@@ -9,10 +9,17 @@ import { LiveMatchPanel } from "@/components/LiveMatchPanel";
 import { MatchDetailTabs } from "@/components/match/MatchDetailTabs";
 import { MatchEventsTimeline } from "@/components/match/MatchEventsTimeline";
 import { MatchLineups } from "@/components/match/MatchLineups";
+import { MatchOdds } from "@/components/match/MatchOdds";
 import { MatchPlayerRatings } from "@/components/match/MatchPlayerRatings";
 import { MatchStatisticsBars } from "@/components/match/MatchStatisticsBars";
 import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
-import type { MatchDetail, MatchEvent, MatchLineupsResponse, MatchStatisticsResponse } from "@/lib/types";
+import type {
+  MatchDetail,
+  MatchEvent,
+  MatchLineupsResponse,
+  MatchOddsResponse,
+  MatchStatisticsResponse,
+} from "@/lib/types";
 
 // A single match's data (score/status) is essentially frozen once FINISHED, so this stays
 // long-window ISR — same window as the list. Live matches are handled separately by
@@ -42,11 +49,16 @@ export default async function MatchDetailPage({
   // Chỉ có data cho match đã scrape (apps/scraper-sofascore, Premier League 2025-2026, chưa full
   // mùa) — 2 endpoint mới trả cấu trúc rỗng hợp lệ (không 404) khi chưa có, các component con tự
   // render empty-state. Fetch song song, không phụ thuộc nhau.
-  const [events, lineups, statistics] = await Promise.all([
+  const [events, lineups, statistics, odds] = await Promise.all([
     apiGet<{ items: MatchEvent[] }>(`/matches/${id}/events`),
     apiGet<MatchLineupsResponse>(`/matches/${id}/lineups`),
     apiGet<MatchStatisticsResponse>(`/matches/${id}/statistics`),
+    apiGet<MatchOddsResponse>(`/matches/${id}/odds`),
   ]);
+
+  // Odds hết ý nghĩa khi FINISHED (thị trường đã đóng) — chỉ hiện tab khi match còn SCHEDULED/LIVE
+  // VÀ thật sự có odds đã scrape, khác 4 slot còn lại (luôn hiện, tự render empty-state).
+  const showOdds = (match.status === "SCHEDULED" || match.status === "LIVE") && odds.items.length > 0;
 
   const { label, variant } = matchStatusMeta(match.status);
   const hasScore = match.homeScore !== null && match.awayScore !== null;
@@ -143,6 +155,7 @@ export default async function MatchDetailPage({
         lineupsSlot={<MatchLineups lineups={lineups} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />}
         ratingsSlot={<MatchPlayerRatings lineups={lineups} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />}
         statisticsSlot={<MatchStatisticsBars statistics={statistics} />}
+        oddsSlot={showOdds ? <MatchOdds odds={odds} /> : undefined}
       />
 
       <LiveMatchPanel matchId={match.id} />
