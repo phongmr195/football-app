@@ -55,7 +55,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: pnpm
 
       - name: Install dependencies
@@ -80,8 +80,10 @@ jobs:
         run: pnpm test
 
   secretlint:
-    # Job riêng vì @secretlint/secretlint-rule-preset-recommend yêu cầu Node >=22,
-    # cao hơn Node 20 job "build" đang dùng (khớp Docker base image node:20-alpine).
+    # Job riêng để chạy song song với "build" (không phải vì version — cả 2 job đều đã lên
+    # Node 24 sau khi Docker base image đổi từ node:20-alpine, xem apps/*/Dockerfile/
+    # Dockerfile.test — Node 24 thoả luôn @secretlint/secretlint-rule-preset-recommend's yêu cầu
+    # >=22, không còn là lý do tách job như trước nữa, nhưng vẫn giữ tách để CI nhanh hơn).
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
