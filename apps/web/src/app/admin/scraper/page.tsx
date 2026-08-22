@@ -41,7 +41,7 @@ const DATA_TYPE_OPTIONS = [
   { key: "momentum", label: "Momentum graph (biểu đồ áp lực trận)" },
   { key: "odds", label: "Odds (tỉ lệ cược — admin-only)" },
 ];
-const DEFAULT_DATA_TYPES = ["events", "lineups", "statistics"];
+const DEFAULT_DATA_TYPES = ["events", "lineups", "statistics", "shotmap", "highlights", "averagePositions", "momentum"];
 
 // Season-level, tab riêng — xem SCRAPER_DATA_TYPES's playerSeasonStats + scraper-orchestrator.ts's
 // runPlayerSeasonStatsPipeline(). Backend vẫn yêu cầu `limit` (Zod schema chung cho mọi

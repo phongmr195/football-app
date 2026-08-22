@@ -155,7 +155,7 @@ export default function AdminConfigPage() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="config-value">Value (JSON)</Label>
+                <Label htmlFor="config-value">Value or JSON</Label>
                 <Textarea
                   id="config-value"
                   value={valueText}
