@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
+import { MatchOddsPreview } from "@/components/match/MatchOddsPreview";
 import { competitionDisplayName, formatKickoffAt } from "@/lib/format";
 import type { Match } from "@/lib/types";
 
@@ -24,8 +25,8 @@ export function UpcomingMatchesBlock({ matches }: UpcomingMatchesBlockProps) {
   return (
     <div className="flex flex-col gap-2">
       {matches.map((match) => (
-        <Link key={match.id} href={`/matches/${match.id}`}>
-          <Card className="transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
+        <Card key={match.id} className="transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
+          <Link href={`/matches/${match.id}`} className="block">
             <CardContent className="flex items-center gap-3 px-4 py-3">
               <span className="w-24 shrink-0 text-xs text-zinc-500 dark:text-zinc-400">
                 {formatKickoffAt(match.kickoffAt)}
@@ -49,8 +50,13 @@ export function UpcomingMatchesBlock({ matches }: UpcomingMatchesBlockProps) {
                 {competitionDisplayName(match.competition)}
               </span>
             </CardContent>
-          </Card>
-        </Link>
+          </Link>
+          {match.status === "SCHEDULED" && match.primaryOdds ? (
+            <div className="px-4 pb-3">
+              <MatchOddsPreview matchId={match.id} primaryOdds={match.primaryOdds} />
+            </div>
+          ) : null}
+        </Card>
       ))}
     </div>
   );

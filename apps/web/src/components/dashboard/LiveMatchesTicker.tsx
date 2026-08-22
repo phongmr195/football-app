@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MatchOddsPreview } from "@/components/match/MatchOddsPreview";
 import { useLiveMatches } from "@/lib/use-live-match";
 
 /**
@@ -38,8 +39,8 @@ export function LiveMatchesTicker() {
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1">
         {matches.map((match) => (
-          <Link key={match.id} href={`/matches/${match.id}`} className="shrink-0">
-            <Card className="w-64 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
+          <Card key={match.id} className="w-64 shrink-0 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
+            <Link href={`/matches/${match.id}`} className="block">
               <CardContent className="flex flex-col gap-2 px-4 py-3">
                 <div className="flex items-center justify-between">
                   <Badge className="bg-red-500 text-white">
@@ -78,8 +79,13 @@ export function LiveMatchesTicker() {
                   </span>
                 </div>
               </CardContent>
-            </Card>
-          </Link>
+            </Link>
+            {match.primaryOdds ? (
+              <div className="px-4 pb-3">
+                <MatchOddsPreview matchId={match.id} primaryOdds={match.primaryOdds} />
+              </div>
+            ) : null}
+          </Card>
         ))}
       </div>
     </div>

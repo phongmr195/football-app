@@ -48,6 +48,72 @@ const teamSelect = { id: true, name: true, logoUrl: true } as const;
 const LIVE_MATCHES_CACHE_KEY = "matches:live";
 const LIVE_MATCHES_CACHE_TTL_SECONDS = 5;
 
+interface PrimaryOdds {
+  home: number;
+  draw: number;
+  away: number;
+}
+
+// "17/2" (Sofascore fractional/UK-style) -> decimal 9.5 (numerator/denominator + 1) — cùng công
+// thức đã dùng ở apps/web's MatchOdds.tsx. Duplicate có chủ đích qua ranh giới app (apps/web
+// hiện KHÔNG phụ thuộc packages/shared — thêm dependency mới chỉ cho 1 hàm ~10 dòng này tốn kém
+// hơn lợi ích, đúng nguyên tắc "duplicate nhỏ hơn coupling" đã áp dụng ở scraper-competitions.ts).
+function toDecimalOdds(fractionalValue: unknown): number | null {
+  if (typeof fractionalValue !== "string") return null;
+  const [numeratorStr, denominatorStr] = fractionalValue.split("/");
+  const numerator = Number(numeratorStr);
+  const denominator = Number(denominatorStr);
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator === 0) return null;
+  return Number((numerator / denominator + 1).toFixed(2));
+}
+
+// Tìm market "Full time"/1X2 (nếu có) trong list market của 1 match, trả về decimal odds
+// Home/Draw/Away — null nếu match chưa scrape odds hoặc thiếu đúng market này.
+function extractPrimaryOdds(oddsRows: { raw: unknown }[]): PrimaryOdds | null {
+  const primary = oddsRows.find((o) => {
+    const raw = o.raw as { marketGroup?: unknown; marketPeriod?: unknown };
+    return raw?.marketGroup === "1X2" && raw?.marketPeriod === "Full-time";
+  });
+  if (!primary) return null;
+
+  const raw = primary.raw as { choices?: unknown };
+  const choices = Array.isArray(raw.choices) ? (raw.choices as { name?: unknown; fractionalValue?: unknown }[]) : [];
+  const byName = new Map(choices.map((choice) => [choice.name, toDecimalOdds(choice.fractionalValue)]));
+  const home = byName.get("1");
+  const draw = byName.get("X");
+  const away = byName.get("2");
+  if (home == null || draw == null || away == null) return null;
+  return { home, draw, away };
+}
+
+// Batch 1 query duy nhất cho TOÀN BỘ match SCHEDULED/LIVE/HALFTIME trong 1 response (KHÔNG N+1
+// theo từng match) — dùng chung cho GET /matches và GET /matches/live. HALFTIME vẫn coi là "chưa
+// đóng market" (trận chưa kết thúc, chỉ tạm nghỉ) — GET /matches/live tự fetch cả HALFTIME nên
+// không nên âm thầm loại odds khỏi những match đó.
+async function attachPrimaryOdds<T extends { id: string; status: string }>(
+  matches: T[],
+): Promise<(T & { primaryOdds: PrimaryOdds | null })[]> {
+  const eligibleIds = matches
+    .filter((m) => m.status === "SCHEDULED" || m.status === "LIVE" || m.status === "HALFTIME")
+    .map((m) => m.id);
+  if (eligibleIds.length === 0) {
+    return matches.map((m) => ({ ...m, primaryOdds: null }));
+  }
+
+  const oddsRows = await prisma.matchOdds.findMany({
+    where: { matchId: { in: eligibleIds } },
+    select: { matchId: true, raw: true },
+  });
+  const oddsByMatchId = new Map<string, { raw: unknown }[]>();
+  for (const row of oddsRows) {
+    const list = oddsByMatchId.get(row.matchId) ?? [];
+    list.push(row);
+    oddsByMatchId.set(row.matchId, list);
+  }
+
+  return matches.map((m) => ({ ...m, primaryOdds: extractPrimaryOdds(oddsByMatchId.get(m.id) ?? []) }));
+}
+
 export const matchesRoute = new Hono()
   .get("/matches", zValidator("query", matchesQuerySchema), async (c) => {
     const { page, pageSize, competitionId, seasonId, status, teamIds, search, order } = c.req.valid("query");
@@ -76,7 +142,7 @@ export const matchesRoute = new Hono()
           : {},
       ],
     };
-    const [items, total] = await Promise.all([
+    const [rawItems, total] = await Promise.all([
       prisma.match.findMany({
         where,
         skip: (page - 1) * pageSize,
@@ -90,6 +156,7 @@ export const matchesRoute = new Hono()
       }),
       prisma.match.count({ where }),
     ]);
+    const items = await attachPrimaryOdds(rawItems);
     return c.json({ items, page, pageSize, total });
   })
   // IMPORTANT: "/matches/live" phải đăng ký TRƯỚC "/matches/:id" — nếu đảo thứ tự, route
@@ -99,7 +166,7 @@ export const matchesRoute = new Hono()
     const cached = await cacheGet<{ items: unknown[] }>(LIVE_MATCHES_CACHE_KEY);
     if (cached) return c.json(cached);
 
-    const items = await prisma.match.findMany({
+    const rawItems = await prisma.match.findMany({
       where: { status: { in: ["LIVE", "HALFTIME"] } },
       orderBy: { kickoffAt: "asc" },
       include: {
@@ -109,6 +176,7 @@ export const matchesRoute = new Hono()
         liveState: true,
       },
     });
+    const items = await attachPrimaryOdds(rawItems);
 
     const response = { items };
     await cacheSet(LIVE_MATCHES_CACHE_KEY, response, LIVE_MATCHES_CACHE_TTL_SECONDS);
@@ -252,5 +320,18 @@ export const matchesRoute = new Hono()
     return c.json({
       home: byTeamId.get(match.homeTeamId) ?? null,
       away: byTeamId.get(match.awayTeamId) ?? null,
+    });
+  })
+  // Odds trước đây admin-only (chỉ lưu DB, xem CLAUDE.md § Scraper) — public route đầu tiên đọc
+  // MatchOdds. KHÔNG lọc theo status ở server — chỉ nên hiển thị cho match SCHEDULED/LIVE (odds hết
+  // ý nghĩa khi FINISHED), nhưng đó là quyết định hiển thị của apps/web, không phải hợp đồng API.
+  .get("/matches/:id/odds", zValidator("param", z.object({ id: z.string() })), async (c) => {
+    const { id } = c.req.valid("param");
+    const match = await prisma.match.findUnique({ where: { id }, select: { id: true } });
+    if (!match) return c.json({ error: "not found" }, 404);
+
+    const odds = await prisma.matchOdds.findMany({ where: { matchId: id } });
+    return c.json({
+      items: odds.map((o) => ({ sofascoreMarketId: o.sofascoreMarketId, marketName: o.marketName, raw: o.raw })),
     });
   });
