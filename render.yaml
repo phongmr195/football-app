@@ -1,0 +1,32 @@
+# Render Blueprint cho apps/sync-worker's live-match poll loop (docker-compose.yml's
+# "sync-worker-live" service) — xem docs/ hoặc plan deploy cho lý do đầy đủ (Render free tier
+# CHỈ có Web Service miễn phí, KHÔNG có Background Worker free — nên khai báo type: web ở đây,
+# poll.ts tự mở 1 HTTP health server khi có PORT env var, hoàn toàn tách biệt khỏi poll loop
+# chính, chỉ để Render/keep-alive ping (vd UptimeRobot) có endpoint để gọi).
+#
+# KHÔNG deploy apps/api/apps/web/scraper qua file này — scraping chạy tay ở local (quyết định
+# đã chốt), apps/api/apps/web ngoài scope piece deploy đầu tiên này.
+#
+# Setup trên Render: "New" -> "Blueprint" -> chọn repo này -> Render tự đọc file này. Sau khi
+# tạo, vào service -> Environment, set 3 secret KHÔNG khai báo value ở đây (sync: false, xem
+# dưới): DATABASE_URL (connection string Neon), FOOTBALL_DATA_API_KEY (key thật). REDIS_URL
+# CHỦ Ý không khai báo — createPublisher() (apps/sync-worker/src/realtime.ts) tự no-op an toàn
+# khi thiếu, không cần Redis cho service này.
+services:
+  - type: web
+    name: football-app-sync-worker-live
+    runtime: docker
+    dockerfilePath: apps/sync-worker/Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/poll.js
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATA_PROVIDER
+        value: football-data
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false
+      - key: LIVE_POLL_INTERVAL_MS
+        value: "30000"
