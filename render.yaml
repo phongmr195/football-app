@@ -4,11 +4,15 @@
 # poll.ts tự mở 1 HTTP health server khi có PORT env var, hoàn toàn tách biệt khỏi poll loop
 # chính, chỉ để Render/keep-alive ping (vd UptimeRobot) có endpoint để gọi).
 #
-# KHÔNG deploy apps/api/apps/web/scraper qua file này — scraping chạy tay ở local (quyết định
-# đã chốt), apps/api/apps/web ngoài scope piece deploy đầu tiên này.
+# KHÔNG deploy apps/api/apps/web qua file này — apps/api/apps/web ngoài scope piece deploy đầu
+# tiên này. Scraping đầy đủ (9+1 loại data qua /admin/scraper) vẫn chạy tay ở local (quyết định
+# đã chốt) — CHỈ riêng odds cho match đang LIVE/HALFTIME được auto-fetch từ chính service này
+# (2026-08-22, xem apps/sync-worker/src/live-odds.ts + Dockerfile's Python/tls_requests bundle —
+# verify thật node:*-alpine KHÔNG chạy được lib native TLS này trên musl, phải đổi sang Debian
+# (node:24-slim) — riêng bản thân version 20->24 là nâng cấp EOL runtime, không liên quan musl).
 #
 # Setup trên Render: "New" -> "Blueprint" -> chọn repo này -> Render tự đọc file này. Sau khi
-# tạo, vào service -> Environment, set 3 secret KHÔNG khai báo value ở đây (sync: false, xem
+# tạo, vào service -> Environment, set 2 secret KHÔNG khai báo value ở đây (sync: false, xem
 # dưới): DATABASE_URL (connection string Neon), FOOTBALL_DATA_API_KEY (key thật). REDIS_URL
 # CHỦ Ý không khai báo — createPublisher() (apps/sync-worker/src/realtime.ts) tự no-op an toàn
 # khi thiếu, không cần Redis cho service này.
@@ -30,3 +34,5 @@ services:
         sync: false
       - key: LIVE_POLL_INTERVAL_MS
         value: "30000"
+      - key: LIVE_ODDS_ENABLED
+        value: "true"
