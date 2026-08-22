@@ -20,14 +20,6 @@ infrastructure/terraform/*.tfstate.backup
 infrastructure/terraform/.terraform.lock.hcl
 infrastructure/terraform/*.tfvars
 
-# Flutter (khi apps/mobile được thêm sau)
-**/*.iml
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-build/
-
 # Python (apps/scraper-sofascore — component Python đầu tiên, xem CLAUDE.md § Scraper)
 apps/scraper-sofascore/.venv/
 apps/scraper-sofascore/.cache/

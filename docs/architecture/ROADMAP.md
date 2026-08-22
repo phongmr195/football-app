@@ -4,7 +4,7 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 
 **Giả định:** team nhỏ (~1-3 người, có thể kiêm nhiệm web + backend), làm bán thời gian hoặc song song nhiều task. Nếu team lớn hơn, các track (Web / Backend / Infra) trong cùng phase có thể chạy song song thay vì tuần tự.
 
-> **Pivot (2026-08-07):** client chính chuyển từ Mobile (Flutter) sang **Web (Next.js)**. `apps/mobile` tạm pause — code giữ nguyên, không xoá. Từ Phase 1 trở đi, mục "Mobile" trong các phase cũ được đổi thành "Web". Xem chi tiết lý do ở [PROJECT_PLAN.md § 1 Pivot](./PROJECT_PLAN.md#pivot-web-trước-mobile-tạm-pause-2026-08-07). Trạng thái mobile lúc pause: xem [§ Mobile — tạm pause](#mobile--tạm-pause-trạng-thái-tại-thời-điểm-pause) ở cuối file.
+> **Pivot (2026-08-07):** client chính chuyển từ Mobile (Flutter) sang **Web (Next.js)**. `apps/mobile` tạm pause, sau đó xoá hẳn (2026-08-22) — không còn kế hoạch resume. Từ Phase 1 trở đi, mục "Mobile" trong các phase cũ được đổi thành "Web". Xem chi tiết lý do ở [PROJECT_PLAN.md § 1 Pivot](./PROJECT_PLAN.md#pivot-web-trước-mobile-tạm-pause-rồi-xoá-hẳn-2026-08-07-xoá-2026-08-22). Trạng thái mobile lúc pause: xem [§ Mobile](#mobile--tạm-pause-rồi-xoá-hẳn-2026-08-22) ở cuối file.
 
 ---
 
@@ -153,14 +153,13 @@ Roadmap theo phase, sắp xếp theo **thứ tự phụ thuộc** (phase sau c�
 
 **Exit criteria:** web live trên domain thật, có dashboard theo dõi chi phí + lỗi, có cơ chế tắt tính năng khẩn cấp.
 
-*(App Store/Play Store submission dời sang khi resume mobile — xem mục Mobile pause.)*
+*(App Store/Play Store submission không còn trong roadmap — `apps/mobile` đã xoá hẳn, xem § Mobile cuối file.)*
 
 ---
 
 ## Phase 7 — Post-launch Growth (Size: XL, mở — làm theo feedback thật)
 
 Không chốt chi tiết trước launch vì phụ thuộc feedback người dùng thật. Các hướng dự kiến:
-- **Resume `apps/mobile`** — ưu tiên cao nếu web đã có traction, vì backend/data/AI đã sẵn, chỉ cần build lại UI (Firebase Auth mobile đã xong từ trước khi pause)
 - Personalization sâu hơn (feed theo hành vi xem)
 - Mở rộng `apps/admin` (đã build ở Phase 4) — thêm tính năng theo nhu cầu vận hành thật sau launch, ví dụ audit log, bulk edit, dashboard chi phí AI/data provider
 - Mở rộng coverage giải đấu / nâng cấp data provider (Sportradar/Opta) nếu doanh thu cho phép
@@ -169,25 +168,9 @@ Không chốt chi tiết trước launch vì phụ thuộc feedback người dù
 
 ---
 
-## Mobile — tạm pause (trạng thái tại thời điểm pause)
+## Mobile — tạm pause rồi xoá hẳn (2026-08-22)
 
-Ghi lại để resume không phải làm lại từ đầu. Ngày pause: 2026-08-07.
-
-**Đã xong và verify thật:**
-- Flutter skeleton (`flutter create`), Riverpod + GoRouter + Hive + Dio wire sẵn
-- `lib/features/health/` — pattern mẫu cho feature (provider gọi Dio + screen)
-- `lib/features/auth/` — `AuthController` (Google sign-in + Phone OTP qua Firebase Auth), `AuthScreen`, đã wire vào router (`/auth`)
-- Firebase project `jankara-e2e-test`: `flutterfire configure` xong, `GoogleService-Info.plist`/`google-services.json` có sẵn, **đã thêm `GIDClientID` + URL scheme vào `ios/Runner/Info.plist`** (bước riêng ngoài `flutterfire configure`)
-- iOS deployment target đã nâng 13.0→15.0 (`firebase_auth` yêu cầu) — sửa ở `Podfile` + `project.pbxproj`
-- SPM (Swift Package Manager) đã tắt (`flutter config --no-enable-swift-package-manager`) — dùng CocoaPods, vì SPM gây treo build vô hạn trên máy dev
-- Đăng nhập Google: **verify tới bước mở màn hình Google thật trên iOS Simulator** — chưa xác nhận hoàn tất toàn bộ flow (chưa login bằng tài khoản Google thật tới cùng) tại thời điểm pause
-
-**Chưa làm (còn nguyên trong ROADMAP các phase trên, dưới tên "Mobile" nếu resume):**
-- Toàn bộ Phase 1 trở đi (browse UI, real-time, search, AI, hardening) — chưa build cho mobile, chỉ có Phase 0 skeleton + auth
-- Facebook sign-in — chưa thêm package (`flutter_facebook_auth`), cần tạo Facebook App riêng
-- App Store/Play Store submission
-
-**Khi resume:** đọc lại `CLAUDE.md § Mobile toolchain` trước (SPM tắt, ANDROID_HOME/JAVA_HOME, RVM ruby conflict với CocoaPods) — đây là các vấn đề máy-cụ-thể đã tốn nhiều thời gian debug, đừng lặp lại.
+`apps/mobile` (Flutter) tạm pause từ 2026-08-07 (đã hoàn thành Phase 0 skeleton + Firebase Auth Google/Phone, verify chạy được trên iOS Simulator), sau đó **xoá hẳn khỏi repo (2026-08-22)** — không còn kế hoạch resume. Chi tiết trạng thái lúc pause xem git history của file này (trước commit xoá) nếu cần tham khảo.
 
 ---
 
@@ -214,7 +197,7 @@ Phase 4 (Admin Panel — độc lập,   │
 Phase 6 (Hardening & Launch) ◀────┘
    │
    ▼
-Phase 7 (Post-launch — bao gồm resume Mobile)
+Phase 7 (Post-launch)
 ```
 
 Phase 3 và Phase 4 có thể chạy **song song một phần** nếu team đủ người (1 track làm search/stats, 1 track làm AI infra) — chỉ cần đồng bộ ở điểm AI cần dữ liệu statistics làm input.

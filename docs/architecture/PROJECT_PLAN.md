@@ -8,12 +8,12 @@ Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + c
 
 **Sản phẩm:** App theo dõi bóng đá thời gian thực, thống kê chuyên sâu, có AI hỗ trợ phân tích — định vị giữa Sofascore/FotMob/OneFootball, khác biệt bằng AI.
 
-### Pivot: Web trước, Mobile tạm pause (2026-08-07)
+### Pivot: Web trước, Mobile tạm pause rồi xoá hẳn (2026-08-07, xoá 2026-08-22)
 
-**Chốt:** chuyển client chính sang **Web (Next.js)**, tạm pause phát triển `apps/mobile` (Flutter). Backend/data/AI không đổi — mọi client (web, mobile sau này) dùng chung 1 API.
+**Chốt:** chuyển client chính sang **Web (Next.js)**. Backend/data/AI không đổi.
 
-- `apps/mobile` đã hoàn thành xong phần lớn Phase 0 (Flutter skeleton, Riverpod, GoRouter, Dio, Firebase Auth với Google + Phone provider đã enable và verify chạy được trên iOS Simulator) — **giữ nguyên code, không xoá**, resume sau khi web ổn định. Xem trạng thái chi tiết ở [ROADMAP.md § Mobile — tạm pause](./ROADMAP.md#mobile--tạm-pause-trạng-thái-t%E1%BA%A1i-th%E1%BB%9Di-%C4%91i%E1%BB%83m-pause).
-- Từ Phase 1 trở đi, phần UI trong roadmap ghi **Web** thay vì **Mobile** — đây là track chủ lực hiện tại.
+- `apps/mobile` (Flutter, đã hoàn thành phần lớn Phase 0 — skeleton, Riverpod, GoRouter, Dio, Firebase Auth Google + Phone verify chạy được trên iOS Simulator) tạm pause từ 2026-08-07, sau đó **xoá hẳn khỏi repo (2026-08-22)** — không còn kế hoạch resume. Code cũ vẫn xem được qua git history nếu cần tham khảo.
+- Từ Phase 1 trở đi, phần UI trong roadmap ghi **Web** — track chủ lực duy nhất hiện tại.
 - `packages/ui` (design system) chuyển từ "dùng nếu admin cần" (plan gốc) sang **dùng thật ngay từ đầu** cho `apps/web`.
 
 **Phạm vi MVP (giới hạn để kiểm soát chi phí data provider):**
@@ -40,19 +40,6 @@ Bản tổng hợp toàn bộ quyết định kiến trúc, gộp plan gốc + c
 | Real-time | WebSocket API của browser (kết nối API Gateway WebSocket) |
 | Authentication | **Firebase Authentication** (Google, Facebook, Phone number) — dùng Firebase JS SDK |
 | Design system | `packages/ui` (dùng chung với `apps/admin` sau này nếu có) |
-
-### Mobile — tạm pause (2026-08-07, xem § 1 Pivot)
-| Component | Technology |
-|---|---|
-| Framework | Flutter |
-| State Management | Riverpod |
-| Routing | GoRouter |
-| Local Database | Hive |
-| Networking | Dio |
-| Real-time | `web_socket_channel` (kết nối WebSocket API Gateway) |
-| Authentication | **Firebase Authentication** (Google, Facebook, Phone number) — đã setup + verify xong trước khi pause |
-| Push Notification | Firebase Cloud Messaging |
-| Crash Analytics | Firebase Crashlytics |
 
 ### Backend
 | Component | Technology |
@@ -121,7 +108,7 @@ Xem chi tiết từng bước ở [ROADMAP.md § Phase 2](./ROADMAP.md).
 **Còn cần làm cho Web** (client chính hiện tại):
 1. Đăng ký Web app trong Firebase Console (project `jankara-e2e-test`) → lấy Firebase JS SDK config
 2. Thêm Firebase JS SDK vào `apps/web`, khởi tạo tương tự `Firebase.initializeApp()` bên mobile
-3. Backend không đổi gì thêm: `apps/api` verify token qua `firebase-admin` — dùng chung cho cả web và mobile, không phân biệt client
+3. Backend không đổi gì thêm: `apps/api` verify token qua `firebase-admin`, dùng chung cho mọi client, không phân biệt client
 4. Facebook provider: chưa bật (cần thêm App ID/Secret từ [developers.facebook.com](https://developers.facebook.com)) — thêm khi có nhu cầu thật
 
 ---
@@ -224,7 +211,6 @@ football-app/
 │
 ├── apps/
 │   ├── web/              # (mới) Next.js — client chính, xem § 1 Pivot
-│   ├── mobile/          # Flutter — TẠM PAUSE (2026-08-07), giữ code, resume sau
 │   ├── api/              # Hono API
 │   ├── admin/            # Web quản trị — xem mục 8, đẩy sớm hơn dự kiến ban đầu
 │   └── sync-worker/      # Ingestion: data-provider adapter + Step Functions handlers
@@ -248,7 +234,6 @@ football-app/
 
 **Tooling điều phối build:**
 - **Turborepo** cho `apps/web`, `apps/api`, `apps/admin`, `apps/sync-worker`, `packages/*` (TS ecosystem)
-- **Melos** riêng cho Flutter nếu `apps/mobile` tách thành nhiều package — không ưu tiên trong lúc pause
 
 ---
 
@@ -264,7 +249,6 @@ Không dựng toàn bộ Aurora + Redis + OpenSearch + Bedrock cùng lúc từ �
 ### 7.2. Observability
 - CloudWatch Logs/Metrics cho toàn bộ Lambda + API
 - Sentry (hoặc CloudWatch + X-Ray) cho error tracking backend + web
-- Firebase Crashlytics cho mobile — giữ khi resume, không cần cho web (Sentry đủ)
 - Dashboard riêng cho chi phí Bedrock/API-Football theo ngày (tránh bị "đốt tiền" âm thầm)
 
 ### 7.3. Security
@@ -275,11 +259,10 @@ Không dựng toàn bộ Aurora + Redis + OpenSearch + Bedrock cùng lúc từ �
 ### 7.4. Testing
 - Backend: unit test cho business logic (Vitest/Jest), integration test cho API routes (test DB riêng)
 - Web: Vitest/React Testing Library cho component, Playwright cho golden path E2E (xem live match, favorite team, chat AI)
-- Mobile (khi resume): `integration_test` package cho golden path tương tự
 - CI chạy test + lint trên mọi PR (`infrastructure/github-actions`)
 
 ### 7.5. i18n
-- MVP: tiếng Việt + English, dùng key-based translation (Next.js: `next-intl` hoặc tương đương; Flutter khi resume: `easy_localization`)
+- MVP: tiếng Việt + English, dùng key-based translation (Next.js: `next-intl` hoặc tương đương)
 - Chưa cần bảng `translations` trong DB ở MVP — dùng file JSON tĩnh; chỉ đưa vào DB nếu cần quản trị nội dung động sau này
 
 ---
