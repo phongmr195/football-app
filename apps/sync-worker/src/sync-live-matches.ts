@@ -1,5 +1,6 @@
 import { prisma } from "@football-app/database";
 import type { GoalEvent } from "@football-app/realtime";
+import { refreshLiveOddsIfNeeded } from "./live-odds";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
@@ -131,6 +132,15 @@ export async function syncLiveMatches() {
     if (dbMatch.status !== "FINISHED" && match.status === "FINISHED") {
       void generateMatchSummaryIfNeeded(dbMatch.id).catch((err) => {
         console.error(`syncLiveMatches: generateMatchSummaryIfNeeded thất bại cho match ${dbMatch.id}`, err);
+      });
+    }
+
+    // Odds auto-refresh cho match đang LIVE/HALFTIME — xem live-odds.ts (tự no-op khi
+    // LIVE_ODDS_ENABLED không set, tự throttle 3 phút/match). KHÔNG await — cùng lý do
+    // generateMatchSummaryIfNeeded ở trên, không làm chậm tick sync tiếp theo.
+    if (match.status === "LIVE" || match.status === "HALFTIME") {
+      void refreshLiveOddsIfNeeded(dbMatch).catch((err) => {
+        console.error(`syncLiveMatches: refreshLiveOddsIfNeeded thất bại cho match ${dbMatch.id}`, err);
       });
     }
   }
