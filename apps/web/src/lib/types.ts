@@ -3,8 +3,8 @@
  *
  * These mirror the JSON shape apps/api actually returns (Prisma model fields, camelCase),
  * not packages/data-provider's canonical provider model (that's the sync-worker's internal
- * shape, pre-mapping). Kept local to apps/web for now — move to packages/shared if/when
- * apps/mobile resumes and needs the same shapes.
+ * shape, pre-mapping). Kept local to apps/web for now — move to packages/shared if another
+ * client ever needs the same shapes.
  */
 
 export type CompetitionType = "LEAGUE" | "CUP" | "INTERNATIONAL";

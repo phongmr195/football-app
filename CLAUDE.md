@@ -2,12 +2,11 @@
 
 Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architecture/PROJECT_PLAN.md](docs/architecture/PROJECT_PLAN.md), [docs/architecture/ROADMAP.md](docs/architecture/ROADMAP.md).
 
-> **Pivot (2026-08-07):** client chính chuyển từ Mobile (Flutter) sang **Web (Next.js)**. `apps/mobile` tạm pause — code giữ nguyên, quy ước Mobile dưới đây vẫn đúng, chỉ không phải track đang active. Xem lý do ở [PROJECT_PLAN.md § 1 Pivot](docs/architecture/PROJECT_PLAN.md#pivot-web-trước-mobile-tạm-pause-2026-08-07).
+> **Pivot (2026-08-07):** client chính chuyển từ Mobile (Flutter) sang **Web (Next.js)**. `apps/mobile` tạm pause, sau đó xoá hẳn (2026-08-22) — không còn kế hoạch resume, xem git history nếu cần tham khảo code cũ. Xem lý do pivot ở [PROJECT_PLAN.md § 1 Pivot](docs/architecture/PROJECT_PLAN.md#pivot-web-trước-mobile-tạm-pause-rồi-xoá-hẳn-2026-08-07-xoá-2026-08-22).
 
 ## Tech stack
 
 - **Web** (client chính): Next.js (React), Firebase Authentication (Google/Phone/Facebook) qua Firebase JS SDK — đã scaffold + browse pages + favorites + real-time (Phase 1+2), xem ROADMAP
-- **Mobile** (tạm pause): Flutter, Riverpod, GoRouter, Hive, Dio — đã có Phase 0 + auth, xem [ROADMAP.md § Mobile — tạm pause](docs/architecture/ROADMAP.md#mobile--tạm-pause-trạng-thái-tại-thời-điểm-pause)
 - **Auth**: Firebase Authentication (Google + Phone + Facebook đều đã enable) — đổi từ AWS Cognito, xem [PROJECT_PLAN.md § Authentication](docs/architecture/PROJECT_PLAN.md#authentication--quyết-định-đổi-từ-cognito-sang-firebase-auth-2026-08-06). Firebase project hiện dùng: `jankara-e2e-test` (project dùng chung, không riêng cho football-app).
 - **Backend**: Node.js, Hono, TypeScript, Zod (`@hono/zod-validator`), Prisma, `firebase-admin` (verify token + gửi FCM push)
 - **Database**: Aurora PostgreSQL (Prisma), Redis (cache + Pub/Sub cho real-time/push, xem Phase 2), Postgres FTS/pgvector cho search/AI (xem PROJECT_PLAN.md § 7.1 — hoãn OpenSearch tới khi cần)
@@ -22,7 +21,6 @@ Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architectu
 ```
 apps/
   web/            Next.js — client chính (browse pages, favorites, real-time) + /admin/* (ROADMAP Phase 4, cùng port, xem "### Admin" dưới)
-  mobile/         Flutter app — TẠM PAUSE, giữ code
   api/            Hono API (TypeScript)
   sync-worker/    Đồng bộ dữ liệu từ data provider + polling live match
   scraper-sofascore/  Python (không qua pnpm/turbo) — scrape Events/Lineups/Stats từ Sofascore, xem "### Scraper" dưới
@@ -47,13 +45,6 @@ pnpm lint / typecheck / build / test    # chạy toàn monorepo qua turbo
 ```
 
 **`pnpm install` chỉ link workspace package (symlink qua `node_modules/@football-app/<pkg>`), KHÔNG tự build nó** — package mới (`main`/`types` trỏ `dist/...`) thiếu `dist/` sẽ làm consumer (`apps/api`, v.v.) lỗi `Cannot find module`/`error TS2307` dù `pnpm install` chạy xong không báo lỗi gì. Bug thật gặp 2026-08-17 với `packages/realtime` (đã merge từ PR khác nhưng chưa từng build ở máy dev khác). Sau khi `git pull`/checkout code có thêm package mới, chạy `pnpm build` toàn repo (hoặc `pnpm --filter <pkg> build` riêng) trước khi trust rằng mọi thứ đã sẵn sàng.
-
-```bash
-# Mobile (tạm pause — lệnh dưới vẫn đúng khi resume)
-cd apps/mobile
-flutter analyze && flutter test
-flutter run -d "iPhone 17"    # cần ANDROID_HOME/JAVA_HOME nếu build Android, xem "Mobile toolchain" dưới
-```
 
 ```bash
 # Docker (data/log/test/deploy) — xem "### Docker" dưới để biết convention
@@ -82,7 +73,7 @@ pnpm docker:down
 - Cần auth → thêm middleware `requireAuth` (từ `src/middleware/auth.ts`) vào route đó, đọc `userId` qua `c.get("userId")`.
 - Đọc/ghi DB qua `prisma` import từ `@football-app/database` — không tạo `PrismaClient` mới trong route.
 - Dùng skill `add-api-module` để scaffold module mới theo đúng pattern trên.
-- Middleware auth dùng chung cho MỌI client (web, mobile) — không có logic riêng theo client.
+- Middleware auth dùng chung cho mọi client hiện tại (web) — không có logic riêng theo client.
 
 ### Database (`packages/database`)
 - Model mới trong `schema.prisma`: id dùng `String @id @default(cuid())`, tên bảng snake_case qua `@@map("...")`, thêm `externalRef Json?` (field name camelCase, KHÔNG `@map` — cột DB thật cũng là `"externalRef"` camelCase, xem migration init) nếu entity map với data provider. Shape bắt buộc `{ provider: string, id: string }` (`ExternalRef` trong `packages/data-provider/src/types.ts`).
@@ -214,22 +205,13 @@ pnpm docker:down
 - **`/admin/scraper`**: trigger pipeline scrape Sofascore (chọn giải/mùa/limit/loại data, poll `ScraperRun` tới khi xong) — xem "### Scraper" dưới cho chi tiết đầy đủ (9 loại data, kiến trúc, verify thật).
 - Chưa làm (optional, không bắt buộc theo exit criteria): xem danh sách `User` + favorites.
 
-### Mobile (`apps/mobile`) — tạm pause, quy ước vẫn giữ cho khi resume
-- Feature mới → folder riêng trong `lib/features/<feature>/` (theo mẫu `lib/features/health/`), gồm 1 Riverpod provider gọi qua `dioProvider` + 1 screen.
-- Gọi API qua `dioProvider` (`lib/core/network/dio_client.dart`), không tạo `Dio()` instance riêng lẻ trong widget.
-- Route mới → thêm vào `lib/core/router/app_router.dart` (GoRouter), không dùng `Navigator.push` trực tiếp trừ dialog/bottom sheet cục bộ.
-- Dùng skill `add-mobile-feature` để scaffold feature mới.
-
 ### Authentication (Firebase Auth)
-- Mobile: `lib/features/auth/auth_provider.dart` (`AuthController` — Google + Phone) và `auth_screen.dart`, đã wire vào router (`/auth`), có nút "Đăng nhập" ở `HealthScreen`. **Đã verify**: mở được màn Google sign-in thật trên iOS Simulator.
-- iOS cần thêm `GIDClientID` + URL scheme (`CFBundleURLTypes`) vào `ios/Runner/Info.plist` — **`flutterfire configure` KHÔNG tự làm bước này**, phải lấy `CLIENT_ID`/`REVERSED_CLIENT_ID` từ `GoogleService-Info.plist` rồi thêm tay. Nếu thiếu, lỗi runtime: `PlatformException(google_sign_in, No active configuration...)`.
-- Nếu enable thêm provider (Facebook, v.v.) trong Firebase Console SAU KHI đã chạy `flutterfire configure` lần đầu → phải chạy lại `flutterfire configure` để tải `GoogleService-Info.plist`/`google-services.json` mới (file cũ thiếu `CLIENT_ID` cho provider mới enable).
-- Web: Web app đã đăng ký trong `jankara-e2e-test` qua `firebase apps:create WEB` (app id `1:264468798864:web:165e6c75fad5e45e07e715`). Firebase JS SDK ở `apps/web/src/lib/firebase.ts`, config qua `NEXT_PUBLIC_FIREBASE_*` trong `apps/web/.env.local` (gitignored, cùng lý do với mobile — xem "### Secrets & credentials"; lấy lại bằng `firebase apps:sdkconfig WEB <app-id> --project jankara-e2e-test`, xem `.env.example`). Auth context (Google popup + Facebook popup + Phone 2-step) ở `apps/web/src/lib/auth-context.tsx`, UI ở `apps/web/src/app/auth/page.tsx` + `AuthStatus` trong NavBar.
+- Web: Web app đã đăng ký trong `jankara-e2e-test` qua `firebase apps:create WEB` (app id `1:264468798864:web:165e6c75fad5e45e07e715`). Firebase JS SDK ở `apps/web/src/lib/firebase.ts`, config qua `NEXT_PUBLIC_FIREBASE_*` trong `apps/web/.env.local` (gitignored — xem "### Secrets & credentials"; lấy lại bằng `firebase apps:sdkconfig WEB <app-id> --project jankara-e2e-test`, xem `.env.example`). Auth context (Google popup + Facebook popup + Phone 2-step) ở `apps/web/src/lib/auth-context.tsx`, UI ở `apps/web/src/app/auth/page.tsx` + `AuthStatus` trong NavBar.
 - Dev local **mặc định** dùng Firebase Auth Emulator qua `connectAuthEmulator` (guard `NODE_ENV === "development"`) — đã verify thật token do emulator cấp có `aud`/`iss` khớp `demo-football-app` (project giả emulator dùng, không phải `jankara-e2e-test`), đúng với `FIREBASE_PROJECT_ID` mặc định của `apps/api`, nên web + api tương thích khi cùng chạy qua Docker emulator.
 - **Test bằng tài khoản Google/Facebook thật** (emulator chỉ nhận fake account tự tạo qua UI của nó, không nối được Google/Facebook thật): set `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=false` trong `apps/web/.env.local` để `apps/web` bỏ qua emulator, nối thẳng `jankara-e2e-test` — PHẢI đổi `apps/api` theo cùng lúc (bỏ `FIREBASE_AUTH_EMULATOR_HOST`, set `FIREBASE_PROJECT_ID=jankara-e2e-test`), không thì `requireAuth` verify token thất bại (token thật có `aud`/`iss` khớp `jankara-e2e-test`, không khớp `demo-football-app` mà emulator-mode `apps/api` đang chờ). Chạy `apps/api` local (không qua Docker) khi cần test kiểu này — xem "## apps/api" trong README.
-- Backend verify token qua `requireAuth` middleware (`apps/api/src/middleware/auth.ts`) dùng `firebase-admin` — chạy qua `pnpm docker:up` đã tự set `FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099` (xem "### Docker"), không cần project thật để test local; set `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` trong `.env` khi cần verify token thật từ `jankara-e2e-test`. Dùng chung cho web + mobile.
+- Backend verify token qua `requireAuth` middleware (`apps/api/src/middleware/auth.ts`) dùng `firebase-admin` — chạy qua `pnpm docker:up` đã tự set `FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099` (xem "### Docker"), không cần project thật để test local; set `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` trong `.env` khi cần verify token thật từ `jankara-e2e-test`. Dùng chung cho mọi client hiện tại (web).
 - `requireAuth` KHÔNG set raw Firebase UID vào context. Sau `verifyIdToken`, nó resolve-or-create `User` row nội bộ theo `User.firebaseUid` (just-in-time provisioning — chưa có flow signup/profile riêng ở Phase 1) rồi `c.set("userId", internalUser.id)`. Vì vậy `c.get("userId")` trong route là `User.id` (cuid) FK-safe, dùng trực tiếp cho query Prisma (ví dụ `FavoriteTeam.userId`/`FavoritePlayer.userId`) — không phải raw Firebase UID. `User.email` là optional (`String?`) vì user đăng nhập bằng phone không có email claim.
-- **Facebook login (web)**: code đã wire (`signInWithFacebook` trong `auth-context.tsx`, nút trong `auth/page.tsx`), nhưng cần enable tay ở Firebase Console (Authentication → Sign-in method → Facebook, nhập App ID + App Secret từ developers.facebook.com) + whitelist redirect URI `https://jankara-e2e-test.firebaseapp.com/__/auth/handler` trong cấu hình OAuth của Facebook App đó — không có CLI cho bước này. Chưa enable → lỗi `auth/operation-not-allowed` khi bấm nút. Mobile chưa có Facebook (xem note ở trên, chưa cần tới).
+- **Facebook login (web)**: code đã wire (`signInWithFacebook` trong `auth-context.tsx`, nút trong `auth/page.tsx`), nhưng cần enable tay ở Firebase Console (Authentication → Sign-in method → Facebook, nhập App ID + App Secret từ developers.facebook.com) + whitelist redirect URI `https://jankara-e2e-test.firebaseapp.com/__/auth/handler` trong cấu hình OAuth của Facebook App đó — không có CLI cho bước này. Chưa enable → lỗi `auth/operation-not-allowed` khi bấm nút.
 - **Web Push notification (Phase 2 Bước 3, FCM)** — **verify thật 2026-08-17: nhận được push thật trên browser**, sau khi fix 5 bug thật (chi tiết đầy đủ ở [ROADMAP.md § Phase 2 Bước 3](docs/architecture/ROADMAP.md#phase-2--real-time--notifications-size-l)):
   - Service worker `/firebase-messaging-sw.js` KHÔNG phải file tĩnh trong `public/` — đó là 1 Route Handler (`app/firebase-messaging-sw.js/route.ts`) đọc `process.env.NEXT_PUBLIC_FIREBASE_*` server-side lúc request và trả JS content — không cần copy tay giá trị Firebase config vào file nào cả, tự động đúng theo `.env.local`/`.env` đang chạy. Chỉ tự hiện notification khi KHÔNG tab nào của app đang focus.
   - **Tab đang mở/focus (foreground) KHÔNG tự hiện notification** — đây là hành vi thật của FCM Web (khác biệt quan trọng, dễ tưởng nhầm là bug), phải tự code `onMessage()` + `new Notification()` tay ở phía client (`listenForForegroundMessages()` trong `lib/push-notifications.ts`, mount qua `<PushNotificationListener />` toàn app trong `layout.tsx`) — service worker's `onBackgroundMessage` không cover case này.
@@ -238,17 +220,7 @@ pnpm docker:down
   - `apps/api/src/realtime/redis-subscriber.ts`'s `subscribeChannel()` (dùng bởi `goal-notifier.ts`) phải đợi event Redis `"ready"` trước khi subscribe nếu client chưa kết nối xong — gọi ngay lúc boot (trước khi ioredis với `lazyConnect: false` kết nối xong) từng fail 100% (`enableOfflineQueue: false` không buffer lệnh) khiến subscriber không bao giờ nhận message, không throw ra ngoài nên dễ tưởng đã hoạt động.
   - Trạng thái nút "Bật thông báo bàn thắng" ở `/favorites` phải tự check lại khi mount (`GET /devices` + so khớp `getToken()` hiện tại) — không chỉ dựa vào state trong session, nếu không reload trang sẽ mất trạng thái "đã bật" dù backend vẫn còn device. `DELETE /devices/:id` để tắt.
   - **macOS có thể chặn notification của Chrome ở cấp hệ điều hành** (System Settings → Notifications → Google Chrome → "Allow Notifications") độc lập hoàn toàn với quyền "Allow" trong browser (`Notification.permission === "granted"` vẫn đúng, code chạy không lỗi, nhưng popup không hiện) — không phải bug code, luôn kiểm tra cả 2 lớp khi debug push không hiện trên macOS.
-- `firebase-tools` CLI (đã cài global) dùng cho `flutterfire configure`/`firebase emulators:start`/`firebase login`.
-- `google-services.json`, `GoogleService-Info.plist`, `lib/firebase_options.dart` **đã gitignore** (2026-08-07, sau khi bị secret scanner flag do repo public) — không phải secret nhạy cảm kiểu AWS key (Firebase client API key an toàn để public theo thiết kế của Google), nhưng project `jankara-e2e-test` dùng chung với app khác nên không commit. Máy mới clone repo phải tự chạy `flutterfire configure -p jankara-e2e-test --platforms=ios,android -y` trong `apps/mobile` để sinh lại 3 file này trước khi build.
-
-## Mobile toolchain (máy dev hiện tại — cần khi resume mobile)
-
-Đã cài đủ Flutter + Android SDK + Xcode + CocoaPods. Lưu ý quan trọng:
-- **SPM đã bị tắt** (`flutter config --no-enable-swift-package-manager`) — project dùng CocoaPods (Podfile commit vào git), vì Swift Package Manager từng gây treo vô hạn khi build lần đầu trên máy này. KHÔNG bật lại SPM trừ khi verify kỹ không bị treo.
-- iOS deployment target đã nâng lên **15.0** (`Podfile` + `project.pbxproj`) — `firebase_auth` yêu cầu tối thiểu 15.0, không hạ xuống lại.
-- Cần set `ANDROID_HOME=/usr/local/share/android-commandlinetools` và `JAVA_HOME=/usr/local/opt/openjdk@17` khi build Android (đã có trong `~/.zshrc`, nhưng Bash tool không tự load — export lại nếu cần trong session mới).
-- Máy có RVM (Ruby version manager) làm ruby mặc định; CocoaPods được cài qua `gem install cocoapods` dưới RVM ruby (không phải qua brew) để tránh xung đột gem path.
-- Simulator + Android Studio chạy cùng lúc có thể làm máy quá tải nặng (load average tăng vọt, process "stuck") — nếu gặp lệnh bash bị treo bất thường, kiểm tra `uptime`/`top -l 1` trước khi nghi ngờ code; tắt Simulator (`killall Simulator`) thường đủ để hồi phục, không cần restart máy.
+- `firebase-tools` CLI (đã cài global) dùng cho `firebase emulators:start`/`firebase login`.
 
 ## Git / branch protection
 
