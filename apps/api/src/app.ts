@@ -20,6 +20,7 @@ import { seasonsRoute } from "./routes/seasons";
 import { appConfigRoute } from "./routes/app-config";
 import { notificationLogsRoute } from "./routes/notification-logs";
 import { adminScraperRoute } from "./routes/admin-scraper";
+import { adminSyncRoute } from "./routes/admin-sync";
 import { chatRoute } from "./routes/chat";
 import { aiUsageLogsRoute } from "./routes/ai-usage-logs";
 
@@ -67,6 +68,7 @@ app.route("/", seasonsRoute);
 app.route("/", appConfigRoute);
 app.route("/", notificationLogsRoute);
 app.route("/", adminScraperRoute);
+app.route("/", adminSyncRoute);
 app.route("/", chatRoute);
 app.route("/", aiUsageLogsRoute);
 
