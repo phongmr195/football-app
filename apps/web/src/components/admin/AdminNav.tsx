@@ -12,6 +12,7 @@ import {
   Flag,
   Landmark,
   LayoutDashboard,
+  RefreshCw,
   Settings,
   Shield,
   Trophy,
@@ -38,6 +39,7 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/config", label: "Cấu hình", icon: Settings },
   { href: "/admin/notifications", label: "Nhật ký thông báo", icon: Bell },
   { href: "/admin/ai-usage-logs", label: "Nhật ký sử dụng AI", icon: Coins },
+  { href: "/admin/data-sync", label: "Đồng bộ dữ liệu", icon: RefreshCw },
   { href: "/admin/scraper", label: "Scraper dữ liệu", icon: Download },
 ];
 

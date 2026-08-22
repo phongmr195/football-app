@@ -44,6 +44,7 @@ model AdminUser {
   updatedAt    DateTime @updatedAt
 
   scraperRuns ScraperRun[]
+  syncRuns    SyncRun[]
 
   @@map("admin_users")
 }
@@ -136,6 +137,7 @@ model Competition {
   seasons     Season[]
   matches     Match[]
   scraperRuns ScraperRun[]
+  syncRuns    SyncRun[]
 
   @@map("competitions")
 }
@@ -160,6 +162,7 @@ model Season {
   topAssists         TopAssist[]
   cleanSheets        CleanSheet[]
   scraperRuns        ScraperRun[]
+  syncRuns           SyncRun[]
 
   @@unique([competitionId, name])
   @@map("seasons")
@@ -989,6 +992,29 @@ model ScraperRun {
   createdAt            DateTime         @default(now())
 
   @@map("scraper_runs")
+}
+
+// Lịch sử chạy đồng bộ danh mục football-data.org (teams/players/standings/matches/topScorers)
+// từ trang admin — trước đó chỉ chạy tay qua CLI (SYNC_MODE=catalog, xem
+// apps/sync-worker/src/sync-all.ts). Reuse ScraperRunStatus (cùng semantics
+// PENDING/RUNNING/SUCCESS/FAILED, không cần enum riêng). Khác ScraperRun: không có
+// requestedLimit/dataTypes (luôn sync đầy đủ 1 competition+season, không theo trận/loại data).
+model SyncRun {
+  id                   String           @id @default(cuid())
+  competitionId        String
+  competition          Competition      @relation(fields: [competitionId], references: [id])
+  seasonId             String
+  season               Season           @relation(fields: [seasonId], references: [id])
+  status               ScraperRunStatus @default(PENDING)
+  resultSummary        Json?
+  errorMessage         String?
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?       @relation(fields: [createdByAdminUserId], references: [id])
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime         @default(now())
+
+  @@map("sync_runs")
 }
 
 model Subscription {
