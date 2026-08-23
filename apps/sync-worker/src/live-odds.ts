@@ -25,7 +25,7 @@ function toSofascoreSeasonString(dbSeasonName: string): string {
   return `${dbSeasonName}-${endYearShort}`;
 }
 
-function readExternalRefId(externalRef: unknown): string | null {
+export function readExternalRefId(externalRef: unknown): string | null {
   if (typeof externalRef !== "object" || externalRef === null) return null;
   const id = (externalRef as { id?: unknown }).id;
   return typeof id === "string" ? id : null;

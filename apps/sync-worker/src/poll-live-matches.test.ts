@@ -45,7 +45,7 @@ async function flushMicrotasks(times = 5) {
 
 describe("runLivePollingLoop", () => {
   it("gọi syncLiveMatches() lại đúng theo interval (cadence)", async () => {
-    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0 });
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0, reconciledCount: 0 });
     const controller = new AbortController();
 
     const loopPromise = runLivePollingLoop({ intervalMs: 1000, signal: controller.signal });
@@ -67,7 +67,7 @@ describe("runLivePollingLoop", () => {
   it("lỗi 1 tick không làm dừng loop — tick kế tiếp vẫn chạy", async () => {
     mockedSyncLiveMatches
       .mockRejectedValueOnce(new Error("provider tạm lỗi"))
-      .mockResolvedValue({ syncedCount: 2 });
+      .mockResolvedValue({ syncedCount: 2, reconciledCount: 0 });
     const controller = new AbortController();
 
     const loopPromise = runLivePollingLoop({ intervalMs: 1000, signal: controller.signal });
@@ -84,7 +84,7 @@ describe("runLivePollingLoop", () => {
   });
 
   it("abort signal dừng loop kịp thời, không chờ hết interval hiện tại", async () => {
-    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0 });
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0, reconciledCount: 0 });
     const controller = new AbortController();
 
     const loopPromise = runLivePollingLoop({ intervalMs: 30_000, signal: controller.signal });
@@ -103,7 +103,7 @@ describe("runLivePollingLoop", () => {
 
 describe("runLivePollingLoop — adaptive cadence (Phase 2 Bước 4)", () => {
   it("computeNextInterval() trả 15s (tight) -> loop dùng đúng 15s cho sleep, không dùng intervalMs cố định", async () => {
-    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 1 });
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 1, reconciledCount: 0 });
     mockedComputeNextInterval.mockResolvedValue(15_000);
     const controller = new AbortController();
 
@@ -125,7 +125,7 @@ describe("runLivePollingLoop — adaptive cadence (Phase 2 Bước 4)", () => {
   });
 
   it("computeNextInterval() trả 300s (idle) -> loop dùng đúng 300s cho sleep", async () => {
-    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0 });
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0, reconciledCount: 0 });
     mockedComputeNextInterval.mockResolvedValue(300_000);
     const controller = new AbortController();
 
@@ -145,7 +145,7 @@ describe("runLivePollingLoop — adaptive cadence (Phase 2 Bước 4)", () => {
   });
 
   it("cadence đổi giữa chừng — tick kế tiếp dùng ngay giá trị computeNextInterval mới, không cần restart loop", async () => {
-    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 1 });
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 1, reconciledCount: 0 });
     mockedComputeNextInterval
       .mockResolvedValueOnce(15_000) // sau tick 1 (tight)
       .mockResolvedValueOnce(300_000); // sau tick 2 (idle)
@@ -171,7 +171,7 @@ describe("runLivePollingLoop — adaptive cadence (Phase 2 Bước 4)", () => {
   });
 
   it("computeNextInterval() reject -> fallback về intervalMs truyền vào, log lỗi, không throw ra ngoài loop", async () => {
-    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0 });
+    mockedSyncLiveMatches.mockResolvedValue({ syncedCount: 0, reconciledCount: 0 });
     mockedComputeNextInterval.mockRejectedValue(new Error("DB tạm lỗi"));
     const controller = new AbortController();
 
