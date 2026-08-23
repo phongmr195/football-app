@@ -251,3 +251,29 @@ export function playerPositionMeta(position: string | null): {
       return { label: position ?? "Chưa rõ", variant: "default" };
   }
 }
+
+const FIRST_HALF_MINUTES = 45;
+const HALFTIME_BREAK_MINUTES = 15;
+
+/**
+ * Ước lượng số phút của trận đang LIVE khi provider không trả `minute` thật. Verify thật
+ * 2026-08-23: `FootballDataAdapter` (provider mặc định, xem CLAUDE.md § Data provider) không có
+ * field minute/elapsed nào trong response `/matches/{id}` — chỉ có `status`, đã confirm qua request
+ * thật lúc có trận live (trước đó session viết `mapMatch()` chưa verify được vì lúc đó không có
+ * trận nào live). `ApiFootballAdapter` THÌ có elapsed thật (`fixture.status.elapsed`) — vì vậy đây
+ * CHỈ là fallback khi `liveState.minute` đã `null`, không dùng thay real data khi có.
+ *
+ * Model 2 hiệp cố định (45' + nghỉ 15' + 45') vì không có cách nào biết thời điểm hiệp 2 thật sự
+ * bắt đầu (provider không cho biết): trong bù giờ hiệp 1 (đã qua 45' nhưng status vẫn LIVE, chưa
+ * chuyển HALFTIME) hiện đứng ở 45' (không đoán số bù giờ thật); tương tự đứng ở 90' trong bù giờ
+ * hiệp 2. Không chính xác 100% (không biết bù giờ thật/hiệp 2 có bắt đầu sớm-muộn hơn 15' nghỉ hay
+ * không) nhưng đây là cách hầu hết app hiển thị "phút live" khi provider free tier không cho elapsed
+ * thật — người dùng đã được thông báo và chấp nhận trade-off này.
+ */
+export function estimateLiveMinute(kickoffAt: string, now: number = Date.now()): number | null {
+  const elapsedMinutes = Math.floor((now - new Date(kickoffAt).getTime()) / 60_000);
+  if (elapsedMinutes < 0) return null; // Chưa tới kickoff thật (clock lệch/data trễ) — không đoán bậy.
+  if (elapsedMinutes <= FIRST_HALF_MINUTES) return elapsedMinutes;
+  if (elapsedMinutes <= FIRST_HALF_MINUTES + HALFTIME_BREAK_MINUTES) return FIRST_HALF_MINUTES;
+  return Math.min(90, elapsedMinutes - HALFTIME_BREAK_MINUTES);
+}

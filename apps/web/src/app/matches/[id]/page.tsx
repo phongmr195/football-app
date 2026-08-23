@@ -187,7 +187,7 @@ export default async function MatchDetailPage({
         oddsSlot={showOdds ? <MatchOdds odds={odds} /> : undefined}
       />
 
-      <LiveMatchPanel matchId={match.id} />
+      <LiveMatchPanel matchId={match.id} kickoffAt={match.kickoffAt} />
     </Container>
   );
 }

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MatchOddsPreview } from "@/components/match/MatchOddsPreview";
+import { estimateLiveMinute } from "@/lib/format";
 import { useLiveMatches } from "@/lib/use-live-match";
 
 /**
@@ -38,13 +39,17 @@ export function LiveMatchesTicker() {
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Đang diễn ra</h2>
       </div>
       <div className="flex gap-3 overflow-x-auto pb-1">
-        {matches.map((match) => (
+        {matches.map((match) => {
+          const minute =
+            match.liveState?.minute ??
+            (match.liveState?.status === "LIVE" ? estimateLiveMinute(match.kickoffAt) : null);
+          return (
           <Card key={match.id} className="w-64 shrink-0 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700">
             <Link href={`/matches/${match.id}`} className="block">
               <CardContent className="flex flex-col gap-2 px-4 py-3">
                 <div className="flex items-center justify-between">
                   <Badge className="bg-red-500 text-white">
-                    {match.liveState?.minute != null ? `${match.liveState.minute}'` : "LIVE"}
+                    {minute !== null ? `${minute}'` : "LIVE"}
                   </Badge>
                   <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">
                     {match.competition.name}
@@ -86,7 +91,8 @@ export function LiveMatchesTicker() {
               </div>
             ) : null}
           </Card>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
