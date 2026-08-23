@@ -8,9 +8,16 @@ import { createPublisher } from "./realtime";
 
 type DbMatch = NonNullable<Awaited<ReturnType<typeof prisma.match.findFirst>>>;
 
-// Match thật không kéo dài quá ngần này (90' + hiệp phụ + bù giờ dư sức) — dùng làm ngưỡng cho
-// bước reconcile dưới, tránh tự gọi fetchMatch() thừa cho match vừa mới chuyển LIVE giữa 2 tick.
-const STALE_LIVE_THRESHOLD_MS = 4 * 60 * 60 * 1000;
+// Match League thường (không hiệp phụ) kết thúc ~1h45-2h sau kickoff (90' + bù giờ + nghỉ giữa
+// giờ) — 2h dư margin ~15-30 phút cho case đó. Match VẪN đang live thật (hiệp phụ, hoặc chỉ chậm
+// bù giờ) không bị ảnh hưởng bởi ngưỡng này: nó vẫn nằm trong fetchLiveMatches() tick hiện tại nên
+// bị loại khỏi vòng reconcile qua fetchedExternalIds phía dưới, KHÔNG bao giờ chạm nhánh này —
+// threshold ngắn chỉ tăng tốc phát hiện match ĐÃ rớt khỏi feed (đã FINISHED), không có rủi ro báo
+// sai match đang live thật. Ban đầu để 4h (quá dài) — verify thật 2026-08-23: 3 match Premier
+// League/Ligue 1 kickoff 13:00 UTC đã FINISHED thật (confirm qua fetchMatch() trực tiếp) lúc
+// kickoff+2h17m nhưng chưa đủ 4h nên vẫn hiện LIVE sai trên web, hạ xuống 2h để user không phải
+// đợi lâu vậy mới thấy status đúng.
+const STALE_LIVE_THRESHOLD_MS = 2 * 60 * 60 * 1000;
 
 async function findDbMatchByExternalId(
   adapter: DataProviderAdapter,
