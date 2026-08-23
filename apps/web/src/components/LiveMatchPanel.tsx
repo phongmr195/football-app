@@ -3,12 +3,13 @@
 import { useState } from "react";
 import { Activity } from "lucide-react";
 import { Badge, Card } from "@football-app/ui";
-import { formatMatchEventLabel, matchStatusMeta } from "@/lib/format";
+import { estimateLiveMinute, formatMatchEventLabel, matchStatusMeta } from "@/lib/format";
 import { useLiveMatch, useMatchEvents, type MatchEventsResponse } from "@/lib/use-live-match";
 import type { MatchEvent } from "@/lib/types";
 
 export interface LiveMatchPanelProps {
   matchId: string;
+  kickoffAt: string;
 }
 
 /**
@@ -19,7 +20,7 @@ export interface LiveMatchPanelProps {
  * (see `lib/use-live-match.ts`) and renders nothing on its own whenever there's no live state yet
  * or the match isn't currently LIVE/HALFTIME.
  */
-export function LiveMatchPanel({ matchId }: LiveMatchPanelProps) {
+export function LiveMatchPanel({ matchId, kickoffAt }: LiveMatchPanelProps) {
   const { data: liveState } = useLiveMatch(matchId);
   const [seenSeq, setSeenSeq] = useState(0);
   const [events, setEvents] = useState<MatchEvent[]>([]);
@@ -54,6 +55,8 @@ export function LiveMatchPanel({ matchId }: LiveMatchPanelProps) {
   if (!isLive || !liveState) return null;
 
   const { label, variant } = matchStatusMeta(liveState.status);
+  const minute =
+    liveState.minute ?? (liveState.status === "LIVE" ? estimateLiveMinute(kickoffAt) : null);
 
   return (
     <Card className="mt-6 flex flex-col gap-4">
@@ -62,9 +65,9 @@ export function LiveMatchPanel({ matchId }: LiveMatchPanelProps) {
           <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
           <Badge variant={variant}>{label}</Badge>
         </span>
-        {liveState.minute !== null ? (
+        {minute !== null ? (
           <span className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
-            {liveState.minute}&apos;
+            {minute}&apos;
           </span>
         ) : null}
       </div>
