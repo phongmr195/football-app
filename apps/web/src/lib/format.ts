@@ -122,6 +122,59 @@ export function formatMatchEventLabel(event: MatchEvent): string {
   return `${base}${detail}${team}`;
 }
 
+export interface GoalScorerEntry {
+  id: string;
+  minute: number;
+  playerName: string;
+  isOwnGoal: boolean;
+  isPenalty: boolean;
+}
+
+/**
+ * Nhóm các MatchEvent loại ghi bàn (GOAL/PENALTY/OWN_GOAL) theo đội home/away, dùng cho phần tóm
+ * tắt "ai ghi bàn phút mấy" dưới tên đội ở score header (match detail page). Event thiếu `player`
+ * (scraper không khớp được tên, hoặc thẻ cho HLV) bị bỏ qua — không có tên để hiện.
+ *
+ * OWN_GOAL: `event.teamId` là đội CỦA CẦU THỦ đá phản lưới (đội bị thiệt điểm), KHÔNG PHẢI đội
+ * được cộng bàn — xem CLAUDE.md § Scraper's own-goal `isHome` note (map_events()/map_shotmap()
+ * trong scraper.py cùng quy ước này). Verify thật qua DB 2026-08-23: Malo Gusto (Chelsea) đá phản
+ * lưới nhà, event.team = "Chelsea FC" nhưng bàn thắng tính cho Sunderland (đối thủ) — vì vậy phải
+ * ĐẢO NGƯỢC cột hiện thị so với GOAL/PENALTY bình thường.
+ */
+export function groupGoalScorersByTeam(
+  events: MatchEvent[],
+  homeTeamId: string,
+): { home: GoalScorerEntry[]; away: GoalScorerEntry[] } {
+  const home: GoalScorerEntry[] = [];
+  const away: GoalScorerEntry[] = [];
+
+  for (const event of events) {
+    if (event.type !== "GOAL" && event.type !== "PENALTY" && event.type !== "OWN_GOAL") continue;
+    if (!event.player || !event.teamId) continue;
+
+    const isOwnGoal = event.type === "OWN_GOAL";
+    const scoresForHomeTeam = isOwnGoal ? event.teamId !== homeTeamId : event.teamId === homeTeamId;
+
+    (scoresForHomeTeam ? home : away).push({
+      id: event.id,
+      minute: event.minute,
+      playerName: event.player.name,
+      isOwnGoal,
+      isPenalty: event.type === "PENALTY",
+    });
+  }
+
+  home.sort((a, b) => a.minute - b.minute);
+  away.sort((a, b) => a.minute - b.minute);
+  return { home, away };
+}
+
+/** vd "45' Nguyễn Văn A (p)" — "(p)" cho phạt đền, "(OG)" cho phản lưới nhà, quy ước phổ biến. */
+export function formatGoalScorerLabel(entry: GoalScorerEntry): string {
+  const suffix = entry.isOwnGoal ? " (OG)" : entry.isPenalty ? " (p)" : "";
+  return `${entry.minute}' ${entry.playerName}${suffix}`;
+}
+
 /** vi-VN formatted kickoff date/time, e.g. "21:00, 11/08/2023". */
 export function formatKickoffAt(kickoffAt: string): string {
   const date = new Date(kickoffAt);

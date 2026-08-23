@@ -12,7 +12,13 @@ import { MatchLineups } from "@/components/match/MatchLineups";
 import { MatchOdds } from "@/components/match/MatchOdds";
 import { MatchPlayerRatings } from "@/components/match/MatchPlayerRatings";
 import { MatchStatisticsBars } from "@/components/match/MatchStatisticsBars";
-import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
+import {
+  competitionDisplayName,
+  formatGoalScorerLabel,
+  formatKickoffAt,
+  groupGoalScorersByTeam,
+  matchStatusMeta,
+} from "@/lib/format";
 import type {
   MatchDetail,
   MatchEvent,
@@ -63,6 +69,7 @@ export default async function MatchDetailPage({
   const { label, variant } = matchStatusMeta(match.status);
   const hasScore = match.homeScore !== null && match.awayScore !== null;
   const competitionName = competitionDisplayName(match.competition);
+  const { home: homeGoals, away: awayGoals } = groupGoalScorersByTeam(events.items, match.homeTeam.id);
 
   return (
     <Container size="md" className="py-10">
@@ -133,6 +140,28 @@ export default async function MatchDetailPage({
             </span>
           </Link>
         </div>
+
+        {/* Block riêng, TÁCH khỏi row logo+tên ở trên (không nằm trong 2 <Link>) — nếu nhét chung,
+            2 cột có số dòng ghi bàn khác nhau (vd 1 đội không ghi bàn) làm `items-center` của row
+            đó lệch tâm logo/tên giữa 2 đội. Spacer giữa ẩn (`invisible`) nhưng vẫn render đúng text
+            tỉ số để chiếm đúng width, giữ 2 cột ghi bàn thẳng hàng dưới đúng tên đội tương ứng. */}
+        {homeGoals.length > 0 || awayGoals.length > 0 ? (
+          <div className="-mt-4 flex w-full items-start justify-around gap-4">
+            <ul className="flex flex-1 flex-col items-center gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              {homeGoals.map((goal) => (
+                <li key={goal.id}>{formatGoalScorerLabel(goal)}</li>
+              ))}
+            </ul>
+            <div className="invisible text-3xl font-bold" aria-hidden="true">
+              {hasScore ? `${match.homeScore} - ${match.awayScore}` : "vs"}
+            </div>
+            <ul className="flex flex-1 flex-col items-center gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              {awayGoals.map((goal) => (
+                <li key={goal.id}>{formatGoalScorerLabel(goal)}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <p className="flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
           <Clock className="h-4 w-4" aria-hidden="true" />
