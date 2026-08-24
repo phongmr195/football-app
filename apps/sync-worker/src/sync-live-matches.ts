@@ -5,7 +5,7 @@ import { readExternalRefId, refreshLiveOddsIfNeeded } from "./live-odds";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
-import { syncStandingsFromMatches } from "./sync-catalog";
+import { refreshTopScorersIfNeeded, syncStandingsFromMatches } from "./sync-catalog";
 
 type DbMatch = NonNullable<Awaited<ReturnType<typeof prisma.match.findFirst>>>;
 
@@ -38,7 +38,12 @@ async function findDbMatchByExternalId(
   });
 }
 
-async function applyMatchUpdate(dbMatch: DbMatch, match: CanonicalMatch, publisher: RealtimeTransport) {
+async function applyMatchUpdate(
+  dbMatch: DbMatch,
+  match: CanonicalMatch,
+  publisher: RealtimeTransport,
+  adapter: DataProviderAdapter,
+) {
   // Diff score TRƯỚC khi transaction ghi đè dbMatch.homeScore/awayScore — chỉ TĂNG mới tính là
   // bàn thắng (giảm là provider sửa số liệu, không phải bàn thắng thật). Tick đầu tiên quan sát
   // 1 match (dbMatch.homeScore null từ lúc còn SCHEDULED, match.homeScore về 0 lúc kickoff)
@@ -150,6 +155,18 @@ async function applyMatchUpdate(dbMatch: DbMatch, match: CanonicalMatch, publish
     void syncStandingsFromMatches(dbMatch.seasonId).catch((err) => {
       console.error(`syncLiveMatches: syncStandingsFromMatches thất bại cho season ${dbMatch.seasonId}`, err);
     });
+
+    // Top scorers/assists (PlayerStatistics.goals/assists) — cùng vấn đề "chỉ cập nhật khi sync
+    // tay" như standings, nhưng KHÔNG tính được từ Match local (không đủ data theo cầu thủ cho
+    // toàn mùa, xem comment đầy đủ ở refreshTopScorersIfNeeded()) nên vẫn gọi provider, có
+    // throttle riêng theo competition+season để không gọi thừa khi nhiều match cùng giải/mùa
+    // FINISHED gần nhau.
+    void refreshTopScorersIfNeeded(adapter, dbMatch.competitionId, dbMatch.seasonId).catch((err) => {
+      console.error(
+        `syncLiveMatches: refreshTopScorersIfNeeded thất bại cho competition ${dbMatch.competitionId}`,
+        err,
+      );
+    });
   }
 
   // Odds auto-refresh cho match đang LIVE/HALFTIME — xem live-odds.ts (tự no-op khi
@@ -175,7 +192,7 @@ export async function syncLiveMatches() {
       // cũng chưa được sync — cần chạy job sync danh mục (competitions/teams/seasons) trước.
       continue;
     }
-    await applyMatchUpdate(dbMatch, match, publisher);
+    await applyMatchUpdate(dbMatch, match, publisher, adapter);
   }
 
   // Reconcile match kẹt LIVE/HALFTIME nhưng KHÔNG còn nằm trong fetchLiveMatches() tick này —
@@ -198,7 +215,7 @@ export async function syncLiveMatches() {
     if (!externalId || fetchedExternalIds.has(externalId)) continue;
     try {
       const freshMatch = await adapter.fetchMatch(externalId);
-      await applyMatchUpdate(dbMatch, freshMatch, publisher);
+      await applyMatchUpdate(dbMatch, freshMatch, publisher, adapter);
       reconciledCount += 1;
     } catch (err) {
       console.error(`syncLiveMatches: reconcile match kẹt LIVE ${dbMatch.id} thất bại`, err);

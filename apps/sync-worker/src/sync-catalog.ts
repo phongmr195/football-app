@@ -439,6 +439,49 @@ export async function syncStandingsFromMatches(seasonId: string) {
   return { teamsRanked: ranked.length, skippedMatches };
 }
 
+function readExternalRef(externalRef: unknown): ExternalRef | null {
+  if (typeof externalRef !== "object" || externalRef === null) return null;
+  const { provider, id } = externalRef as { provider?: unknown; id?: unknown };
+  return typeof provider === "string" && typeof id === "string" ? { provider, id } : null;
+}
+
+// Throttle trong memory theo (competitionId, seasonId) — KHÔNG dùng cột DB riêng, cùng lý do/
+// pattern live-odds.ts's lastFetchedAt (reset khi process restart, chấp nhận được, tệ nhất tốn 1
+// request thừa ngay sau redeploy). Tránh gọi provider nhiều lần liên tiếp khi nhiều match cùng
+// giải/mùa FINISHED gần nhau (vd nhiều trận cùng kickoff 15:00 UTC kết thúc trong vài phút).
+const TOP_SCORERS_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const topScorersLastFetchedAt = new Map<string, number>();
+
+// TopScorer/TopAssist/PlayerStatistics(goals/assists) trước đây CHỈ cập nhật khi admin bấm sync
+// tay (syncTopScorers() gọi thẳng provider) — khác Standing (tính được từ Match local), số bàn
+// theo TỪNG CẦU THỦ không thể tính đủ từ local data vì MatchEvent chỉ có cho số match ĐÃ được
+// scrape Sofascore (xem CLAUDE.md § Scraper), không phải toàn bộ mùa giải — bug thật báo
+// 2026-08-24: TopScorer đứng yên ở đúng snapshot lần sync tay gần nhất (3 cầu thủ Arsenal 1 bàn
+// mỗi người, dù đã qua thêm ~10 trận thật của cả vòng đấu). Giải pháp: gọi lại
+// adapter.fetchTopScorers() (vẫn provider, không phải tính local) TỰ ĐỘNG mỗi khi có match trong
+// giải/mùa đó vừa FINISHED — throttle theo TOP_SCORERS_REFRESH_INTERVAL_MS để không gọi thừa.
+// Lỗi (provider tạm lỗi, competition thiếu externalRef...) throw bình thường ra ngoài — caller
+// (sync-live-matches.ts) bọc .catch() riêng, cùng pattern generateMatchSummaryIfNeeded/
+// syncStandingsFromMatches, không tự nuốt lỗi ở đây.
+export async function refreshTopScorersIfNeeded(adapter: DataProviderAdapter, competitionId: string, seasonId: string) {
+  const key = `${competitionId}:${seasonId}`;
+  const last = topScorersLastFetchedAt.get(key);
+  if (last && Date.now() - last < TOP_SCORERS_REFRESH_INTERVAL_MS) return;
+
+  const [competition, season] = await Promise.all([
+    prisma.competition.findUniqueOrThrow({ where: { id: competitionId } }),
+    prisma.season.findUniqueOrThrow({ where: { id: seasonId } }),
+  ]);
+
+  const competitionExternalRef = readExternalRef(competition.externalRef);
+  if (!competitionExternalRef || competitionExternalRef.provider !== adapter.providerName) return;
+
+  topScorersLastFetchedAt.set(key, Date.now());
+
+  // seasonExternalRef.id === Season.name (năm bắt đầu) — cùng convention findSeason() ở trên.
+  return syncTopScorers(adapter, competitionExternalRef, { provider: adapter.providerName, id: season.name });
+}
+
 // Đồng bộ toàn bộ 1 giải đấu cho 1 season: teams -> players (từng team) -> standings + matches
 // -> top scorers/assists + team/clean-sheet aggregates. Giả định syncCompetitions + syncSeasons
 // đã chạy trước (competition/season đã có trong DB).

@@ -15,7 +15,7 @@
     "generate-player-season-stats-manifest": "tsx src/scripts/generate-player-season-stats-manifest.ts",
     "ingest-player-season-stats": "tsx src/scripts/ingest-player-season-stats.ts",
     "sync-competition-season": "tsx src/scripts/sync-competition-season.ts",
-    "recompute-standings": "tsx src/scripts/recompute-standings.ts",
+    "recompute-season-stats": "tsx src/scripts/recompute-season-stats.ts",
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
