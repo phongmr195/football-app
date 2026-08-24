@@ -91,3 +91,34 @@ export function rankCleanSheetTeams(statsByTeamId: Map<string, TeamAggregateStat
       rank: index + 1,
     }));
 }
+
+export interface CalculatedStandingRow {
+  teamId: string;
+  position: number;
+  played: number;
+  win: number;
+  draw: number;
+  loss: number;
+  gf: number;
+  ga: number;
+  gd: number;
+  points: number;
+}
+
+/**
+ * Xếp hạng standings từ `statsByTeamId` (output của `calculateTeamSeasonStatistics()`) — tie-break
+ * theo điểm số -> hiệu số -> số bàn thắng (thứ tự phổ biến nhất của các giải), KHÔNG có head-to-
+ * head (cần lịch sử đối đầu trực tiếp, không có input đủ ở tầng này) — chấp nhận được vì trường
+ * hợp cần tie-break xa hơn hiệu số/bàn thắng rất hiếm khi xảy ra ở 1 mùa giải đầy đủ.
+ */
+export function rankStandings(statsByTeamId: Map<string, TeamAggregateStats>): CalculatedStandingRow[] {
+  return [...statsByTeamId.entries()]
+    .map(([teamId, stats]) => {
+      const played = stats.wins + stats.draws + stats.losses;
+      const gd = stats.goalsFor - stats.goalsAgainst;
+      const points = stats.wins * 3 + stats.draws;
+      return { teamId, played, win: stats.wins, draw: stats.draws, loss: stats.losses, gf: stats.goalsFor, ga: stats.goalsAgainst, gd, points };
+    })
+    .sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf)
+    .map((row, index) => ({ ...row, position: index + 1 }));
+}

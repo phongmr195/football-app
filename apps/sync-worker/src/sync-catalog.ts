@@ -1,6 +1,6 @@
 import type { DataProviderAdapter, ExternalRef } from "@football-app/data-provider";
 import { prisma } from "@football-app/database";
-import { calculateTeamSeasonStatistics, rankCleanSheetTeams } from "@football-app/shared";
+import { calculateTeamSeasonStatistics, rankCleanSheetTeams, rankStandings } from "@football-app/shared";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 
 // Thứ tự phụ thuộc bắt buộc: syncCompetitions -> syncSeasons -> syncTeams -> syncPlayers,
@@ -395,6 +395,48 @@ export async function syncTeamAggregates(seasonId: string) {
   ]);
 
   return { teamsProcessed: statsByTeamId.size, cleanSheetTeams: ranked.length, skippedMatches };
+}
+
+// Tính lại bảng xếp hạng (Standing) TRỰC TIẾP từ Match FINISHED trong DB — KHÔNG gọi
+// adapter.fetchStandings() (provider), khác hẳn syncStandings() ở trên. Lý do: syncStandings()
+// chỉ chạy khi admin bấm sync tay (qua /admin/data-sync's runSyncPipeline() -> sync-competition-
+// season.ts) — mùa giải hiện tại (matches vẫn đang diễn ra qua sync-worker-live's live poller tự
+// động trên Render) không có gì tự re-sync Standing, nên bảng xếp hạng "đứng yên" từ lần sync tay
+// gần nhất dù match mới liên tục FINISHED (bug thật báo 2026-08-24). Hàm này tính hoàn toàn từ
+// data local (giống syncTeamAggregates() ở trên, cùng helper calculateTeamSeasonStatistics()) —
+// KHÔNG tốn thêm request nào tới provider, nên gọi được ngay trong live-poll loop (xem
+// sync-live-matches.ts) mỗi khi có match VỪA chuyển FINISHED.
+//
+// Tie-break: điểm số -> hiệu số -> bàn thắng (rankStandings() trong packages/shared) — không có
+// head-to-head, chấp nhận được vì hiếm khi cần tie-break xa hơn ở 1 mùa đầy đủ. Có thể lệch vài
+// bậc so với bảng "chính thức" nếu giải có trừ điểm (kỷ luật) — provider mới biết được số đó,
+// syncStandings() (chạy tay) vẫn là nguồn "chính thức" khi cần đối chiếu.
+export async function syncStandingsFromMatches(seasonId: string) {
+  const matches = await prisma.match.findMany({
+    where: { seasonId, status: "FINISHED" },
+    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
+  });
+  const { statsByTeamId, skippedMatches } = calculateTeamSeasonStatistics(matches);
+  const ranked = rankStandings(statsByTeamId);
+  const activeTeamIds = ranked.map((row) => row.teamId);
+
+  await Promise.all([
+    Promise.all(
+      ranked.map((row) => {
+        const { teamId, ...rest } = row;
+        return prisma.standing.upsert({
+          where: { seasonId_teamId: { seasonId, teamId } },
+          create: { seasonId, teamId, ...rest },
+          update: rest,
+        });
+      }),
+    ),
+    activeTeamIds.length === 0
+      ? prisma.standing.deleteMany({ where: { seasonId } })
+      : prisma.standing.deleteMany({ where: { seasonId, teamId: { notIn: activeTeamIds } } }),
+  ]);
+
+  return { teamsRanked: ranked.length, skippedMatches };
 }
 
 // Đồng bộ toàn bộ 1 giải đấu cho 1 season: teams -> players (từng team) -> standings + matches

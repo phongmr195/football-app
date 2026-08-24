@@ -5,6 +5,7 @@ import { readExternalRefId, refreshLiveOddsIfNeeded } from "./live-odds";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
+import { syncStandingsFromMatches } from "./sync-catalog";
 
 type DbMatch = NonNullable<Awaited<ReturnType<typeof prisma.match.findFirst>>>;
 
@@ -140,6 +141,14 @@ async function applyMatchUpdate(dbMatch: DbMatch, match: CanonicalMatch, publish
   if (dbMatch.status !== "FINISHED" && match.status === "FINISHED") {
     void generateMatchSummaryIfNeeded(dbMatch.id).catch((err) => {
       console.error(`syncLiveMatches: generateMatchSummaryIfNeeded thất bại cho match ${dbMatch.id}`, err);
+    });
+
+    // Bảng xếp hạng mùa hiện tại trước đây CHỈ cập nhật khi admin bấm sync tay (xem
+    // syncStandingsFromMatches() trong sync-catalog.ts) — trigger ngay khi có match VỪA
+    // FINISHED, tính hoàn toàn từ Match local (KHÔNG gọi provider) nên an toàn gọi ở đây, cùng
+    // lý do/pattern generateMatchSummaryIfNeeded ngay trên. KHÔNG await, không chặn tick tiếp theo.
+    void syncStandingsFromMatches(dbMatch.seasonId).catch((err) => {
+      console.error(`syncLiveMatches: syncStandingsFromMatches thất bại cho season ${dbMatch.seasonId}`, err);
     });
   }
 
