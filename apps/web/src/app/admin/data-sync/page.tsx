@@ -186,7 +186,7 @@ export default function AdminDataSyncPage() {
     <div className="flex flex-col gap-6">
       <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         <RefreshCw className="h-6 w-6" aria-hidden="true" />
-        Đồng bộ dữ liệu
+        Sync data
       </h1>
 
       <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">

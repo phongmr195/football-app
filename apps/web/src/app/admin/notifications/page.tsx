@@ -67,7 +67,7 @@ export default function AdminNotificationLogsPage() {
     <div className="flex flex-col gap-4">
       <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
         <Bell className="h-6 w-6" aria-hidden="true" />
-        Nhật ký thông báo
+        Notifications
       </h1>
 
       <div className="flex flex-wrap items-center gap-3">
