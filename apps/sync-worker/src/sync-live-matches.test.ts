@@ -27,6 +27,7 @@ const mockPublisher: RealtimeTransport = {
   transportName: "mock",
   publish: vi.fn().mockResolvedValue(undefined),
   publishGoal: vi.fn().mockResolvedValue(undefined),
+  publishMatchFinished: vi.fn().mockResolvedValue(undefined),
 };
 vi.mock("./realtime", () => ({
   createPublisher: () => mockPublisher,
@@ -128,6 +129,7 @@ beforeEach(async () => {
   await cleanupTestData();
   mockPublisher.publish = vi.fn().mockResolvedValue(undefined);
   mockPublisher.publishGoal = vi.fn().mockResolvedValue(undefined);
+  mockPublisher.publishMatchFinished = vi.fn().mockResolvedValue(undefined);
 });
 afterAll(cleanupTestData);
 

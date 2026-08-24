@@ -25,3 +25,18 @@ export interface GoalEvent {
   awayScore: number;
   scoredAt: string; // ISO datetime
 }
+
+// Publish-side shape khi 1 match VỪA chuyển sang FINISHED — kênh global riêng (giống GoalEvent),
+// vì noti "trận đấu kết thúc" cũng phải nổ kể cả khi không ai đang xem qua WebSocket. Kèm sẵn tên
+// đội (KHÔNG chỉ id) để apps/api's notifier dựng message push mà không cần query lại Postgres —
+// sync-worker đã có sẵn data này ngay lúc publish (xem sync-live-matches.ts).
+export interface MatchFinishedEvent {
+  matchId: string;
+  homeTeamId: string;
+  awayTeamId: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeScore: number;
+  awayScore: number;
+  finishedAt: string; // ISO datetime
+}

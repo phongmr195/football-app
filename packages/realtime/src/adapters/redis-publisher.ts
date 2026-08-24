@@ -1,6 +1,6 @@
 import Redis from "ioredis";
 import type { RealtimeTransport } from "../publisher.interface";
-import type { GoalEvent, LiveUpdateEvent } from "../types";
+import type { GoalEvent, LiveUpdateEvent, MatchFinishedEvent } from "../types";
 
 function channelFor(matchId: string): string {
   // Kênh theo TỪNG match, không dùng 1 kênh global — registry kết nối ở apps/api vốn đã per-match
@@ -13,6 +13,10 @@ function channelFor(matchId: string): string {
 // goal-notifier) đăng ký đúng 1 kênh này suốt vòng đời process, thay vì subscribe/unsubscribe
 // theo lifecycle của ConnectionRegistry như channelFor() ở trên.
 const GOAL_EVENTS_CHANNEL = "goal-events";
+
+// Kênh global thứ 2, cùng lý do/permanent-subscriber style với GOAL_EVENTS_CHANNEL — xem
+// MatchFinishedEvent's doc comment.
+const MATCH_FINISHED_EVENTS_CHANNEL = "match-finished-events";
 
 export interface RedisPublisherOptions {
   redisUrl: string;
@@ -68,6 +72,18 @@ export class RedisPublisher implements RealtimeTransport {
       // notification bị bỏ lỡ (client vẫn thấy score mới qua REST/WS catch-up).
       console.error(
         `redis-publisher: publishGoal thất bại cho match ${event.matchId} (degrading gracefully)`,
+        err,
+      );
+    }
+  }
+
+  async publishMatchFinished(event: MatchFinishedEvent): Promise<void> {
+    try {
+      await this.client.publish(MATCH_FINISHED_EVENTS_CHANNEL, JSON.stringify(event));
+    } catch (err) {
+      // Cùng triết lý publish()/publishGoal() ở trên.
+      console.error(
+        `redis-publisher: publishMatchFinished thất bại cho match ${event.matchId} (degrading gracefully)`,
         err,
       );
     }
