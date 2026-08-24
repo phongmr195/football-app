@@ -103,7 +103,7 @@ export default function AdminConfigPage() {
       <div className="flex items-center justify-between gap-4">
         <h1 className="flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
           <Settings className="h-6 w-6" aria-hidden="true" />
-          Cấu hình (Feature flags)
+          Settings (Feature flags)
         </h1>
         <Button onClick={openCreate}>+ Thêm mới</Button>
       </div>
