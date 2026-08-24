@@ -1,31 +1,30 @@
 "use client";
 
 /**
- * React context wrapping the Firebase JS SDK's auth state (Google + Phone sign-in) for
+ * React context wrapping the Firebase JS SDK's auth state (Google + Facebook popup, và
+ * username/password của chính app — xem "signInWithUsername"/"registerWithUsername" dưới) cho
  * apps/web. Mounted once in app/layout.tsx around the whole app (NavBar needs it too, for the
  * "Đăng nhập"/"Đăng xuất" state).
+ *
+ * Phone sign-in đã BỎ (2026-08-24) — Firebase Phone Auth bắt buộc gói Blaze (trả phí) + tính phí
+ * theo từng SMS, không có free tier, xem CLAUDE.md § Authentication. Thay bằng username/password
+ * tự build (apps/api/src/routes/auth.ts) — backend mint 1 Firebase custom token khi đăng ký/đăng
+ * nhập thành công, client signInWithCustomToken() bằng token đó để vẫn ra được Firebase ID token
+ * thật, không cần sửa gì ở tầng verify token (requireAuth) hay mọi API đã có.
  */
 import {
   FacebookAuthProvider,
   GoogleAuthProvider,
-  RecaptchaVerifier,
   onAuthStateChanged,
-  signInWithPhoneNumber as firebaseSignInWithPhoneNumber,
+  signInWithCustomToken,
   signInWithPopup,
   signOut as firebaseSignOut,
-  type ConfirmationResult,
+  updateProfile,
   type User,
 } from "firebase/auth";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { auth } from "./firebase";
+import { loginWithUsername, registerWithUsername } from "./user-auth";
 
 interface AuthContextValue {
   user: User | null;
@@ -40,14 +39,17 @@ interface AuthContextValue {
    * isn't enabled yet.
    */
   signInWithFacebook: () => Promise<void>;
-  /**
-   * Step 1 of phone sign-in: sends an SMS code. `recaptchaContainerId` must be the id of an
-   * empty, currently-mounted DOM element (invisible reCAPTCHA renders into it) — see
-   * app/auth/page.tsx.
-   */
-  sendPhoneCode: (phoneNumber: string, recaptchaContainerId: string) => Promise<void>;
-  /** Step 2 of phone sign-in: confirms the SMS code sent by `sendPhoneCode`. */
-  confirmPhoneCode: (code: string) => Promise<void>;
+  /** Đăng ký username/password mới — validate đầy đủ đã chạy ở server (apps/api's
+   * registerBodySchema), lỗi cụ thể (username trùng, password yếu, confirmPassword không khớp...)
+   * ném ra qua ApiError, xem extractAuthErrorMessage() trong app/auth/page.tsx. Tự đăng nhập luôn
+   * sau khi đăng ký thành công (không cần bước đăng nhập riêng). */
+  registerWithUsernamePassword: (
+    fullName: string,
+    username: string,
+    password: string,
+    confirmPassword: string,
+  ) => Promise<void>;
+  signInWithUsernamePassword: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   /**
    * Current user's Firebase ID token, or null if signed out. Firebase ID tokens are short-lived
@@ -63,11 +65,6 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Phone sign-in is a 2-step flow (send code -> confirm code); these need to survive between
-  // the two calls but don't need to trigger re-renders themselves, hence refs over state.
-  const confirmationResultRef = useRef<ConfirmationResult | null>(null);
-  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
@@ -85,28 +82,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signInWithPopup(auth, new FacebookAuthProvider());
   }, []);
 
-  const sendPhoneCode = useCallback(async (phoneNumber: string, recaptchaContainerId: string) => {
-    // Reuse a single RecaptchaVerifier per container across retries (e.g. user mistypes the
-    // phone number and resubmits) — creating a new one each call without clearing the old one
-    // leaks widgets into the DOM.
-    if (!recaptchaVerifierRef.current) {
-      recaptchaVerifierRef.current = new RecaptchaVerifier(auth, recaptchaContainerId, {
-        size: "invisible",
-      });
-    }
-    confirmationResultRef.current = await firebaseSignInWithPhoneNumber(
-      auth,
-      phoneNumber,
-      recaptchaVerifierRef.current
-    );
-  }, []);
+  const registerWithUsernamePassword = useCallback(
+    async (fullName: string, username: string, password: string, confirmPassword: string) => {
+      const { customToken } = await registerWithUsername(fullName, username, password, confirmPassword);
+      const credential = await signInWithCustomToken(auth, customToken);
+      // fullName chỉ lưu ở UserProfile.displayName (Postgres, xem apps/api/src/routes/auth.ts) —
+      // Firebase's User object KHÔNG tự biết giá trị này (signInWithCustomToken không set
+      // displayName). Đồng bộ sang đây 1 lần lúc đăng ký để AuthStatus.tsx (đọc user.displayName)
+      // hiện đúng tên thật thay vì rơi về fallback "Tài khoản".
+      await updateProfile(credential.user, { displayName: fullName });
+    },
+    [],
+  );
 
-  const confirmPhoneCode = useCallback(async (code: string) => {
-    if (!confirmationResultRef.current) {
-      throw new Error("Chưa gửi mã xác nhận — gọi sendPhoneCode trước khi confirmPhoneCode.");
-    }
-    await confirmationResultRef.current.confirm(code);
-    confirmationResultRef.current = null;
+  const signInWithUsernamePassword = useCallback(async (username: string, password: string) => {
+    const { customToken } = await loginWithUsername(username, password);
+    await signInWithCustomToken(auth, customToken);
   }, []);
 
   const signOut = useCallback(async () => {
@@ -124,8 +115,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         signInWithGoogle,
         signInWithFacebook,
-        sendPhoneCode,
-        confirmPhoneCode,
+        registerWithUsernamePassword,
+        signInWithUsernamePassword,
         signOut,
         getIdToken,
       }}

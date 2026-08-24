@@ -43,8 +43,8 @@ export function AuthStatus() {
     );
   }
 
-  const name = user.displayName ?? user.phoneNumber ?? "Tài khoản";
-  const contact = user.email ?? user.phoneNumber ?? null;
+  const name = user.displayName ?? "Tài khoản";
+  const contact = user.email ?? null;
   const initial = name.charAt(0).toUpperCase();
 
   return (

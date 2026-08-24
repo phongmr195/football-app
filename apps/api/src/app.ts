@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { cors } from "hono/cors";
 import { healthRoute } from "./routes/health";
+import { authRoute } from "./routes/auth";
 import { competitionsRoute } from "./routes/competitions";
 import { teamsRoute } from "./routes/teams";
 import { playersRoute } from "./routes/players";
@@ -62,6 +63,7 @@ app.use(
   })
 );
 app.route("/", healthRoute);
+app.route("/", authRoute);
 app.route("/", competitionsRoute);
 app.route("/", teamsRoute);
 app.route("/", playersRoute);
