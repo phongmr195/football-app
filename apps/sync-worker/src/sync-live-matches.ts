@@ -8,7 +8,15 @@ import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
 import { refreshTopScorersIfNeeded, syncStandingsFromMatches } from "./sync-catalog";
 
-type DbMatch = NonNullable<Awaited<ReturnType<typeof prisma.match.findFirst>>>;
+// Kèm tên đội (select tối thiểu) — cần cho MatchFinishedEvent's homeTeamName/awayTeamName mà
+// không phải query thêm 1 lần nữa trong applyMatchUpdate().
+const DB_MATCH_INCLUDE = {
+  homeTeam: { select: { name: true } },
+  awayTeam: { select: { name: true } },
+} as const;
+type DbMatch = NonNullable<
+  Awaited<ReturnType<typeof prisma.match.findFirst<{ include: typeof DB_MATCH_INCLUDE }>>>
+>;
 
 // Match League thường (không hiệp phụ) kết thúc ~1h45-2h sau kickoff (90' + bù giờ + nghỉ giữa
 // giờ) — 2h dư margin ~15-30 phút cho case đó. Match VẪN đang live thật (hiệp phụ, hoặc chỉ chậm
@@ -36,6 +44,7 @@ async function findDbMatchByExternalId(
         { externalRef: { path: ["id"], equals: externalId } },
       ],
     },
+    include: DB_MATCH_INCLUDE,
   });
 }
 
@@ -168,6 +177,24 @@ async function applyMatchUpdate(
         err,
       );
     });
+
+    // Push noti "trận đấu kết thúc" cho user có đội yêu thích đá trận này (apps/api's
+    // match-finished-notifier.ts subscribe kênh này) — cùng lý do KHÔNG await với goalEvents ở
+    // trên, chỉ khác kênh global riêng thay vì per-match.
+    try {
+      await publisher.publishMatchFinished({
+        matchId: dbMatch.id,
+        homeTeamId: dbMatch.homeTeamId,
+        awayTeamId: dbMatch.awayTeamId,
+        homeTeamName: dbMatch.homeTeam.name,
+        awayTeamName: dbMatch.awayTeam.name,
+        homeScore: newHomeScore,
+        awayScore: newAwayScore,
+        finishedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      void logError(`syncLiveMatches: publishMatchFinished thất bại cho match ${dbMatch.id}`, err);
+    }
   }
 
   // Odds auto-refresh cho match đang LIVE/HALFTIME — xem live-odds.ts (tự no-op khi
@@ -208,6 +235,7 @@ export async function syncLiveMatches() {
       kickoffAt: { lt: new Date(Date.now() - STALE_LIVE_THRESHOLD_MS) },
       externalRef: { path: ["provider"], equals: adapter.providerName },
     },
+    include: DB_MATCH_INCLUDE,
   });
 
   let reconciledCount = 0;

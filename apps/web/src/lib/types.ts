@@ -421,3 +421,17 @@ export interface PlayerStatistics {
   saves: number | null;
   cleanSheet: number | null;
 }
+
+/** GET /notifications (apps/api/src/routes/notifications.ts) — thông báo CỦA CHÍNH user đang đăng
+ * nhập (khác NotificationLog ở admin, vốn là log gửi theo mọi user). `data` là payload gốc gửi
+ * kèm FCM push (xem goal-notifier.ts/match-finished-notifier.ts) — shape khác nhau theo `type`
+ * ("goal" | "match_result"), không model hoá chặt ở đây vì UI hiện chỉ cần title/body hiển thị. */
+export interface UserNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  data: Record<string, unknown> | null;
+  readAt: string | null;
+  createdAt: string;
+}

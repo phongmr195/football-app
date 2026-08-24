@@ -92,6 +92,7 @@ model NotificationSetting {
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   goalAlerts        Boolean @default(true)
   matchStartAlerts  Boolean @default(true)
+  matchResultAlerts Boolean @default(true)
   newsAlerts        Boolean @default(false)
 
   @@map("notification_settings")

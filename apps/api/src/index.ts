@@ -4,6 +4,7 @@ import { serve } from "@hono/node-server";
 import { app } from "./app";
 import { attachWebSocketServer } from "./realtime/ws-server";
 import { startGoalNotifier } from "./realtime/goal-notifier";
+import { startMatchFinishedNotifier } from "./realtime/match-finished-notifier";
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -21,3 +22,6 @@ attachWebSocketServer(server as HttpServer);
 // onLastUnsubscribe ở attachWebSocketServer trên): goal notification phải nổ kể cả khi không ai
 // đang xem match qua WS. Xem apps/api/src/realtime/goal-notifier.ts.
 startGoalNotifier();
+// Cùng lý do/pattern startGoalNotifier() ở trên, kênh global riêng — xem
+// apps/api/src/realtime/match-finished-notifier.ts.
+startMatchFinishedNotifier();

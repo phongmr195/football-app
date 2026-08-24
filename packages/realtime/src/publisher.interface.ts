@@ -1,4 +1,4 @@
-import type { GoalEvent, LiveUpdateEvent } from "./types";
+import type { GoalEvent, LiveUpdateEvent, MatchFinishedEvent } from "./types";
 
 // Interface CHỈ áp dụng cho phía publish (mirror DataProviderAdapter — sync-worker phụ thuộc vào
 // interface này, không biết transport cụ thể là Redis Pub/Sub hay (sau này) AWS SNS/EventBridge).
@@ -16,4 +16,7 @@ export interface RealtimeTransport {
   // ConnectionRegistry). Vẫn cùng 1 transport/connection Redis, chỉ thêm method thứ 2 — xem plan
   // Phase 2 Bước 3 § A3 cho lý do không tách interface riêng.
   publishGoal(event: GoalEvent): Promise<void>;
+  // Kênh global riêng thứ 2 (giống publishGoal, khác lý do — xem MatchFinishedEvent) — noti "trận
+  // đấu kết thúc" cho user có đội yêu thích đá trận đó.
+  publishMatchFinished(event: MatchFinishedEvent): Promise<void>;
 }
