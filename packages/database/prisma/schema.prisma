@@ -918,6 +918,37 @@ model AiUsageLog {
   @@map("ai_usage_logs")
 }
 
+// ==================== System Log Module ====================
+
+// Lỗi/warning quan trọng từ apps/api và apps/sync-worker (service dài hạn) — trước đó CHỈ có
+// console.error/warn, đi thẳng ra stdout/stderr, không có gì lưu lại được (Render's log stream tự
+// mất theo thời gian, không ai xem trừ khi chủ động mở dashboard đúng lúc). KHÔNG ghi mọi
+// console.log (sẽ phình DB vô ích) — chỉ các catch-block "fire-and-forget không được throw ra
+// ngoài" đã có sẵn trong code (sync-live-matches.ts, live-odds.ts, poll-live-matches.ts,
+// goal-notifier.ts...) và lỗi 500 chưa bắt được ở tầng route (app.onError trong apps/api/src/
+// app.ts) — đây chính xác là các chỗ lỗi "biến mất im lặng" hiện tại.
+enum SystemLogService {
+  API
+  SYNC_WORKER
+}
+
+enum SystemLogLevel {
+  WARN
+  ERROR
+}
+
+model SystemLog {
+  id        String           @id @default(cuid())
+  service   SystemLogService
+  level     SystemLogLevel
+  message   String
+  detail    Json?
+  createdAt DateTime         @default(now())
+
+  @@index([service, level, createdAt])
+  @@map("system_logs")
+}
+
 // ==================== Notification Module ====================
 
 model Notification {

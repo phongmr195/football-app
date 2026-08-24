@@ -4,6 +4,7 @@ import { prisma } from "@football-app/database";
 import type { LiveUpdateEvent } from "@football-app/realtime";
 import { ConnectionRegistry, type WebSocketLike } from "./connection-registry";
 import { subscribeChannel, unsubscribeChannel } from "./redis-subscriber";
+import { logError } from "../logger";
 
 // Message protocol (wire contract dùng chung với apps/web — xem plan Phase 2 Bước 2 § Phần 3):
 // Client -> Server: { type: "subscribe", matchId } | { type: "unsubscribe", matchId }
@@ -49,7 +50,7 @@ export function attachWebSocketServer(server: HttpServer): void {
         try {
           event = JSON.parse(raw) as LiveUpdateEvent;
         } catch (err) {
-          console.error(`ws-server: parse Redis message thất bại cho match ${matchId}`, err);
+          void logError(`ws-server: parse Redis message thất bại cho match ${matchId}`, err);
           return;
         }
         for (const ws of registry.getSubscribers(matchId)) {
@@ -94,7 +95,7 @@ export function attachWebSocketServer(server: HttpServer): void {
           safeSend(ws, { type: "match.snapshot", matchId, data: liveState ?? null });
         })
         .catch((err) => {
-          console.error(`ws-server: query LiveMatchState thất bại cho match ${matchId}`, err);
+          void logError(`ws-server: query LiveMatchState thất bại cho match ${matchId}`, err);
           safeSend(ws, { type: "error", message: "failed to load initial snapshot" });
         });
     });

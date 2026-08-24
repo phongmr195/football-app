@@ -13,6 +13,7 @@ import {
   Landmark,
   LayoutDashboard,
   RefreshCw,
+  ScrollText,
   Settings,
   Shield,
   Trophy,
@@ -36,10 +37,11 @@ const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/admin/coaches", label: "HLV", icon: UserCog },
   { href: "/admin/referees", label: "Trọng tài", icon: Flag },
   { href: "/admin/matches", label: "Trận đấu", icon: CalendarClock },
-  { href: "/admin/config", label: "Cấu hình", icon: Settings },
-  { href: "/admin/notifications", label: "Nhật ký thông báo", icon: Bell },
-  { href: "/admin/ai-usage-logs", label: "Nhật ký sử dụng AI", icon: Coins },
-  { href: "/admin/data-sync", label: "Đồng bộ dữ liệu", icon: RefreshCw },
+  { href: "/admin/config", label: "Settings", icon: Settings },
+  { href: "/admin/notifications", label: "Notifications", icon: Bell },
+  { href: "/admin/ai-usage-logs", label: "AI usage", icon: Coins },
+  { href: "/admin/system-logs", label: "System logs", icon: ScrollText },
+  { href: "/admin/data-sync", label: "Sync data", icon: RefreshCw },
   { href: "/admin/scraper", label: "Scraper dữ liệu", icon: Download },
 ];
 

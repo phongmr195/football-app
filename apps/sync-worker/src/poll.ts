@@ -1,4 +1,5 @@
 import { createServer } from "node:http";
+import { logError } from "./logger";
 import { runLivePollingLoop } from "./poll-live-matches";
 
 // Entrypoint chạy loop polling live-match dài hạn cho local dev / Docker (xem CLAUDE.md § Data
@@ -35,7 +36,12 @@ runLivePollingLoop({ intervalMs, signal: controller.signal })
     console.log("live polling loop đã dừng");
     process.exit(0);
   })
-  .catch((err) => {
-    console.error("live polling loop crashed", err);
+  .catch(async (err) => {
+    // await trước process.exit() — process.exit() cắt ngang mọi promise pending ngay lập tức, nên
+    // đây (crash làm chết cả service) là đúng chỗ CẦN đợi ghi SystemLog xong, khác mọi call site
+    // fire-and-forget khác của logError() trong codebase. Race với timeout 5s — DB không phản hồi
+    // lúc crash (worst case) không được phép treo process mãi, ưu tiên thoát/restart đúng lịch hơn
+    // là chắc chắn ghi được log.
+    await Promise.race([logError("live polling loop crashed", err), new Promise((r) => setTimeout(r, 5000))]);
     process.exit(1);
   });

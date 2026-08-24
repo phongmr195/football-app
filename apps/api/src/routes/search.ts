@@ -3,6 +3,7 @@ import { prisma } from "@football-app/database";
 import { Hono } from "hono";
 import { z } from "zod";
 import { tryResolveUserId } from "../middleware/auth";
+import { logError } from "../logger";
 
 const searchQuerySchema = z.object({
   q: z.string().trim().min(1),
@@ -54,7 +55,7 @@ export const searchRoute = new Hono().get(
     // có userId để tra cứu lại sau nên không có giá trị ghi).
     if (userId) {
       prisma.searchHistory.create({ data: { userId, query: q } }).catch((err) => {
-        console.error("search: failed to log search_history", err);
+        void logError("search: failed to log search_history", err);
       });
     }
 

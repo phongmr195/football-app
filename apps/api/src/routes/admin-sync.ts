@@ -4,6 +4,7 @@ import { prisma } from "@football-app/database";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAdminSession } from "../middleware/admin-auth";
+import { logError } from "../logger";
 import { SYNC_COMPETITION_KEYS, SYNC_COMPETITIONS, type SyncCompetitionKey } from "../sync-competitions";
 import { runSyncPipeline } from "../sync-orchestrator";
 
@@ -93,7 +94,7 @@ export const adminSyncRoute = new Hono()
     // Không await — job chạy vài phút, không block response. Lỗi bất ngờ (throw trước khi kịp tự
     // ghi FAILED bên trong runSyncPipeline) vẫn được bắt ở đây, đúng nguyên tắc goal-notifier.ts.
     void runSyncPipeline(run.id).catch((err) => {
-      console.error(`runSyncPipeline(${run.id}) threw unexpectedly:`, err);
+      void logError(`runSyncPipeline(${run.id}) threw unexpectedly:`, err);
       void prisma.syncRun.update({
         where: { id: run.id },
         data: { status: "FAILED", errorMessage: String(err).slice(0, 2000), finishedAt: new Date() },
