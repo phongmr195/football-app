@@ -1,6 +1,6 @@
 import type { DataProviderAdapter, ExternalRef } from "@football-app/data-provider";
 import { prisma } from "@football-app/database";
-import { calculateTeamSeasonStatistics, rankCleanSheetTeams } from "@football-app/shared";
+import { calculateTeamSeasonStatistics, rankCleanSheetTeams, rankStandings } from "@football-app/shared";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 
 // Thứ tự phụ thuộc bắt buộc: syncCompetitions -> syncSeasons -> syncTeams -> syncPlayers,
@@ -395,6 +395,91 @@ export async function syncTeamAggregates(seasonId: string) {
   ]);
 
   return { teamsProcessed: statsByTeamId.size, cleanSheetTeams: ranked.length, skippedMatches };
+}
+
+// Tính lại bảng xếp hạng (Standing) TRỰC TIẾP từ Match FINISHED trong DB — KHÔNG gọi
+// adapter.fetchStandings() (provider), khác hẳn syncStandings() ở trên. Lý do: syncStandings()
+// chỉ chạy khi admin bấm sync tay (qua /admin/data-sync's runSyncPipeline() -> sync-competition-
+// season.ts) — mùa giải hiện tại (matches vẫn đang diễn ra qua sync-worker-live's live poller tự
+// động trên Render) không có gì tự re-sync Standing, nên bảng xếp hạng "đứng yên" từ lần sync tay
+// gần nhất dù match mới liên tục FINISHED (bug thật báo 2026-08-24). Hàm này tính hoàn toàn từ
+// data local (giống syncTeamAggregates() ở trên, cùng helper calculateTeamSeasonStatistics()) —
+// KHÔNG tốn thêm request nào tới provider, nên gọi được ngay trong live-poll loop (xem
+// sync-live-matches.ts) mỗi khi có match VỪA chuyển FINISHED.
+//
+// Tie-break: điểm số -> hiệu số -> bàn thắng (rankStandings() trong packages/shared) — không có
+// head-to-head, chấp nhận được vì hiếm khi cần tie-break xa hơn ở 1 mùa đầy đủ. Có thể lệch vài
+// bậc so với bảng "chính thức" nếu giải có trừ điểm (kỷ luật) — provider mới biết được số đó,
+// syncStandings() (chạy tay) vẫn là nguồn "chính thức" khi cần đối chiếu.
+export async function syncStandingsFromMatches(seasonId: string) {
+  const matches = await prisma.match.findMany({
+    where: { seasonId, status: "FINISHED" },
+    select: { homeTeamId: true, awayTeamId: true, homeScore: true, awayScore: true },
+  });
+  const { statsByTeamId, skippedMatches } = calculateTeamSeasonStatistics(matches);
+  const ranked = rankStandings(statsByTeamId);
+  const activeTeamIds = ranked.map((row) => row.teamId);
+
+  await Promise.all([
+    Promise.all(
+      ranked.map((row) => {
+        const { teamId, ...rest } = row;
+        return prisma.standing.upsert({
+          where: { seasonId_teamId: { seasonId, teamId } },
+          create: { seasonId, teamId, ...rest },
+          update: rest,
+        });
+      }),
+    ),
+    activeTeamIds.length === 0
+      ? prisma.standing.deleteMany({ where: { seasonId } })
+      : prisma.standing.deleteMany({ where: { seasonId, teamId: { notIn: activeTeamIds } } }),
+  ]);
+
+  return { teamsRanked: ranked.length, skippedMatches };
+}
+
+function readExternalRef(externalRef: unknown): ExternalRef | null {
+  if (typeof externalRef !== "object" || externalRef === null) return null;
+  const { provider, id } = externalRef as { provider?: unknown; id?: unknown };
+  return typeof provider === "string" && typeof id === "string" ? { provider, id } : null;
+}
+
+// Throttle trong memory theo (competitionId, seasonId) — KHÔNG dùng cột DB riêng, cùng lý do/
+// pattern live-odds.ts's lastFetchedAt (reset khi process restart, chấp nhận được, tệ nhất tốn 1
+// request thừa ngay sau redeploy). Tránh gọi provider nhiều lần liên tiếp khi nhiều match cùng
+// giải/mùa FINISHED gần nhau (vd nhiều trận cùng kickoff 15:00 UTC kết thúc trong vài phút).
+const TOP_SCORERS_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
+const topScorersLastFetchedAt = new Map<string, number>();
+
+// TopScorer/TopAssist/PlayerStatistics(goals/assists) trước đây CHỈ cập nhật khi admin bấm sync
+// tay (syncTopScorers() gọi thẳng provider) — khác Standing (tính được từ Match local), số bàn
+// theo TỪNG CẦU THỦ không thể tính đủ từ local data vì MatchEvent chỉ có cho số match ĐÃ được
+// scrape Sofascore (xem CLAUDE.md § Scraper), không phải toàn bộ mùa giải — bug thật báo
+// 2026-08-24: TopScorer đứng yên ở đúng snapshot lần sync tay gần nhất (3 cầu thủ Arsenal 1 bàn
+// mỗi người, dù đã qua thêm ~10 trận thật của cả vòng đấu). Giải pháp: gọi lại
+// adapter.fetchTopScorers() (vẫn provider, không phải tính local) TỰ ĐỘNG mỗi khi có match trong
+// giải/mùa đó vừa FINISHED — throttle theo TOP_SCORERS_REFRESH_INTERVAL_MS để không gọi thừa.
+// Lỗi (provider tạm lỗi, competition thiếu externalRef...) throw bình thường ra ngoài — caller
+// (sync-live-matches.ts) bọc .catch() riêng, cùng pattern generateMatchSummaryIfNeeded/
+// syncStandingsFromMatches, không tự nuốt lỗi ở đây.
+export async function refreshTopScorersIfNeeded(adapter: DataProviderAdapter, competitionId: string, seasonId: string) {
+  const key = `${competitionId}:${seasonId}`;
+  const last = topScorersLastFetchedAt.get(key);
+  if (last && Date.now() - last < TOP_SCORERS_REFRESH_INTERVAL_MS) return;
+
+  const [competition, season] = await Promise.all([
+    prisma.competition.findUniqueOrThrow({ where: { id: competitionId } }),
+    prisma.season.findUniqueOrThrow({ where: { id: seasonId } }),
+  ]);
+
+  const competitionExternalRef = readExternalRef(competition.externalRef);
+  if (!competitionExternalRef || competitionExternalRef.provider !== adapter.providerName) return;
+
+  topScorersLastFetchedAt.set(key, Date.now());
+
+  // seasonExternalRef.id === Season.name (năm bắt đầu) — cùng convention findSeason() ở trên.
+  return syncTopScorers(adapter, competitionExternalRef, { provider: adapter.providerName, id: season.name });
 }
 
 // Đồng bộ toàn bộ 1 giải đấu cho 1 season: teams -> players (từng team) -> standings + matches
