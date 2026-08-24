@@ -2,6 +2,7 @@ import type { CanonicalMatch, DataProviderAdapter } from "@football-app/data-pro
 import { prisma } from "@football-app/database";
 import type { GoalEvent, RealtimeTransport } from "@football-app/realtime";
 import { readExternalRefId, refreshLiveOddsIfNeeded } from "./live-odds";
+import { logError } from "./logger";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
@@ -119,7 +120,7 @@ async function applyMatchUpdate(
       updatedAt: new Date().toISOString(),
     });
   } catch (err) {
-    console.error(`syncLiveMatches: publish thất bại cho match ${dbMatch.id}`, err);
+    void logError(`syncLiveMatches: publish thất bại cho match ${dbMatch.id}`, err);
   }
 
   // Publish từng goal event SAU transaction, mỗi event bọc try/catch riêng (không phải 1 try/
@@ -129,7 +130,7 @@ async function applyMatchUpdate(
     try {
       await publisher.publishGoal(goalEvent);
     } catch (err) {
-      console.error(
+      void logError(
         `syncLiveMatches: publishGoal thất bại cho match ${dbMatch.id}, team ${goalEvent.teamId}`,
         err,
       );
@@ -145,7 +146,7 @@ async function applyMatchUpdate(
   // chạy nền, không làm chậm tick sync tiếp theo (xem plan Phase 5 § "không block API").
   if (dbMatch.status !== "FINISHED" && match.status === "FINISHED") {
     void generateMatchSummaryIfNeeded(dbMatch.id).catch((err) => {
-      console.error(`syncLiveMatches: generateMatchSummaryIfNeeded thất bại cho match ${dbMatch.id}`, err);
+      void logError(`syncLiveMatches: generateMatchSummaryIfNeeded thất bại cho match ${dbMatch.id}`, err);
     });
 
     // Bảng xếp hạng mùa hiện tại trước đây CHỈ cập nhật khi admin bấm sync tay (xem
@@ -153,7 +154,7 @@ async function applyMatchUpdate(
     // FINISHED, tính hoàn toàn từ Match local (KHÔNG gọi provider) nên an toàn gọi ở đây, cùng
     // lý do/pattern generateMatchSummaryIfNeeded ngay trên. KHÔNG await, không chặn tick tiếp theo.
     void syncStandingsFromMatches(dbMatch.seasonId).catch((err) => {
-      console.error(`syncLiveMatches: syncStandingsFromMatches thất bại cho season ${dbMatch.seasonId}`, err);
+      void logError(`syncLiveMatches: syncStandingsFromMatches thất bại cho season ${dbMatch.seasonId}`, err);
     });
 
     // Top scorers/assists (PlayerStatistics.goals/assists) — cùng vấn đề "chỉ cập nhật khi sync
@@ -162,7 +163,7 @@ async function applyMatchUpdate(
     // throttle riêng theo competition+season để không gọi thừa khi nhiều match cùng giải/mùa
     // FINISHED gần nhau.
     void refreshTopScorersIfNeeded(adapter, dbMatch.competitionId, dbMatch.seasonId).catch((err) => {
-      console.error(
+      void logError(
         `syncLiveMatches: refreshTopScorersIfNeeded thất bại cho competition ${dbMatch.competitionId}`,
         err,
       );
@@ -174,7 +175,7 @@ async function applyMatchUpdate(
   // generateMatchSummaryIfNeeded ở trên, không làm chậm tick sync tiếp theo.
   if (match.status === "LIVE" || match.status === "HALFTIME") {
     void refreshLiveOddsIfNeeded(dbMatch).catch((err) => {
-      console.error(`syncLiveMatches: refreshLiveOddsIfNeeded thất bại cho match ${dbMatch.id}`, err);
+      void logError(`syncLiveMatches: refreshLiveOddsIfNeeded thất bại cho match ${dbMatch.id}`, err);
     });
   }
 }
@@ -218,7 +219,7 @@ export async function syncLiveMatches() {
       await applyMatchUpdate(dbMatch, freshMatch, publisher, adapter);
       reconciledCount += 1;
     } catch (err) {
-      console.error(`syncLiveMatches: reconcile match kẹt LIVE ${dbMatch.id} thất bại`, err);
+      void logError(`syncLiveMatches: reconcile match kẹt LIVE ${dbMatch.id} thất bại`, err);
     }
   }
 

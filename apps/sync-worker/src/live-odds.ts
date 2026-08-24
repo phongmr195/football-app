@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prisma } from "@football-app/database";
 import { ingestSofascoreOutputs } from "./ingest-sofascore";
+import { logError } from "./logger";
 
 // Duplicate của apps/api/src/scraper-competitions.ts's SCRAPER_COMPETITIONS — apps/api và
 // apps/sync-worker không import code qua lại (2 app riêng, xem CLAUDE.md § Scraper). CHỈ 5 giải
@@ -109,7 +110,7 @@ export async function refreshLiveOddsIfNeeded(match: LiveMatchInfo): Promise<voi
 
     const result = await runPython(["scraper/scraper.py", manifestPath, outputDir, "--data-types", "odds"]);
     if (result.code !== 0) {
-      console.error(`refreshLiveOddsIfNeeded: scraper.py thất bại cho match ${match.id} (exit ${result.code}): ${result.stderr.slice(-1000)}`);
+      void logError(`refreshLiveOddsIfNeeded: scraper.py thất bại cho match ${match.id} (exit ${result.code}): ${result.stderr.slice(-1000)}`);
       return;
     }
 

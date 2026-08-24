@@ -1,6 +1,7 @@
 import type { DataProviderAdapter, ExternalRef } from "@football-app/data-provider";
 import { prisma } from "@football-app/database";
 import { calculateTeamSeasonStatistics, rankCleanSheetTeams, rankStandings } from "@football-app/shared";
+import { logError, logWarn } from "./logger";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 
 // Thứ tự phụ thuộc bắt buộc: syncCompetitions -> syncSeasons -> syncTeams -> syncPlayers,
@@ -267,7 +268,7 @@ export async function syncMatches(
     // generateMatchSummaryIfNeeded tự idempotent, an toàn khi cả 2 đường cùng trigger. KHÔNG await.
     if (existing?.status !== "FINISHED" && m.status === "FINISHED") {
       void generateMatchSummaryIfNeeded(matchId).catch((err) => {
-        console.error(`syncMatches: generateMatchSummaryIfNeeded thất bại cho match ${matchId}`, err);
+        void logError(`syncMatches: generateMatchSummaryIfNeeded thất bại cho match ${matchId}`, err);
       });
     }
   }
@@ -506,7 +507,7 @@ export async function syncCompetitionSeason(
   // provider.interface.ts) — degrade gracefully, không chặn phần sync chính đã thành công ở trên.
   const topScorersResult = await syncTopScorers(adapter, competitionExternalRef, seasonExternalRef).catch(
     (err) => {
-      console.warn(
+      void logWarn(
         `syncTopScorers thất bại cho competition ${competitionExternalRef.id} season ${seasonExternalRef.id} (provider ${adapter.providerName}) — bỏ qua`,
         err,
       );

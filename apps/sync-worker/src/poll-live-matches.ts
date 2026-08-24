@@ -1,4 +1,5 @@
 import { computeNextInterval } from "./adaptive-interval";
+import { logError } from "./logger";
 import { syncLiveMatches } from "./sync-live-matches";
 
 // sleep() dùng setTimeout + abort listener thay vì sleep chặn thật — cho phép Ctrl-C (SIGINT/
@@ -37,7 +38,7 @@ export async function runLivePollingLoop({ intervalMs = 30_000, signal }: RunLiv
       const result = await syncLiveMatches();
       console.log("live poll tick", result);
     } catch (err) {
-      console.error("live poll tick failed", err);
+      void logError("live poll tick failed", err);
     }
 
     if (signal?.aborted) break;
@@ -50,7 +51,7 @@ export async function runLivePollingLoop({ intervalMs = 30_000, signal }: RunLiv
     try {
       nextInterval = await computeNextInterval();
     } catch (err) {
-      console.error("computeNextInterval thất bại, dùng intervalMs mặc định", err);
+      void logError("computeNextInterval thất bại, dùng intervalMs mặc định", err);
     }
     console.log("live poll next interval", nextInterval);
     await sleep(nextInterval, signal);

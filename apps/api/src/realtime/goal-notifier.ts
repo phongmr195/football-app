@@ -2,6 +2,7 @@ import { prisma } from "@football-app/database";
 import type { GoalEvent } from "@football-app/realtime";
 import { getMessaging } from "firebase-admin/messaging";
 import { getFirebaseApp } from "../middleware/auth";
+import { logError } from "../logger";
 import { subscribeChannel } from "./redis-subscriber";
 
 // Kênh global CỐ ĐỊNH (khác "live:match:*" per-match, xem RedisPublisher.publishGoal) — subscriber
@@ -44,7 +45,7 @@ async function handleGoalEvent(event: GoalEvent): Promise<void> {
   try {
     favorites = await findNotifiableFavorites(event.teamId);
   } catch (err) {
-    console.error(`goal-notifier: query FavoriteTeam thất bại cho team ${event.teamId}`, err);
+    void logError(`goal-notifier: query FavoriteTeam thất bại cho team ${event.teamId}`, err);
     return;
   }
 
@@ -95,12 +96,12 @@ async function handleGoalEvent(event: GoalEvent): Promise<void> {
 
       const failedCount = response.responses.filter((r) => !r.success).length;
       if (failedCount > 0) {
-        console.error(
+        void logError(
           `goal-notifier: ${failedCount}/${tokens.length} FCM send thất bại cho user ${user.id}`,
         );
       }
     } catch (err) {
-      console.error(`goal-notifier: xử lý goal event thất bại cho user ${user.id}`, err);
+      void logError(`goal-notifier: xử lý goal event thất bại cho user ${user.id}`, err);
     }
   }
 }
@@ -117,12 +118,12 @@ export function startGoalNotifier(): void {
     try {
       event = JSON.parse(raw);
     } catch (err) {
-      console.error("goal-notifier: parse Redis message thất bại", err);
+      void logError("goal-notifier: parse Redis message thất bại", err);
       return;
     }
 
     if (!isGoalEvent(event)) {
-      console.error("goal-notifier: message không đúng shape GoalEvent, bỏ qua", event);
+      void logError("goal-notifier: message không đúng shape GoalEvent, bỏ qua", event);
       return;
     }
 
@@ -130,7 +131,7 @@ export function startGoalNotifier(): void {
       // Lớp phòng thủ cuối — handleGoalEvent() đã tự catch lỗi nội bộ theo user, nhưng vẫn bọc ở
       // đây để 1 lỗi bất ngờ (bug tương lai) không làm subscriber callback throw ra ngoài
       // ioredis's "message" event handler và crash process.
-      console.error("goal-notifier: handleGoalEvent thất bại (không throw ra ngoài subscriber)", err);
+      void logError("goal-notifier: handleGoalEvent thất bại (không throw ra ngoài subscriber)", err);
     });
   });
 }

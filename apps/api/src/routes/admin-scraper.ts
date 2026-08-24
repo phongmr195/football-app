@@ -4,6 +4,7 @@ import { prisma } from "@football-app/database";
 import { Hono } from "hono";
 import { z } from "zod";
 import { requireAdminSession } from "../middleware/admin-auth";
+import { logError } from "../logger";
 import {
   DEFAULT_SCRAPER_DATA_TYPES,
   SCRAPER_COMPETITION_KEYS,
@@ -122,7 +123,7 @@ export const adminScraperRoute = new Hono()
     // tự ghi FAILED bên trong runScraperPipeline) vẫn được bắt ở đây để không làm crash apps/api,
     // đúng nguyên tắc goal-notifier.ts.
     void runScraperPipeline(run.id).catch((err) => {
-      console.error(`runScraperPipeline(${run.id}) threw unexpectedly:`, err);
+      void logError(`runScraperPipeline(${run.id}) threw unexpectedly:`, err);
       void prisma.scraperRun.update({
         where: { id: run.id },
         data: { status: "FAILED", errorMessage: String(err).slice(0, 2000), finishedAt: new Date() },

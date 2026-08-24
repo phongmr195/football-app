@@ -1,4 +1,5 @@
 import Redis from "ioredis";
+import { logError } from "../logger";
 
 // Connection ioredis RIÊNG BIỆT, dành riêng cho subscribe — KHÔNG dùng chung client cache ở
 // ../lib/redis.ts. Lý do: 1 client ioredis sau khi gọi .subscribe()/.psubscribe() chuyển hẳn sang
@@ -26,7 +27,7 @@ function getClient(): Redis | null {
     lazyConnect: false,
   });
   client.on("error", (err) => {
-    console.error("redis-subscriber error (degrading gracefully)", err.message);
+    void logError("redis-subscriber error (degrading gracefully)", err.message);
   });
 
   return client;
@@ -56,7 +57,7 @@ export function subscribeChannel(channel: string, onMessage: (raw: string) => vo
 
   const doSubscribe = () => {
     redis.subscribe(channel).catch((err) => {
-      console.error(`redis-subscriber: subscribe("${channel}") thất bại (degrading gracefully)`, err);
+      void logError(`redis-subscriber: subscribe("${channel}") thất bại (degrading gracefully)`, err);
     });
   };
 
@@ -82,6 +83,6 @@ export function unsubscribeChannel(channel: string): void {
   if (!redis) return;
 
   redis.unsubscribe(channel).catch((err) => {
-    console.error(`redis-subscriber: unsubscribe("${channel}") thất bại (degrading gracefully)`, err);
+    void logError(`redis-subscriber: unsubscribe("${channel}") thất bại (degrading gracefully)`, err);
   });
 }

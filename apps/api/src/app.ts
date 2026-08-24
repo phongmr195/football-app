@@ -23,8 +23,18 @@ import { adminScraperRoute } from "./routes/admin-scraper";
 import { adminSyncRoute } from "./routes/admin-sync";
 import { chatRoute } from "./routes/chat";
 import { aiUsageLogsRoute } from "./routes/ai-usage-logs";
+import { systemLogsRoute } from "./routes/system-logs";
+import { logError } from "./logger";
 
 export const app = new Hono();
+
+// Bắt lỗi 500 chưa được handler nào tự catch — trước đây chỉ Hono's built-in default (console.log
+// stack trace + trả 500 rỗng), không có gì lưu lại được để admin xem sau. Route tự trả lỗi cụ thể
+// (400/404 validation...) không đi qua đây, chỉ exception thật (bug) mới rơi vào onError.
+app.onError((err, c) => {
+  void logError(`unhandled error: ${c.req.method} ${c.req.path}`, err);
+  return c.json({ error: "internal server error" }, 500);
+});
 
 app.use(logger());
 // apps/web's Client Components (e.g. favorites, MatchFilters' season lookup) call apps/api
@@ -71,5 +81,6 @@ app.route("/", adminScraperRoute);
 app.route("/", adminSyncRoute);
 app.route("/", chatRoute);
 app.route("/", aiUsageLogsRoute);
+app.route("/", systemLogsRoute);
 
 export type App = typeof app;
