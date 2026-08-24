@@ -2,35 +2,99 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { LogIn, Phone, Send } from "lucide-react";
-import { Button, Card, Container } from "@football-app/ui";
+import { LogIn } from "lucide-react";
+import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-
-const RECAPTCHA_CONTAINER_ID = "recaptcha-container";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /**
- * Simple sign-in page: Google (1-click popup) or Phone (2-step: send SMS code -> confirm code).
- * Deliberately minimal for Phase 1 auth wiring — not a polished account settings page.
+ * Trích message lỗi sạch ("Tên đăng nhập đã được sử dụng"...) từ ApiError ném ra bởi
+ * apiMutateClient (lib/api-client.ts) — message thật có dạng
+ * `${method} ${path} failed with ${status}: ${rawBodyText}`, rawBodyText là JSON `{error: "..."}`
+ * trả về từ apps/api/src/routes/auth.ts. Fallback về message chung nếu parse thất bại (vd lỗi
+ * network, không phải response JSON).
+ */
+function extractAuthErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof ApiError) {
+    const jsonStart = err.message.indexOf("{");
+    if (jsonStart !== -1) {
+      try {
+        const parsed = JSON.parse(err.message.slice(jsonStart)) as { error?: string };
+        if (parsed.error) return parsed.error;
+      } catch {
+        // rơi xuống fallback bên dưới
+      }
+    }
+  }
+  return fallback;
+}
+
+const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
+
+function validateRegisterForm(
+  fullName: string,
+  username: string,
+  password: string,
+  confirmPassword: string,
+): string | null {
+  const trimmedFullName = fullName.trim();
+  if (trimmedFullName.length < 2 || trimmedFullName.length > 100) {
+    return "Họ tên phải có 2-100 ký tự";
+  }
+  if (username.length < 3 || username.length > 20) {
+    return "Tên đăng nhập phải có 3-20 ký tự";
+  }
+  if (!USERNAME_PATTERN.test(username)) {
+    return "Tên đăng nhập chỉ gồm chữ, số và dấu gạch dưới";
+  }
+  if (password.length < 8) {
+    return "Mật khẩu phải có ít nhất 8 ký tự";
+  }
+  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+    return "Mật khẩu phải có ít nhất 1 chữ cái và 1 chữ số";
+  }
+  if (password !== confirmPassword) {
+    return "Xác nhận mật khẩu không khớp";
+  }
+  return null;
+}
+
+/**
+ * Đăng nhập/đăng ký: Google + Facebook popup, hoặc username/password tự build (xem
+ * lib/auth-context.tsx cho lý do bỏ Phone sign-in). Tab "Đăng ký" validate y hệt server's zod
+ * schema (apps/api/src/routes/auth.ts) trước khi gọi API, để user thấy lỗi ngay không cần round-trip.
  */
 export default function AuthPage() {
-  const { user, signInWithGoogle, signInWithFacebook, sendPhoneCode, confirmPhoneCode } = useAuth();
+  const { user, signInWithGoogle, signInWithFacebook, signInWithUsernamePassword, registerWithUsernamePassword } =
+    useAuth();
   const router = useRouter();
 
-  const [phoneNumber, setPhoneNumber] = useState("");
-  const [code, setCode] = useState("");
-  const [step, setStep] = useState<"phone" | "code">("phone");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  const [fullName, setFullName] = useState("");
+  const [registerUsername, setRegisterUsername] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+
   if (user) {
     return (
-      <Container size="sm" className="py-10">
+      <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
         <Card>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">
-            Bạn đã đăng nhập với {user.displayName ?? user.phoneNumber ?? "tài khoản này"}.
-          </p>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Bạn đã đăng nhập với {user.displayName ?? "tài khoản này"}.
+            </p>
+          </CardContent>
         </Card>
-      </Container>
+      </div>
     );
   }
 
@@ -60,106 +124,170 @@ export default function AuthPage() {
     }
   }
 
-  async function handleSendCode(event: FormEvent) {
+  async function handleLogin(event: FormEvent) {
     event.preventDefault();
     setError(null);
+
+    if (!loginUsername.trim() || !loginPassword) {
+      setError("Nhập tên đăng nhập và mật khẩu");
+      return;
+    }
+
     setPending(true);
     try {
-      await sendPhoneCode(phoneNumber, RECAPTCHA_CONTAINER_ID);
-      setStep("code");
+      await signInWithUsernamePassword(loginUsername.trim(), loginPassword);
+      router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không gửi được mã xác nhận.");
+      setError(extractAuthErrorMessage(err, "Đăng nhập thất bại, thử lại sau"));
     } finally {
       setPending(false);
     }
   }
 
-  async function handleConfirmCode(event: FormEvent) {
+  async function handleRegister(event: FormEvent) {
     event.preventDefault();
     setError(null);
+
+    const validationError = validateRegisterForm(fullName, registerUsername, registerPassword, confirmPassword);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setPending(true);
     try {
-      await confirmPhoneCode(code);
+      await registerWithUsernamePassword(
+        fullName.trim(),
+        registerUsername.trim(),
+        registerPassword,
+        confirmPassword,
+      );
       router.push("/");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Mã xác nhận không đúng.");
+      setError(extractAuthErrorMessage(err, "Đăng ký thất bại, thử lại sau"));
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <Container size="sm" className="py-10">
-      <h1 className="mb-6 flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+    <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
+      <h1 className="mb-6 flex items-center gap-2 text-2xl font-semibold">
         <LogIn className="h-6 w-6" aria-hidden="true" />
         Đăng nhập
       </h1>
 
-      <Card className="flex flex-col gap-6">
-        <Button onClick={() => void handleGoogle()} disabled={pending} className="w-full">
-          Đăng nhập với Google
-        </Button>
-
-        <Button
-          onClick={() => void handleFacebook()}
-          disabled={pending}
-          variant="secondary"
-          className="w-full"
-        >
-          Đăng nhập với Facebook
-        </Button>
-
-        <div className="flex items-center gap-3 text-xs text-zinc-400 dark:text-zinc-600">
-          <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-          hoặc
-          <span className="h-px flex-1 bg-zinc-200 dark:bg-zinc-800" />
-        </div>
-
-        {step === "phone" ? (
-          <form onSubmit={handleSendCode} className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm text-zinc-600 dark:text-zinc-400">
-              <span className="flex items-center gap-1.5">
-                <Phone className="h-4 w-4" aria-hidden="true" />
-                Số điện thoại (kèm mã quốc gia, ví dụ +84901234567)
-              </span>
-              <input
-                type="tel"
-                required
-                value={phoneNumber}
-                onChange={(event) => setPhoneNumber(event.target.value)}
-                placeholder="+84901234567"
-                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </label>
-            <Button type="submit" variant="outline" disabled={pending} className="gap-1.5">
-              <Send className="h-4 w-4" aria-hidden="true" />
-              Gửi mã xác nhận
+      <Card>
+        <CardContent className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <Button onClick={() => void handleGoogle()} disabled={pending} className="w-full">
+              Đăng nhập với Google
             </Button>
-          </form>
-        ) : (
-          <form onSubmit={handleConfirmCode} className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm text-zinc-600 dark:text-zinc-400">
-              Mã xác nhận (SMS gửi tới {phoneNumber})
-              <input
-                type="text"
-                required
-                value={code}
-                onChange={(event) => setCode(event.target.value)}
-                placeholder="123456"
-                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-              />
-            </label>
-            <Button type="submit" variant="outline" disabled={pending}>
-              Xác nhận
+            <Button
+              onClick={() => void handleFacebook()}
+              disabled={pending}
+              variant="secondary"
+              className="w-full"
+            >
+              Đăng nhập với Facebook
             </Button>
-          </form>
-        )}
+          </div>
 
-        {error ? <p className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            hoặc
+            <span className="h-px flex-1 bg-border" />
+          </div>
 
-        {/* Invisible reCAPTCHA widget required by RecaptchaVerifier for phone sign-in. */}
-        <div id={RECAPTCHA_CONTAINER_ID} />
+          <Tabs defaultValue="login">
+            <TabsList className="w-full">
+              <TabsTrigger value="login" className="flex-1">
+                Đăng nhập
+              </TabsTrigger>
+              <TabsTrigger value="register" className="flex-1">
+                Đăng ký
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="login" className="pt-3">
+              <form onSubmit={handleLogin} className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="login-username">Tên đăng nhập</Label>
+                  <Input
+                    id="login-username"
+                    autoComplete="username"
+                    value={loginUsername}
+                    onChange={(event) => setLoginUsername(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="login-password">Mật khẩu</Label>
+                  <Input
+                    id="login-password"
+                    type="password"
+                    autoComplete="current-password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                  />
+                </div>
+                <Button type="submit" variant="outline" disabled={pending}>
+                  Đăng nhập
+                </Button>
+              </form>
+            </TabsContent>
+
+            <TabsContent value="register" className="pt-3">
+              <form onSubmit={handleRegister} className="flex flex-col gap-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="register-fullname">Họ tên</Label>
+                  <Input
+                    id="register-fullname"
+                    autoComplete="name"
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="register-username">Tên đăng nhập</Label>
+                  <Input
+                    id="register-username"
+                    autoComplete="username"
+                    placeholder="3-20 ký tự, chữ/số/gạch dưới"
+                    value={registerUsername}
+                    onChange={(event) => setRegisterUsername(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="register-password">Mật khẩu</Label>
+                  <Input
+                    id="register-password"
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Ít nhất 8 ký tự, có chữ và số"
+                    value={registerPassword}
+                    onChange={(event) => setRegisterPassword(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <Label htmlFor="register-confirm-password">Xác nhận mật khẩu</Label>
+                  <Input
+                    id="register-confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                  />
+                </div>
+                <Button type="submit" variant="outline" disabled={pending}>
+                  Đăng ký
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
+
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+        </CardContent>
       </Card>
-    </Container>
+    </div>
   );
 }

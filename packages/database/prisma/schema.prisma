@@ -12,8 +12,20 @@ datasource db {
 
 model User {
   id          String   @id @default(cuid())
+  // Bắt buộc + unique cho MỌI user, kể cả đăng ký username/password (xem "### Authentication —
+  // username/password" trong CLAUDE.md) — lúc đó firebaseUid là giá trị TỰ SINH (không phải
+  // Firebase cấp), dùng để mint 1 Firebase custom token (firebase-admin's createCustomToken(uid))
+  // ngay khi đăng ký/đăng nhập thành công. Client signInWithCustomToken() bằng token đó ->
+  // Firebase tự tạo user thật với ĐÚNG uid này -> requireAuth's resolveOrCreateUserId() (tìm theo
+  // firebaseUid) khớp lại đúng row đã tạo sẵn ở đây, không tạo trùng. Nhờ vậy middleware/auth.ts
+  // KHÔNG cần sửa gì để hỗ trợ thêm 1 auth method mới.
   firebaseUid String   @unique
   email       String?  @unique
+  // Cả 2 field CHỈ có giá trị cho user đăng ký qua username/password (null cho Google/Facebook) —
+  // xem apps/api/src/routes/auth.ts. username lưu dạng LOWERCASE (chuẩn hoá lúc đăng ký) để
+  // unique constraint không phân biệt hoa/thường mà không cần citext extension.
+  username     String?  @unique
+  passwordHash String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
