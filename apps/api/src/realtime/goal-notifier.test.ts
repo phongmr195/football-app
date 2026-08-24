@@ -110,7 +110,10 @@ describe("handleGoalEvent", () => {
     expect(notifications).toHaveLength(0);
   });
 
-  it("user không có Device nào -> bỏ qua êm, không throw, không gọi FCM", async () => {
+  it("user không có Device nào -> vẫn ghi Notification in-app, chỉ không gọi FCM", async () => {
+    // Bug thật đã sửa 2026-08-24: user chưa từng bật push (không có Device nào) hoặc đang offline
+    // lúc ghi bàn vẫn phải thấy thông báo này khi mở web sau đó (xem NotificationBell.tsx) — bản
+    // ghi in-app KHÔNG được phụ thuộc việc có gửi FCM được hay không.
     const team = await prisma.team.create({ data: { name: "Team No Device", externalRef: ref("team-no-device") as object } });
     const user = await createUser(); // không có device
     await favoriteTeam(user.id, team.id);
@@ -119,7 +122,9 @@ describe("handleGoalEvent", () => {
 
     expect(mockSendEachForMulticast).not.toHaveBeenCalled();
     const notifications = await prisma.notification.findMany({ where: { userId: user.id } });
-    expect(notifications).toHaveLength(0);
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.type).toBe("goal");
+    expect(notifications[0]?.readAt).toBeNull();
   });
 
   it("ghi Notification + NotificationLog đúng SENT/FAILED theo response FCM (nhiều device, 1 fail)", async () => {
@@ -177,8 +182,10 @@ describe("handleGoalEvent", () => {
     expect(mockSendEachForMulticast).toHaveBeenCalledTimes(2); // cả 2 user đều được thử gửi
     const notificationsA = await prisma.notification.findMany({ where: { userId: userA.id } });
     const notificationsB = await prisma.notification.findMany({ where: { userId: userB.id } });
-    // Đúng 1 trong 2 user bị lỗi (không ghi Notification do throw trước khi tạo record), user còn
-    // lại vẫn được ghi nhận bình thường — tổng 2 user, 1 thành công.
-    expect(notificationsA.length + notificationsB.length).toBe(1);
+    // Notification (in-app) được ghi TRƯỚC lúc gọi FCM (xem fix 2026-08-24) — nên cả 2 user đều
+    // có bản ghi in-app dù 1 trong 2 bị lỗi gửi FCM tạm thời; lỗi đó chỉ mất phần push, không mất
+    // lịch sử in-app.
+    expect(notificationsA).toHaveLength(1);
+    expect(notificationsB).toHaveLength(1);
   });
 });

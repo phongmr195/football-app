@@ -49,38 +49,39 @@ async function handleGoalEvent(event: GoalEvent): Promise<void> {
     return;
   }
 
+  const title = "Bàn thắng!";
+  const body = `Đội bạn yêu thích vừa ghi bàn — tỉ số hiện tại ${event.homeScore}-${event.awayScore}`;
+  const data = {
+    type: "goal",
+    matchId: event.matchId,
+    teamId: event.teamId,
+    homeScore: String(event.homeScore),
+    awayScore: String(event.awayScore),
+  };
+
   for (const favorite of favorites) {
     const { user } = favorite;
-    if (user.devices.length === 0) continue; // không có device nào -> bỏ qua êm, không phải lỗi
 
-    // 1 lỗi gửi FCM cho 1 user không được throw ra ngoài / chặn user khác — bọc try/catch riêng
+    // 1 lỗi xử lý cho 1 user không được throw ra ngoài / chặn user khác — bọc try/catch riêng
     // từng user (xem plan Phase 2 Bước 3 § A4).
     try {
-      const tokens = user.devices.map((d) => d.fcmToken);
-      const title = "Bàn thắng!";
-      const body = `Đội bạn yêu thích vừa ghi bàn — tỉ số hiện tại ${event.homeScore}-${event.awayScore}`;
-      const data = {
-        type: "goal",
-        matchId: event.matchId,
-        teamId: event.teamId,
-        homeScore: String(event.homeScore),
-        awayScore: String(event.awayScore),
-      };
+      // Luôn ghi Notification (bản ghi in-app, xem NotificationBell.tsx) TRƯỚC, KHÔNG phụ thuộc
+      // user có Device nào hay không — bug thật đã sửa 2026-08-24: trước đây `continue` sớm khi
+      // devices rỗng khiến user chưa từng bật push trên browser nào (hoặc đang offline lúc ghi
+      // bàn) không có gì để xem lại khi mở web sau đó, dù họ có favorite đội này và bật
+      // goalAlerts. Push FCM chỉ là kênh gửi THÊM khi có device, không phải điều kiện để có bản
+      // ghi in-app.
+      const notification = await prisma.notification.create({
+        data: { userId: user.id, type: "goal", title, body, data },
+      });
 
+      if (user.devices.length === 0) continue; // không có device -> chỉ ghi in-app, không gửi FCM
+
+      const tokens = user.devices.map((d) => d.fcmToken);
       const response = await getMessaging(getFirebaseApp()).sendEachForMulticast({
         tokens,
         notification: { title, body },
         data,
-      });
-
-      const notification = await prisma.notification.create({
-        data: {
-          userId: user.id,
-          type: "goal",
-          title,
-          body,
-          data,
-        },
       });
 
       // 1 NotificationLog row/token — NotificationLog không có cột riêng lưu token (chỉ audit

@@ -58,38 +58,35 @@ async function handleMatchFinishedEvent(event: MatchFinishedEvent): Promise<void
 
   const title = "Trận đấu kết thúc";
   const body = `${event.homeTeamName} ${event.homeScore} - ${event.awayScore} ${event.awayTeamName}`;
+  const data = {
+    type: "match_result",
+    matchId: event.matchId,
+    homeTeamId: event.homeTeamId,
+    awayTeamId: event.awayTeamId,
+    homeScore: String(event.homeScore),
+    awayScore: String(event.awayScore),
+  };
 
   for (const favorite of favorites) {
     const { user } = favorite;
-    if (user.devices.length === 0) continue; // không có device nào -> bỏ qua êm, không phải lỗi
 
-    // 1 lỗi gửi FCM cho 1 user không được throw ra ngoài / chặn user khác — cùng convention
+    // 1 lỗi xử lý cho 1 user không được throw ra ngoài / chặn user khác — cùng convention
     // goal-notifier.ts.
     try {
-      const tokens = user.devices.map((d) => d.fcmToken);
-      const data = {
-        type: "match_result",
-        matchId: event.matchId,
-        homeTeamId: event.homeTeamId,
-        awayTeamId: event.awayTeamId,
-        homeScore: String(event.homeScore),
-        awayScore: String(event.awayScore),
-      };
+      // Luôn ghi Notification (bản ghi in-app) TRƯỚC, KHÔNG phụ thuộc user có Device nào hay
+      // không — cùng fix/lý do goal-notifier.ts (2026-08-24): user chưa từng bật push, hoặc đang
+      // offline lúc trận kết thúc, vẫn phải thấy kết quả trong bell icon khi mở web sau đó.
+      const notification = await prisma.notification.create({
+        data: { userId: user.id, type: "match_result", title, body, data },
+      });
 
+      if (user.devices.length === 0) continue; // không có device -> chỉ ghi in-app, không gửi FCM
+
+      const tokens = user.devices.map((d) => d.fcmToken);
       const response = await getMessaging(getFirebaseApp()).sendEachForMulticast({
         tokens,
         notification: { title, body },
         data,
-      });
-
-      const notification = await prisma.notification.create({
-        data: {
-          userId: user.id,
-          type: "match_result",
-          title,
-          body,
-          data,
-        },
       });
 
       await prisma.notificationLog.createMany({

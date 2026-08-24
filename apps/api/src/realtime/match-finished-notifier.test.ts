@@ -153,7 +153,9 @@ describe("handleMatchFinishedEvent", () => {
     expect(mockSendEachForMulticast).toHaveBeenCalledTimes(1);
   });
 
-  it("user không có Device nào -> bỏ qua êm, không throw, không gọi FCM", async () => {
+  it("user không có Device nào -> vẫn ghi Notification in-app, chỉ không gọi FCM", async () => {
+    // Cùng fix goal-notifier.ts (2026-08-24) — user chưa từng bật push/đang offline lúc trận kết
+    // thúc vẫn phải thấy kết quả trong bell icon khi mở web sau đó.
     const home = await prisma.team.create({ data: { name: "Home FC", externalRef: ref("home-6") as object } });
     const away = await prisma.team.create({ data: { name: "Away FC", externalRef: ref("away-6") as object } });
     const user = await createUser();
@@ -161,6 +163,10 @@ describe("handleMatchFinishedEvent", () => {
 
     await expect(handleMatchFinishedEvent(makeEvent(home.id, away.id))).resolves.toBeUndefined();
     expect(mockSendEachForMulticast).not.toHaveBeenCalled();
+
+    const notifications = await prisma.notification.findMany({ where: { userId: user.id } });
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]?.type).toBe("match_result");
   });
 
   it("ghi Notification + NotificationLog đúng SENT/FAILED theo response FCM", async () => {
