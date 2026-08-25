@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ScrollText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -52,33 +52,62 @@ function formatDetailFull(detail: unknown): string {
   return JSON.stringify(detail, null, 2);
 }
 
-/** Cột "Chi tiết" — width cố định (xem className="w-72" ở cột tương ứng + ResourceTable's
- * fixedLayout), text 1 dòng bị cắt (truncate) kèm nút "Xem thêm" mở popup xem đầy đủ (message +
- * stack/JSON) — khác TruncatedListCell (admin/scraper/page.tsx, tự expand ngay trong cell) vì
- * detail ở đây có thể dài tới hàng nghìn ký tự (stack trace), không hợp để giãn cả hàng của bảng. */
-function DetailCell({ message, detail }: { message: string; detail: unknown }) {
-  const summary = formatDetailSummary(detail);
+/** Bên dưới độ dài này, cột "w-72" (truncate) đủ chỗ hiện hết message/summary thật — không cần
+ * nút "Xem thêm" (ngưỡng ước lượng, không quan trọng nếu lệch vài ký tự vì truncate vẫn còn đó
+ * làm lưới an toàn). */
+const TRUNCATE_THRESHOLD = 50;
 
+/** Cột "Message"/"Chi tiết" — width cố định (xem className="w-72" + ResourceTable's fixedLayout),
+ * text 1 dòng bị cắt (truncate) kèm nút "Xem thêm" mở popup xem đầy đủ — khác TruncatedListCell
+ * (admin/scraper/page.tsx, tự expand ngay trong cell) vì message/detail ở đây có thể dài tới
+ * hàng nghìn ký tự (stack trace), không hợp để giãn cả hàng của bảng. */
+function TruncatedCellWithPopup({ text, dialogTitle, dialogBody }: { text: string; dialogTitle: string; dialogBody: ReactNode }) {
   return (
     <div className="flex min-w-0 items-center gap-2">
-      <span className="min-w-0 flex-1 truncate">{summary}</span>
-      {summary !== "—" ? (
+      <span className="min-w-0 flex-1 truncate">{text}</span>
+      {text !== "—" && text.length > TRUNCATE_THRESHOLD ? (
         <Dialog>
           <DialogTrigger className="shrink-0 text-xs text-zinc-500 underline hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200">
             Xem thêm
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Chi tiết log</DialogTitle>
+              <DialogTitle>{dialogTitle}</DialogTitle>
             </DialogHeader>
-            <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{message}</p>
-            <pre className="max-h-[60vh] overflow-auto rounded-md bg-zinc-100 p-3 text-xs whitespace-pre-wrap text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
-              {formatDetailFull(detail)}
-            </pre>
+            {dialogBody}
           </DialogContent>
         </Dialog>
       ) : null}
     </div>
+  );
+}
+
+function MessageCell({ message }: { message: string }) {
+  return (
+    <TruncatedCellWithPopup
+      text={message}
+      dialogTitle="Message đầy đủ"
+      dialogBody={<p className="text-sm whitespace-pre-wrap text-zinc-900 dark:text-zinc-50">{message}</p>}
+    />
+  );
+}
+
+function DetailCell({ message, detail }: { message: string; detail: unknown }) {
+  const summary = formatDetailSummary(detail);
+
+  return (
+    <TruncatedCellWithPopup
+      text={summary}
+      dialogTitle="Chi tiết log"
+      dialogBody={
+        <>
+          <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{message}</p>
+          <pre className="max-h-[60vh] overflow-auto rounded-md bg-zinc-100 p-3 text-xs whitespace-pre-wrap text-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+            {formatDetailFull(detail)}
+          </pre>
+        </>
+      }
+    />
   );
 }
 
@@ -190,7 +219,7 @@ export default function AdminSystemLogsPage() {
                 key: "message",
                 label: "Message",
                 className: "w-72",
-                render: (row) => <span className="block truncate">{row.message}</span>,
+                render: (row) => <MessageCell message={row.message} />,
               },
               {
                 key: "detail",
