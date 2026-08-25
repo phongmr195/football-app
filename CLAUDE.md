@@ -2,35 +2,33 @@
 
 Monorepo cho Football App. Kiến trúc đầy đủ + roadmap: [docs/architecture/PROJECT_PLAN.md](docs/architecture/PROJECT_PLAN.md), [docs/architecture/ROADMAP.md](docs/architecture/ROADMAP.md).
 
-> **Pivot (2026-08-07):** client chính chuyển từ Mobile (Flutter) sang **Web (Next.js)**. `apps/mobile` tạm pause, sau đó xoá hẳn (2026-08-22) — không còn kế hoạch resume, xem git history nếu cần tham khảo code cũ. Xem lý do pivot ở [PROJECT_PLAN.md § 1 Pivot](docs/architecture/PROJECT_PLAN.md#pivot-web-trước-mobile-tạm-pause-rồi-xoá-hẳn-2026-08-07-xoá-2026-08-22).
+> **Pivot (2026-08-07):** client chính chuyển từ Mobile (Flutter) sang **Web (Next.js)**. `apps/mobile` đã xoá hẳn (2026-08-22), không còn kế hoạch resume — xem git history nếu cần code cũ.
 
 ## Tech stack
 
-- **Web** (client chính): Next.js (React), Firebase Authentication (Google/Phone/Facebook) qua Firebase JS SDK — đã scaffold + browse pages + favorites + real-time (Phase 1+2), xem ROADMAP
-- **Auth**: Firebase Authentication (Google + Phone + Facebook đều đã enable) — đổi từ AWS Cognito, xem [PROJECT_PLAN.md § Authentication](docs/architecture/PROJECT_PLAN.md#authentication--quyết-định-đổi-từ-cognito-sang-firebase-auth-2026-08-06). Firebase project hiện dùng: `jankara-e2e-test` (project dùng chung, không riêng cho football-app).
-- **Backend**: Node.js, Hono, TypeScript, Zod (`@hono/zod-validator`), Prisma, `firebase-admin` (verify token + gửi FCM push)
-- **Database**: Aurora PostgreSQL (Prisma), Redis (cache + Pub/Sub cho real-time/push, xem Phase 2), Postgres FTS/pgvector cho search/AI (xem PROJECT_PLAN.md § 7.1 — hoãn OpenSearch tới khi cần)
-- **AI**: gọi thẳng Anthropic API (Claude) qua `packages/ai-provider` — KHÔNG qua AWS Bedrock (đổi quyết định 2026-08-18, xem "### AI" dưới + ROADMAP Phase 5). Embedding cho Chat/RAG (Phase 5 piece sau) chưa chọn provider chốt — đang nghiêng OpenAI `text-embedding-3-small`, xem ROADMAP Phase 5.
-- **Data provider**: `football-data.org` (mặc định) qua adapter pattern (`packages/data-provider`) — API-Football vẫn giữ làm adapter phụ, đổi default vì API-Football free tier bị suspend nhiều lần, xem "### Data provider" dưới
-- **Infra**: Terraform (`infrastructure/terraform`, chưa apply), Turborepo + pnpm workspaces
-- **Secret scanning**: `secretlint` qua Husky pre-commit + CI backstop — xem "### Secrets & credentials"
-- **Docker**: `docker-compose.yml` (data: Postgres+Redis, log: Dozzle, auth: Firebase Auth Emulator, app: api+sync-worker) cho local dev; `docker-compose.test.yml` cho test cô lập; `apps/api/Dockerfile` + `apps/sync-worker/Dockerfile` multi-stage production-ready (dùng `pnpm deploy`)
+- **Web** (client chính): Next.js (React) + shadcn/ui, Firebase Authentication (Google/Facebook/username-password) qua Firebase JS SDK.
+- **Backend**: Node.js, Hono, TypeScript, Zod (`@hono/zod-validator`), Prisma, `firebase-admin`.
+- **Database**: Aurora PostgreSQL (Prisma), Redis (cache + Pub/Sub cho real-time/push).
+- **AI**: gọi thẳng Anthropic API qua `packages/ai-provider` (không qua Bedrock) — xem [packages/ai-provider/CLAUDE.md](packages/ai-provider/CLAUDE.md).
+- **Data provider**: `football-data.org` (mặc định) qua adapter pattern (`packages/data-provider`) — xem "### Data provider" dưới.
+- **Infra**: Terraform (chưa apply), Turborepo + pnpm workspaces.
+- **Secret scanning**: `secretlint` qua Husky pre-commit + CI backstop — xem "### Secrets & credentials".
 
 ## Cấu trúc monorepo
 
 ```
 apps/
-  web/            Next.js — client chính (browse pages, favorites, real-time) + /admin/* (ROADMAP Phase 4, cùng port, xem "### Admin" dưới)
+  web/            Next.js — client chính + /admin/* (cùng port, xem "### Admin" dưới)
   api/            Hono API (TypeScript)
   sync-worker/    Đồng bộ dữ liệu từ data provider + polling live match
-  scraper-sofascore/  Python (không qua pnpm/turbo) — scrape Events/Lineups/Stats từ Sofascore, xem "### Scraper" dưới
+  scraper-sofascore/  Python — scrape data từ Sofascore, xem [apps/scraper-sofascore/CLAUDE.md](apps/scraper-sofascore/CLAUDE.md)
 packages/
-  database/       Prisma schema + client (export từ packages/database/src/index.ts)
-  shared/         Types/utils dùng chung TS (pagination, ApiError, admin-password hash/verify)
+  database/       Prisma schema + client
+  shared/         Types/utils dùng chung TS
   data-provider/  Canonical model + adapter pattern cho data provider bóng đá
-  ai-provider/    LlmProvider interface + Anthropic adapter (gọi thẳng API, không qua Bedrock — Phase 5)
-  realtime/       RealtimeTransport interface + Redis Pub/Sub adapter (WebSocket + goal push, Phase 2)
-  ui/             Design system — dùng cho apps/web (Button/Card/Badge/Container...)
+  ai-provider/    LlmProvider interface + adapter (xem packages/ai-provider/CLAUDE.md)
+  realtime/       RealtimeTransport interface + Redis Pub/Sub adapter
+  ui/             Design system cũ (đang migrate dần sang shadcn)
   config/         eslint/tsconfig/prettier chung
 ```
 
@@ -40,193 +38,150 @@ packages/
 pnpm install
 pnpm db:generate        # generate Prisma client sau khi sửa schema.prisma
 pnpm dev                # chạy tất cả apps qua turbo
-pnpm --filter @football-app/api dev
 pnpm lint / typecheck / build / test    # chạy toàn monorepo qua turbo
 ```
 
-**`pnpm install` chỉ link workspace package (symlink qua `node_modules/@football-app/<pkg>`), KHÔNG tự build nó** — package mới (`main`/`types` trỏ `dist/...`) thiếu `dist/` sẽ làm consumer (`apps/api`, v.v.) lỗi `Cannot find module`/`error TS2307` dù `pnpm install` chạy xong không báo lỗi gì. Bug thật gặp 2026-08-17 với `packages/realtime` (đã merge từ PR khác nhưng chưa từng build ở máy dev khác). Sau khi `git pull`/checkout code có thêm package mới, chạy `pnpm build` toàn repo (hoặc `pnpm --filter <pkg> build` riêng) trước khi trust rằng mọi thứ đã sẵn sàng.
+**`pnpm install` KHÔNG tự build workspace package mới** — thiếu `dist/` sẽ làm consumer lỗi
+`Cannot find module` dù install chạy xong không báo lỗi. Sau khi pull code có package mới, chạy
+`pnpm build` toàn repo trước khi trust mọi thứ sẵn sàng.
 
 ```bash
-# Docker (data/log/test/deploy) — xem "### Docker" dưới để biết convention
-cp .env.example .env  # optional — chỉ cần nếu muốn set API_FOOTBALL_KEY/FIREBASE_PROJECT_ID thật
+# Docker — xem "### Docker" dưới
+cp .env.example .env  # optional
 pnpm docker:up      # postgres + redis + dozzle + firebase-emulator + api
-pnpm docker:worker  # sync-worker 1 lượt (profile "worker", không tự chạy cùng docker:up)
-pnpm docker:test    # test suite trong container, Postgres riêng ephemeral
+pnpm docker:worker  # sync-worker 1 lượt
+pnpm docker:test    # test suite trong container
 pnpm docker:down
 ```
 
 ## Quy ước bắt buộc theo (đọc kỹ trước khi thêm code mới)
 
-### Secrets & credentials (đọc trước khi commit bất cứ file config/credential nào)
-- **3 lớp bảo vệ, không lớp nào tự đủ — đừng bỏ qua lớp nào vì tưởng lớp khác đã lo:**
-  1. `.gitignore` — chặn file generated-credential đã biết (`google-services.json`, `GoogleService-Info.plist`, `lib/firebase_options.dart`) khỏi bị `git add` thông thường bắt vào. Thêm file loại này (service account key, cert, token khác) → thêm vào `.gitignore` NGAY khi tạo ra, không chờ.
-  2. **Husky pre-commit** (`.husky/pre-commit` → `lint-staged` → `.lintstagedrc.json`) chạy 2 check trên file staged: `secretlint` (nội dung — bắt AWS key, private key, Slack/Stripe token...) + `scripts/block-credential-files.sh` (tên file — chặn cả khi bị `git add -f` ép qua gitignore).
-  3. CI job `secretlint` (`.github/workflows/ci.yml`) chạy `pnpm secretlint` trên toàn repo — backstop nếu ai đó `git commit --no-verify` bỏ qua hook local.
-- **secretlint KHÔNG bắt được Firebase/Google client API key (`AIzaSy...`)** — đây là chủ đích của tool (Google thiết kế key này an toàn để public, xem [PROJECT_PLAN.md § Authentication]). Vì vậy lớp #1 (gitignore theo tên file) và #2b (block theo tên file) là lớp bảo vệ THẬT cho loại file này, không phải secretlint. Đừng tưởng "đã có secretlint" là đủ khi thêm file Firebase config mới.
-- Test hook hoạt động: `git add -f <file>` rồi `git commit` — phải bị chặn với message rõ ràng. Đã verify thật (2026-08-12) với đúng file Firebase từng leak.
-- Cần bypass hợp lệ (hiếm, ví dụ file `.example` bị false-positive) → sửa `.lintstagedrc.json`/`.secretlintrc.json` thêm exception, KHÔNG dùng `git commit --no-verify` trừ khi đã hỏi user trước.
-- `pnpm secretlint` chạy check thủ công toàn repo bất kỳ lúc nào (không cần staged).
+### Secrets & credentials
+- **3 lớp bảo vệ, không lớp nào tự đủ**: `.gitignore` (chặn tên file credential đã biết) → Husky
+  pre-commit (`secretlint` bắt nội dung + `scripts/block-credential-files.sh` bắt tên file, chặn cả
+  khi `git add -f`) → CI job `secretlint` (backstop nếu ai `--no-verify`).
+- **secretlint KHÔNG bắt được Firebase/Google client API key** (`AIzaSy...`, chủ đích của Google —
+  key này an toàn để public) — lớp #1/#2 (theo TÊN FILE) mới là bảo vệ thật cho loại file này.
+- Cần bypass hợp lệ (file `.example` false-positive) → sửa `.lintstagedrc.json`/`.secretlintrc.json`
+  thêm exception, KHÔNG `git commit --no-verify` trừ khi đã hỏi user trước.
 
 ### Backend (`apps/api`)
-- Route mới → 1 file trong `apps/api/src/routes/<module>.ts`, export 1 `Hono` instance, mount vào `app.ts` qua `app.route(...)`.
-- Validate input bằng `@hono/zod-validator` (`zValidator("json"|"query"|"param", schema)`), KHÔNG parse tay bằng `schema.parse()` trong handler.
-- Cần auth → thêm middleware `requireAuth` (từ `src/middleware/auth.ts`) vào route đó, đọc `userId` qua `c.get("userId")`.
-- Đọc/ghi DB qua `prisma` import từ `@football-app/database` — không tạo `PrismaClient` mới trong route.
-- Dùng skill `add-api-module` để scaffold module mới theo đúng pattern trên.
-- Middleware auth dùng chung cho mọi client hiện tại (web) — không có logic riêng theo client.
+- Route mới → 1 file `apps/api/src/routes/<module>.ts`, export 1 `Hono` instance, mount qua
+  `app.route(...)`.
+- Validate input bằng `@hono/zod-validator`, KHÔNG parse tay bằng `schema.parse()` trong handler.
+- Cần auth → middleware `requireAuth` (`src/middleware/auth.ts`), đọc `userId` qua `c.get("userId")`.
+- Đọc/ghi DB qua `prisma` từ `@football-app/database` — không tạo `PrismaClient` mới trong route.
+- Dùng skill `add-api-module` để scaffold module mới.
 
 ### Database (`packages/database`)
-- Model mới trong `schema.prisma`: id dùng `String @id @default(cuid())`, tên bảng snake_case qua `@@map("...")`, thêm `externalRef Json?` (field name camelCase, KHÔNG `@map` — cột DB thật cũng là `"externalRef"` camelCase, xem migration init) nếu entity map với data provider. Shape bắt buộc `{ provider: string, id: string }` (`ExternalRef` trong `packages/data-provider/src/types.ts`).
-- **Model có `externalRef Json?` BẮT BUỘC đi kèm 1 unique expression index** trên `(externalRef->>'provider', externalRef->>'id')`, partial `WHERE "externalRef" IS NOT NULL` — lý do: 2 provider khác nhau (vd `api-football` id "39" vs `football-data` id "39") có thể trùng id số dù là 2 entity thật khác nhau; nếu code chỉ lookup theo `id` mà quên `provider`, `findFirst` có thể match nhầm row và silently overwrite data (bug thật tìm thấy 2026-08-14 ở `apps/sync-worker/src/sync-catalog.ts`, xem migration `20260814000000_add_external_ref_provider_id_unique_index`). Index này là **expression/functional index — không biểu diễn được trong Prisma schema DSL** (Prisma không có cú pháp cho index trên biểu thức JSON), nên phải viết migration tay theo style `packages/database/prisma/migrations/20260813000000_rename_cognito_sub_to_firebase_uid/migration.sql` (SQL thuần + comment giải thích), KHÔNG hiện trong `schema.prisma`/`prisma db pull`. Mẫu SQL (đổi tên bảng/index cho đúng model mới):
-  ```sql
-  CREATE UNIQUE INDEX "<table>_external_ref_provider_id_key"
-    ON "<table>" (("externalRef"->>'provider'), ("externalRef"->>'id'))
-    WHERE "externalRef" IS NOT NULL;
-  ```
-  Dùng B-tree (mặc định), KHÔNG dùng GIN — đây là exact-match lookup, không phải containment query.
-- **Lookup theo `externalRef` LUÔN LUÔN filter cả `provider` VÀ `id`, KHÔNG BAO GIỜ filter chỉ `id`** — đây chính là bug đã tìm thấy ở trên. Prisma JSON "AND 2 path điều kiện":
+- Model mới: `id String @id @default(cuid())`, tên bảng snake_case qua `@@map("...")`. Entity map
+  với data provider → thêm `externalRef Json?` (camelCase, không `@map`), shape bắt buộc
+  `{ provider: string, id: string }`.
+- **Model có `externalRef` BẮT BUỘC unique expression index** trên
+  `(externalRef->>'provider', externalRef->>'id')`, partial `WHERE "externalRef" IS NOT NULL` — 2
+  provider khác nhau có thể trùng id số (vd cả 2 dùng id "39" cho 2 entity khác nhau); lookup chỉ
+  theo `id` có thể match nhầm row. Prisma không biểu diễn được expression index → viết migration
+  tay (xem style ở `packages/database/prisma/migrations/20260813000000_*`), dùng B-tree.
+- **Lookup theo `externalRef` LUÔN filter cả `provider` VÀ `id`**:
   ```ts
   prisma.<model>.findFirst({
-    where: {
-      AND: [
-        { externalRef: { path: ["provider"], equals: provider } },
-        { externalRef: { path: ["id"], equals: externalId } },
-      ],
-    },
+    where: { AND: [
+      { externalRef: { path: ["provider"], equals: provider } },
+      { externalRef: { path: ["id"], equals: externalId } },
+    ] },
   })
   ```
-  Hàm lookup nên nhận `provider` qua tham số (lấy từ `adapter.providerName`, xem `DataProviderAdapter`), không đọc từ global.
-- Sau khi sửa schema: `pnpm db:generate`, rồi migration khi có DB thật (`pnpm db:migrate`).
-- **`pnpm db:generate` KHÔNG áp migration vào DB thật** — chỉ sinh lại Prisma Client theo `schema.prisma`. Bug thật gặp 2026-08-17: `schema.prisma` đã có `DevicePlatform.WEB` (merge từ PR khác), `db:generate` chạy bình thường không báo lỗi gì, nhưng DB dev local chưa hề chạy `pnpm db:migrate`/`db:migrate:deploy` nên enum Postgres thật vẫn chỉ có `IOS`/`ANDROID` — lỗi chỉ lộ ra lúc insert thật (`invalid input value for enum`). Sau khi `git pull`/merge PR có đổi schema, luôn chạy `db:migrate:deploy` thật trên DB đang dùng, đừng chỉ tin `db:generate` chạy xong là đủ.
+- Sau khi sửa schema: `pnpm db:generate` (chỉ sinh lại Client, KHÔNG áp migration vào DB thật) rồi
+  `pnpm db:migrate`/`db:migrate:deploy` khi có DB thật — đừng chỉ tin `db:generate` chạy xong là đủ.
 - Dùng skill `add-prisma-model` khi thêm model mới.
-- Sửa tay data sai từ provider → dùng CRUD `/admin/*` (Competition/Season/Team/Player/Stadium/Coach/Referee đã build, xem "### Admin" dưới). Chỉ dùng `pnpm db:studio` (Prisma Studio) cho việc XOÁ thật (admin CRUD không có nút Delete, có chủ đích) hoặc các model chưa có trang admin.
+- Sửa tay data sai từ provider → CRUD `/admin/*`. `pnpm db:studio` chỉ cho việc XOÁ thật (admin CRUD
+  không có nút Delete) hoặc model chưa có trang admin.
 
 ### Data provider (`packages/data-provider`)
-- KHÔNG để downstream code (sync-worker, api) biết hình dạng JSON thật của provider — luôn map qua canonical model trong `src/types.ts` trước.
-- Provider mới → thêm adapter trong `src/adapters/`, implement `DataProviderAdapter` interface, KHÔNG sửa canonical model để khớp provider mới (ngược lại).
-- **Provider mặc định (2026-08-13): `football-data.org`** (`FootballDataAdapter`), KHÔNG phải API-Football — API-Football free tier bị **suspend account thật 3 lần** (3 key khác nhau) và quota 100 request/ngày quá chật. `football-data.org` free tier ("Free Forever", verify thật): **10 request/phút, KHÔNG có giới hạn/ngày**, phủ 13 giải lớn (Premier League, La Liga, Bundesliga, Serie A, Ligue 1, Champions League, Eredivisie, Primeira Liga, Championship, Brasileirão, Copa Libertadores, World Cup, European Championship) — đủ scope MVP. `ApiFootballAdapter` vẫn giữ nguyên, tested, không bị xoá — chỉ không còn là default.
-- `apps/sync-worker` chọn adapter qua `createAdapter()` (`apps/sync-worker/src/provider.ts`), đọc env `DATA_PROVIDER` (`"football-data"` mặc định | `"api-football"`). Set `FOOTBALL_DATA_API_KEY`/`API_FOOTBALL_KEY` tương ứng.
-- Mỗi adapter tự throttle qua `rate-limiter.ts` (sliding-window, injectable clock) — margin an toàn dưới giới hạn thật của provider, KHÔNG sát biên: `ApiFootballAdapter` 8 req/phút (giới hạn cứng 10/phút VÀ 100/ngày), `FootballDataAdapter` 8 req/phút (giới hạn cứng 10/phút, KHÔNG giới hạn/ngày). Adapter mới cho provider khác PHẢI tự cân nhắc rate limit tương tự, không giả định provider không giới hạn.
-- API-Football Free plan: full sync 1 giải ~20 team tốn ~70-80 request (phân trang squad) — chỉ đủ ngân sách ~1 giải/ngày. football-data.org không có giới hạn ngày nên không bị ràng buộc này, nhưng vẫn chỉ 10 req/phút — full sync 1 giải/season (~26 request: competitions+seasons+teams×2+players×20 team+standings+matches) mất vài phút do rate limiter, đừng chạy đồng thời nhiều `SYNC_COMPETITION_IDS` nếu cần nhanh.
-- `FootballDataAdapter.fetchPlayers` bắt riêng lỗi HTTP 403 từ `GET /teams/{id}` — provider gate quyền truy cập theo giải team đang đá **hiện tại**, không theo season query param được truyền vào (verify thật: Luton Town id=389 trả 403 khi hỏi squad season 2023 dù họ có đá Premier League season đó, vì hiện tại đã xuống hạng khỏi mọi giải free-tier) — trả `[]` + log warn thay vì throw, để không chặn cả job sync khi gặp team dạng này.
-
-### AI (`packages/ai-provider`, ROADMAP Phase 5)
-- **Gọi thẳng Anthropic API, KHÔNG qua AWS Bedrock** (quyết định 2026-08-18) — Bedrock cần mở AWS account thật + xin quyền truy cập model (approval, có thể mất thời gian) + IAM riêng, không có lợi ích thật ở quy mô app này.
-- `LlmProvider` interface (`src/provider.interface.ts`) + `AnthropicAdapter`/`GeminiAdapter` (`src/adapters/*.adapter.ts`) — mirror chính xác pattern `DataProviderAdapter` ở `packages/data-provider`: constructor `{ apiKey, model?, fetchImpl? }` dùng `fetch` gốc (không thêm SDK/axios), KHÔNG throw ở constructor nếu thiếu `apiKey` (lỗi thật chỉ lộ lúc gọi `generateText()` — cho phép build/test code trước khi có API key thật).
-- `apps/sync-worker` chọn qua `createLlmProvider()` (`src/ai-provider.ts`), đọc env `LLM_PROVIDER` (`"anthropic"` mặc định | `"gemini"` | `"groq"`). Anthropic: set `ANTHROPIC_API_KEY`, tuỳ chọn `ANTHROPIC_MODEL` (mặc định `claude-haiku-4-5-20251001` — rẻ nhất, đủ cho việc tóm tắt kết quả trận đấu, không cần suy luận phức tạp). Gemini: set `GEMINI_API_KEY`, tuỳ chọn `GEMINI_MODEL` (mặc định `gemini-3.5-flash-lite` — đổi từ `gemini-2.5-flash-lite` sau khi verify thật 2026-08-18: Google đã deprecate model đó cho user mới, request trả 404 kèm chỉ dẫn trực tiếp dùng bản 3.5) — **free tier thật** (Google AI Studio, không cần thẻ tín dụng), lựa chọn tốt nếu không muốn phụ thuộc trả phí cho việc chỉ tóm tắt vài câu.
-- **`GroqAdapter`** (`src/adapters/groq.adapter.ts`) — **free tier thật** (Groq Cloud, không cần thẻ tín dụng), API **OpenAI-compatible** (`POST https://api.groq.com/openai/v1/chat/completions`, header `authorization: Bearer <key>`), suy luận rất nhanh (LPU inference). Set `LLM_PROVIDER=groq` + `GROQ_API_KEY`, tuỳ chọn `GROQ_MODEL` (mặc định `openai/gpt-oss-20b`). **Verify thật 2026-08-19**: model mặc định lúc viết ban đầu (`llama-3.3-70b-versatile`, đoán theo model phổ biến hay nhắc tới) đã KHÔNG còn tồn tại trên Groq nữa (404 `model_not_found`) — danh mục model Groq đổi khá thường xuyên, `GET /openai/v1/models` (kèm `authorization` header) mới là nguồn đúng để tra model đang khả dụng, đừng tin tên model cứng trong doc/training data. Đã đổi default sang `openai/gpt-oss-20b`, verify gọi thành công thật (trả lời đúng nội dung, có `usage`).
-- **`FallbackLlmProvider`** (`packages/ai-provider/src/fallback-provider.ts`) — compose 2 `LlmProvider`: gọi primary trước, primary fail (network lỗi, rate limit...) thì tự chuyển qua fallback, throw 1 lỗi gộp (giữ message cả 2 bên) nếu CẢ 2 đều fail. Bật qua env `LLM_FALLBACK_PROVIDER` (optional, cùng 3 giá trị `"anthropic"/"gemini"/"groq"`) ở cả `apps/api`/`apps/sync-worker`'s `createLlmProvider()` — vd `LLM_PROVIDER=gemini` + `LLM_FALLBACK_PROVIDER=groq` để tự chuyển qua Groq free tier khi Gemini free tier bị rate limit. Case thật đã gặp (2026-08-19): `backfill-player-summaries` chạy 100 cầu thủ liên tiếp bằng Gemini free tier bị 429 `RESOURCE_EXHAUSTED` giữa chừng (quota 15 req/phút) — fix tạm bằng delay 4.5s/request giữa các lần gọi trong script (`backfill-player-summaries.ts`), `LLM_FALLBACK_PROVIDER` là lựa chọn khác cho job cần chạy nhanh hơn không muốn đợi throttle.
-- **Cân nhắc đã bỏ**: ban đầu có thêm `NgrokAdapter` (gọi 1 server LLM tự host đứng sau ngrok tunnel) nhưng đã XOÁ (2026-08-19) — hiểu nhầm ban đầu tưởng ngrok tự có API AI, thực ra ngrok bản thân KHÔNG có API AI/summary nào (chỉ là tunnel, model thật vẫn phải tự host ở đâu đó). `GroqAdapter` (free tier thật, không cần tự host gì) giải quyết đúng nhu cầu thật hơn nên không cần giữ `NgrokAdapter`.
-- **`GeminiAdapter` — 2 điểm casing KHÔNG NHẤT QUÁN trong chính docs của Google, chưa verify thật bằng key thật lúc viết** (xem comment trong file): `generationConfig.maxOutputTokens` xác nhận camelCase (REST reference chính thức), nhưng field top-level `system_instruction` lại là snake_case theo đúng ví dụ REST chính thức của Google (`google-gemini/cookbook`) — khác hẳn convention camelCase còn lại của cùng API. Đã theo đúng ví dụ chính thức thay vì đoán theo pattern chung. Key truyền qua header `x-goog-api-key` (không phải query param `?key=`, tránh lộ key vào access log). Verify lại field `system_instruction` đầu tiên nếu gặp lỗi 400 khi gắn `GEMINI_API_KEY` thật.
-- **`ai_match_summary`** (`apps/sync-worker/src/match-summary.ts`'s `generateMatchSummaryIfNeeded()`) sinh khi match chuyển sang FINISHED, trigger từ 2 nơi độc lập (`sync-live-matches.ts` + `sync-catalog.ts`'s `syncMatches()`, xem comment tại 2 chỗ gọi) — hàm tự idempotent (guard bằng `AiMatchSummary.matchId` đã `@unique`), an toàn khi cả 2 nơi cùng trigger. Gọi KHÔNG `await` (`void ...catch()`) để không chặn vòng lặp sync chính.
-- **`Commentary`/`MatchEvent` đều rỗng hoàn toàn trong DB thật** (verify 2026-08-18, 2701 match FINISHED nhưng 0 dòng ở cả 2 bảng) — không adapter provider nào (`FootballDataAdapter`/`ApiFootballAdapter`) từng ghi vào đây. `ai_match_summary` vì vậy chỉ dựa trên tỉ số cuối + `Standing` (vị trí bảng xếp hạng), KHÔNG thể tường thuật diễn biến theo phút — giới hạn dữ liệu thật, không phải giới hạn của tính năng AI. Nếu sau này cần tường thuật chi tiết, phải giải quyết ở tầng data-provider trước (thêm fetch/map commentary/event thật), không phải sửa ở tầng AI.
-- Script backfill 1 lần: `pnpm --filter @football-app/sync-worker backfill-match-summaries [limit]` (mặc định `limit=5`) — cần thiết vì match đã FINISHED từ trước khi tính năng này tồn tại sẽ không bao giờ tự trigger. Mỗi match tốn 1 lần gọi API thật (tính phí) — không chạy không giới hạn khi mới test key.
-- **KHÔNG dùng `AiUsageLog`** cho `ai_match_summary` — model đó thiết kế cap usage theo user (`userId` bắt buộc), nhưng đây là job hệ thống sinh 1 lần dùng chung, không có user để gán quota. Chỉ `console.log` structured token/cost (bảng giá cứng nhỏ theo model trong `match-summary.ts`). `AiUsageLog` sẽ dùng thật ở piece Chat/player-compare (user-triggered, cần cap theo user).
-- **KHÔNG dùng Redis Pub/Sub cho trigger này** (khác goal-notifier ở Phase 2) — phát hiện (match vừa FINISHED) lẫn xử lý (gọi LLM, lưu `AiMatchSummary`) đều nằm trong sync-worker, thêm channel mới chỉ để tự nói chuyện với mình là phức tạp không cần thiết.
-- Test: `packages/ai-provider`'s adapter test dùng `fetchImpl` giả (không cần key thật). `apps/sync-worker`'s `match-summary.test.ts` inject fake `LlmProvider` qua tham số thứ 2 của `generateMatchSummaryIfNeeded()`. **Quan trọng**: `sync-catalog.test.ts`/`sync-live-matches.test.ts` PHẢI mock module `"./ai-provider"` (giống cách đã mock `"./provider"`/`"./realtime"`) — nếu không, test 1 match FINISHED sẽ gọi `createLlmProvider()` thật (network thật tới Anthropic với key rỗng) làm chậm/flaky test không liên quan.
-- `apps/api` cũng phụ thuộc `@football-app/ai-provider` (từ piece player-compare, `apps/api/src/ai-provider.ts`'s `createLlmProvider()`, cùng pattern `LLM_PROVIDER` env như sync-worker) — dùng cho mọi tính năng AI gọi đồng bộ theo request của user (`player_compare`, `chat`), khác `ai_match_summary`/`ai_player_summary` là job nền chạy trong sync-worker.
-- **`AiUsageLog` đã có 2 consumer thật**: `player_compare` (cap 20/user/24h, `apps/api/src/routes/player-compare.ts`) và `chat` (cap 30/user/24h, `apps/api/src/routes/chat.ts`) — cả 2 check count trước khi gọi LLM, trả 429 nếu vượt cap.
-- **`chat`** (`apps/api/src/routes/chat.ts` + `apps/api/src/chat-retrieval.ts`, web: `apps/web/src/app/chat/page.tsx`) — piece cuối Phase 5, hoàn thành 2026-08-19. **Quyết định (đã hỏi user): dùng "RAG-lite" qua SQL retrieval trực tiếp, KHÔNG build embedding/pgvector** — tự check DB trước khi thiết kế thấy corpus text thật chỉ ~7 dòng (2 `AiMatchSummary` + 1 `AiPlayerSummary` + 4 `AiPlayerComparison`), vector search không có giá trị ở quy mô này; để lại cho piece sau khi corpus đủ lớn (đúng nguyên tắc PROJECT_PLAN §7.1 "chỉ thêm infra khi có nhu cầu đo được"). `PromptTemplate`/`Embedding` (đã có sẵn trong schema, scaffold từ trước) vẫn CHƯA dùng — không có consumer thật, giữ nguyên chờ piece pgvector.
-  - Retrieval: raw SQL `ILIKE '%' || name || '%'` quét tên Team/Player xuất hiện trong tin nhắn (đẩy scan xuống Postgres qua `$queryRaw`, không load hết tên vào memory), ngưỡng `length(name) >= 4` tránh match nhầm tên ngắn. Mỗi entity khớp được → kèm `TeamStatistics`/`PlayerStatistics` mùa gần nhất + `AiMatchSummary`/`AiPlayerSummary` liên quan vào context block đưa vào prompt.
-  - **Hạn chế đã biết, chấp nhận cho v1** (verify thật qua câu hỏi nối tiếp dùng đại từ, ví dụ "Cậu ấy đá cho đội nào?"): retrieval chỉ quét tin nhắn MỚI NHẤT, không quét lại toàn bộ lịch sử session — AI đúng khi trả lời "không có thông tin" thay vì bịa, nhưng cũng có nghĩa câu hỏi nối tiếp dùng đại từ thay tên riêng sẽ không tự tìm lại được context nếu bản thân câu trả lời trước đó của AI không nhắc lại tên đó. Không xử lý dấu (ILIKE không fold accent — cần `unaccent` extension, không thêm cho piece này); không resolve theo cặp "đội A vs đội B" trong 1 câu, chỉ resolve từng Team/Player riêng lẻ.
-  - `ChatHistory.sessionId` (schema có sẵn, không cần bảng `ChatSession` riêng) — không truyền `sessionId` thì tự tạo mới (`randomUUID()`). `GET /chat/sessions/:sessionId/messages` LUÔN filter thêm `userId` (không chỉ `sessionId`) — không tin `sessionId` một mình là biên giới quyền truy cập.
-
-### Scraper (`apps/scraper-sofascore`) — 9 loại data Sofascore, admin tự chọn qua `/admin/scraper`
-- **Component Python ĐẦU TIÊN trong monorepo** (mọi thứ khác Node/TS) — dùng thư viện `soccerdata` để lấy data từ Sofascore. KHÔNG nằm trong pnpm workspace/`pnpm turbo run` — có `requirements.txt`/README riêng, tự setup venv.
-- **Vì sao Python, không phải 1 adapter TS như `packages/data-provider`**: `soccerdata`'s Sofascore reader (và MỌI request tới Sofascore, kể cả lấy lịch thi đấu) đi qua `tls_requests` — thư viện **chủ động giả mạo TLS fingerprint (JA3) của browser thật** (tải native binary `bogdanfinn/tls-client` theo platform) để vượt Cloudflare bot-protection (verify thật: `curl` bị 403 dù có User-Agent giả, `tls_requests` thì không). Đây KHÔNG phải chỉ set header — Node `fetch` gốc không làm được việc này. **Rủi ro thật, đã cân nhắc và chấp nhận**: hành vi này khác hẳn việc gọi API đối tác có ToS cho phép (football-data.org/API-Football) — là chủ động bypass cơ chế chống bot, có rủi ro ToS + có thể gãy bất cứ lúc nào nếu Sofascore đổi cơ chế bảo vệ.
-- **Phát hiện quan trọng**: `soccerdata.Sofascore` (class Python) chỉ implement 4 method (`read_leagues`/`read_seasons`/`read_league_table`/`read_schedule`) — KHÔNG có `read_events`/`read_lineup`/`read_player_match_stats` dù trang docs liệt kê "lineups, detailed statistics". Lấy 3 loại dữ liệu còn lại (Events/Lineups/Player ratings/Match statistics) bằng cách gọi TRỰC TIẾP 3 endpoint Sofascore không được `soccerdata` wrap (`GET /event/{id}/incidents|lineups|statistics`), dùng CHUNG session đã bypass Cloudflare sẵn (`sofascore_client._session.get(...)`).
-- **Pipeline 3 bước, giao tiếp qua file JSON, KHÔNG để Python đụng Postgres** (giữ bất biến "Prisma là nơi ghi DB duy nhất"):
-  1. `pnpm --filter @football-app/sync-worker generate-sofascore-manifest -- --limit N` — Node query match FINISHED (Premier League, season 2025-2026) + roster 2 đội → `manifest.json`.
-  2. `python scraper.py manifest.json output/` (trong `apps/scraper-sofascore`, cần `python3 -m venv .venv && pip install -r requirements.txt` trước) — resolve `game_id` Sofascore qua so khớp tên đội + ngày, gọi 3 endpoint, so khớp tên cầu thủ Sofascore với roster đã cho SẴN trong manifest (phạm vi 1 đội, an toàn hơn fuzzy-match toàn DB) → `output/<ourMatchId>.json`, ID đã resolve sẵn.
-  3. `pnpm --filter @football-app/sync-worker ingest-sofascore [outputDir]` — đọc `output/`, upsert vào `MatchEvent`/`MatchLineup`/`Formation`/`PlayerRating`/`MatchStatistic` qua Prisma. Cầu thủ không khớp được (tên khác quá nhiều, hoặc thật sự chưa có trong DB) → skip + log, không chặn cả file (đúng convention `sync-catalog.ts`).
-- **Bug thật đã gặp + fix khi verify (2026-08-18)**: với `incidentClass: "ownGoal"`, Sofascore's `isHome` phản ánh đội ĐƯỢC LỢI điểm số (đối phương của người đá phản lưới), KHÔNG PHẢI đội của cầu thủ ghi bàn — verify thật: Malo Gusto (Chelsea, đội khách) đá phản lưới, incident có `isHome: true`. Dùng thẳng `isHome` để chọn roster tra cầu thủ sẽ tra nhầm sang đội đối phương, luôn unmatched. Fix: đảo `isHome` riêng cho case own-goal trước khi chọn team/roster (`scraper.py`'s `map_events`). **Cùng bug lặp lại ở `map_shotmap()` khi thêm piece "6 loại data mới"** (2026-08-19, own-goal shot cũng có `isHome` lệch hệt vậy, khoá bằng `goalType == "own"` thay vì `incidentClass`) — nhắc để nhớ áp lại fix này cho MỌI hàm `map_*()` mới có thao tác chọn team/roster theo `isHome`, không chỉ `map_events()`.
-- **`match_player()` — 2 lớp lỗi khớp tên thật khác nhau, verify qua audit thật 1 trận (2026-08-19, Sunderland 2-1 Chelsea, ban đầu 5/~250 lượt cầu thủ không khớp)**:
-  1. **Ký tự Latin mở rộng không tự decompose qua NFKD** — `normalize()` dùng NFKD + strip combining mark để bỏ dấu (đúng cho é/ö/ñ...), nhưng `ø`/`æ`/`đ`/`ð`/`þ`/`ł`/`ß` KHÔNG có decomposition mapping trong Unicode (không phải "chữ base + dấu combining"), bị regex `[^a-z0-9\s]` xoá hẳn như dấu câu — case thật: "Filip **Jørgensen**" (Sofascore) vs DB's "Filip **Jörgensen**" (football-data.org, `ö` decompose được) → `normalize()` ra 2 chuỗi khác nhau ("filip jrgensen" vs "filip jorgensen") dù cùng 1 người. Fix: thêm bảng `EXTRA_CHAR_FOLDS` fold tay các ký tự này về ASCII TRƯỚC khi NFKD.
-  2. **Mononym vs tên đầy đủ** — fallback theo họ (từ cuối cùng) không xử lý được trường hợp 1 bên chỉ có 1 từ (mononym, phổ biến ở cầu thủ Brazil/Bồ Đào Nha) — case thật: DB lưu "**Reinildo**" (mononym) nhưng Sofascore trả tên đầy đủ "Reinildo **Mandava**" → "mandava" (họ theo Sofascore) không khớp "reinildo" (họ theo DB, vì DB chỉ có 1 từ). Fix: thêm fallback 2 — nếu 1 bên (DB hoặc Sofascore) là mononym VÀ từ đó xuất hiện nguyên vẹn trong tên đầy đủ bên kia, VÀ chỉ đúng 1 ứng viên khớp kiểu này → match.
-  - **2 case KHÔNG fix được bằng cải thiện khớp tên** (verify qua audit cùng trận, còn lại sau 2 fix trên): "Nordi Mukiele" (Sunderland theo Sofascore) — DB vẫn gán anh cho Paris Saint-Germain (chuyển nhượng/cho mượn football-data.org chưa cập nhật kịp — **fix bằng cách re-sync catalog** qua `sync-catalog.ts`, KHÔNG phải sửa `match_player()`, vì roster truyền vào manifest lấy theo `Player.teamId` hiện tại trong DB, người này không hề nằm trong danh sách roster Sunderland được truyền vào); "Jesse Derry" — hoàn toàn KHÔNG tồn tại trong `Player` table (cầu thủ trẻ/dự bị football-data.org's squad endpoint chưa từng liệt kê) — không có gì để khớp, chấp nhận là giới hạn dữ liệu nguồn thật, không phải bug.
-- **Audit vòng 2 (2026-08-19, admin trigger thật 10 trận La Liga qua UI, 158/~1800 lượt cầu thủ không khớp)** — nguyên nhân thật đa dạng hơn audit vòng 1, đa số KHÔNG phải bug scraper:
-  - **~80% (127/158) do 3 CLB có roster RỖNG HOÀN TOÀN trong DB** (Girona FC, RCD Mallorca, Real Oviedo — 0 player) — không phải bug khớp tên (roster truyền vào không có AI để khớp). Thử re-sync qua `syncPlayers()` → **football-data.org trả 403** cho cả 3 team — verify thật: đây LÀ giới hạn free-tier đã ghi ở mục `FootballDataAdapter.fetchPlayers` phía trên (team KHÔNG còn ở giải free-tier "hiện tại" — cả 3 đội này rơi xuống hạng sau mùa 2025-2026). **football-data.org không có cách fix nào ngoài trả phí** — nhưng Sofascore's `GET /team/{id}/players` KHÔNG bị gate theo hạng đấu hiện tại (verify thật 2026-08-19-20: trả 200 đủ squad cho cả 3 team) → xây pipeline backfill riêng (xem "Roster backfill từ Sofascore" dưới), giảm 127 xuống 64 (còn lại là staleness/thiếu squad THẬT của chính Sofascore, không fix thêm được). Kiểm tra roster size trước khi nghi bug khớp tên nếu thấy 1 trận có tỉ lệ unmatched rất cao (gần hết 1 đội) — dấu hiệu roster rỗng/gần rỗng, không phải lỗi tên.
-- **Roster backfill từ Sofascore (2026-08-20)** — CHỈ gap-fill khi football-data.org 403 (roster rỗng), KHÔNG thay thế football-data.org cho team đã có data (giữ nguyên tắc "1 nguồn canonical mỗi loại entity" — `Player` tạo từ nguồn này có `externalRef.provider: "sofascore"`, KHÁC `"football-data"`, không đụng/trùng player đã sync từ nguồn chính). Pipeline riêng, 3 bước, cùng convention "Prisma là nơi ghi DB duy nhất":
-  1. `pnpm --filter @football-app/sync-worker generate-roster-backfill-manifest -- --competition-id id --season-id id --sofascore-key key --sofascore-season str` — tìm team CÓ tham gia competition/season này nhưng roster ĐANG RỖNG (0 player), ghi `roster-manifest.json`.
-  2. `python backfill-roster.py roster-manifest.json roster-output/` (`apps/scraper-sofascore`) — resolve Sofascore team id qua `GET /search/all?q=<tên>` (soccerdata KHÔNG có API tra team id trực tiếp theo tên). **Lưu ý thật đã gặp**: search có thể trả NHIỀU team trùng tên (khác giới/cấp độ trẻ) — case thật: "Real Oviedo" có cả bản nam (id=2851) VÀ bản NỮ (id=114821) cùng tên y hệt — phải lọc `sport.slug=="football"` + `gender=="M"` + tên khớp CHÍNH XÁC qua `normalize_team_name()` + chỉ nhận khi ĐÚNG 1 ứng viên (an toàn, cùng nguyên tắc `match_player()`). Map field: `position` Sofascore chỉ có 4 code (G/D/M/F) — map về đúng 4 giá trị "broad category" ĐÃ tồn tại thật trong DB (Goalkeeper/Defence/Midfield/Offence), không tạo giá trị mới.
-  3. `pnpm --filter @football-app/sync-worker ingest-sofascore-roster [outputDir]` — upsert `Player` theo `externalRef` (provider="sofascore") — an toàn re-run.
-  - Verify thật: cả 3 team (Girona 33, Mallorca 25, Real Oviedo 24 = 82 player) resolve + backfill đúng ngay lần đầu, bao gồm đúng case "Real Oviedo" nam/nữ trùng tên nói trên. Re-scrape match Atletico-Girona sau backfill: unmatched giảm từ 28 → 8 (71%) — 8 còn lại (vd "Ademola Lookman", "Vitor Reis") xác nhận KHÔNG có trong chính `/team/{id}/players` snapshot của Sofascore (staleness/thiếu squad THẬT ở nguồn, không phải bug pipeline).
-  - **Phần còn lại (31 case, sau fix 2 cải tiến dưới) đa số là squad THIẾU 1 phần** (football-data.org chưa list hết — case thật: "Iñaki Peña"/"Hector Fort"/"Martim Neto" ở trận Elche vs Getafe KHÔNG PHẢI cầu thủ Barcelona trùng tên nổi tiếng, mà là cầu thủ THẬT của Elche/Getafe chưa từng được sync — dò cả roster 40 người của Elche xác nhận không có ai tên gần giống) hoặc **cầu thủ đã chuyển đội nhưng DB chưa cập nhật** (case thật: "Eray Cömert"/"Thierry Correia" DB vẫn gán Torino FC/Venezia FC trong khi Sofascore cho thấy họ đang đá La Liga) — cả 2 dạng đều cần re-sync catalog, KHÔNG sửa được ở `match_player()`.
-- **`playerSeasonStats` — loại data SEASON-level (2026-08-20), khác hẳn 9 loại match-level ở trên** — Sofascore's `GET /unique-tournament/{id}/season/{id}/top-players/overall` trả **34 category** (rating/goals/xG/xA/thẻ vàng-đỏ/tackles/...) trong **CÙNG 1 response** (verify thật — KHÔNG phải 1 request/category như đoán ban đầu lúc research). Mỗi category là top-50 CỦA CATEGORY ĐÓ (không phải toàn giải) — 1 cầu thủ lọt category này có thể không lọt category khác, hợp nhất (`merge_player_entries()` trong `scrape-player-season-stats.py`) theo Sofascore player id trước khi ghi.
-  - **Mở RỘNG `PlayerStatistics` đã có (KHÔNG tạo model riêng)** — model này đã sẵn field `raw Json?` chưa dùng tới, và đây chính xác là model trang `/players/[id]` đang đọc (`GET /statistics/players/:id` không có `select`, tự trả field mới không cần đổi API) — quyết định này giải quyết TRỰC TIẾP vấn đề gốc user hỏi ("tại sao card thống kê không hiện với 1 số player, và thẻ vàng/đỏ luôn = 0") mà không cần thêm route/UI mới. Field mới đều **nullable** (khác `appearances`/`goals`/`assists`/`yellowCards`/`redCards` cũ `@default(0)`) — thiếu field nghĩa là "không có data", KHÔNG phải "giá trị 0".
-  - **Ingest CHỈ set field mà Sofascore THẬT quan sát được cho từng cầu thủ** (`ingest-player-season-stats.ts`) — KHÔNG đè `undefined`/0 lên field đã có giá trị đúng từ football-data.org's `syncTopScorers()` (vd cầu thủ lọt category "tackles" nhưng không lọt "goals" — giữ nguyên `goals` cũ, chỉ thêm `tackles` mới).
-  - **Bug thật đã tránh trước khi ship**: hàm `resolve_players()` ban đầu tra roster theo `team.name` Sofascore trả trong entry — nhưng đây là team **HIỆN TẠI** (lúc scrape) của cầu thủ, KHÔNG PHẢI team lúc đá mùa giải đang xét (mùa 2025-2026 đã qua kỳ chuyển nhượng hè) — case thật: "Antoine Semenyo" bị Sofascore tag "Manchester City" (chuyển nhượng thật sau mùa) nhưng DB đúng "AFC Bournemouth" (nơi anh thật sự đá mùa 2025-26) → ban đầu 56/381 unmatched. Fix: fallback tra trên TOÀN BỘ roster cả giải (không giới hạn 1 team) nếu tra theo team thất bại — giảm xuống 28/381 (93% resolved). 28 còn lại gồm cả 2 case đã biết từ audit trước (Nordi Mukiele/Jesse Derry) — không sửa thêm được.
-  - **Kiến trúc admin scraper**: `playerSeasonStats` KHÔNG đi qua `generate-sofascore-manifest.ts`/`scraper.py` (không có "limit"/không theo match) — `scraper-orchestrator.ts` tách riêng thành `runPlayerSeasonStatsPipeline()`, chạy độc lập/song song với `runMatchLevelPipeline()` trong CÙNG 1 `ScraperRun` nếu admin chọn cả 2 nhóm. **Bug thật đã tránh trước khi ship**: summary của 2 pipeline đều có field `unmatchedPlayers` — gộp bằng `Object.assign()` sẽ khiến pipeline chạy SAU đè mất field của pipeline chạy TRƯỚC nếu tên trùng — đặt tên riêng `playerSeasonStatsUpserted`/`playerSeasonStatsUnmatchedPlayers` để tránh.
-  - **UI `/admin/scraper` tách 2 tab riêng** (2026-08-20, đổi từ thiết kế ban đầu gộp `playerSeasonStats` làm checkbox thứ 10 chung với 9 loại match-level — user phản hồi đúng: gộp chung gây hiểu nhầm vì loại này không dùng Limit, chạy độc lập hoàn toàn) — tab "Scrape theo trận" (9 checkbox + Limit, y hệt cũ) và tab "Player season stats" (chỉ 1 nút Apply, không Limit/checkbox — gửi `dataTypes: ["playerSeasonStats"]` cố định). 2 tab dùng CHUNG Select giải đấu/mùa giải (đặt ngoài `<Tabs>`, không duplicate). Bảng lịch sử hiện "—" ở cột Limit cho run chỉ chọn `playerSeasonStats` (giá trị `PLAYER_SEASON_STATS_PLACEHOLDER_LIMIT` gửi lên chỉ để thoả Zod schema chung, không có ý nghĩa thật, không nên hiện số giả cho admin).
-  - Verify thật 2026-08-20: Premier League 2025-26, 381 cầu thủ tìm thấy, 353 ghi đúng (93%), trigger qua `POST /admin/scraper-runs` thật với `dataTypes: ["playerSeasonStats"]` (không kèm loại match-level nào) — `matchesFound`/`matchesScraped` đúng là `null` (không áp dụng), SUCCESS. James Garner: `appearances=38, goals=0, assists=7, rating=7.23, yellowCards=12, redCards=0` ghi đúng, hiện đúng trên `/players/[id]` thật (đã thêm 3 field Rating TB/Thẻ vàng/Thẻ đỏ vào card "Thống kê mùa giải gần nhất", chỉ hiện khi `rating !== null` — dùng `rating` làm cờ báo "đã được Sofascore enrich" vì các field cũ `@default(0)` không tự phân biệt được "0 thật" với "chưa có data").
-  - **2 cải tiến thật cho `match_player()` từ audit này**:
-    1. Thêm `ț`/`Ț`/`ș`/`Ș` (Romania) vào `EXTRA_CHAR_FOLDS` — cùng lớp lỗi NFKD-không-decompose-được như `ø` ở trên.
-    2. **Fallback theo họ đổi từ "chỉ so từ CUỐI" sang "so giao nhau mọi từ SAU tên đầu"** — case thật: DB lưu ĐỦ họ đôi Tây Ban Nha/Bồ Đào Nha ("Jofre Carreras **Pagès**", "Ángel Fortuño **Viñas**") nhưng Sofascore/truyền thông chỉ dùng họ cha, BỎ HẲN họ mẹ ở cuối ("Jofre Carreras", "Angel Fortuno") — so khớp CHỈ từ cuối luôn lệch cho case này (họ chung "Carreras"/"Fortuño" lại nằm ở GIỮA chuỗi DB, không phải cuối). Đổi qua so khớp tập hợp (`set` giao nhau) toàn bộ từ sau tên đầu, vẫn giữ an toàn bằng điều kiện "chỉ đúng 1 ứng viên".
-  - **`PLAYER_NAME_ALIASES` (mới, cùng pattern `TEAM_NAME_ALIASES`)** — nickname KHÔNG suy được bằng quy tắc chung (khác mononym/họ đôi ở trên) — case thật đã verify: "**Gavi**" (Sofascore, tên gọi toàn cầu) vs DB's "**Pablo Gavira**" (football-data.org, giữ họ cha, bỏ tên + họ mẹ "Martín Páez") — đối chiếu `dateOfBirth` (2004-08-05) xác nhận CÙNG 1 người thật. Thêm entry mới khi gặp case thật tương tự, KHÔNG đoán trước nickname chưa gặp.
-- **Không chạy tự động/liên tục** — backfill có giới hạn (`--limit`), không wire vào `docker-compose.yml`/cron, chạy tay khi cần. Chỉ scope Premier League, mùa giải 2025-2026 (football-data.org đặt tên season theo NĂM BẮT ĐẦU — season tên **"2025"**, KHÔNG PHẢI "2026", mới là mùa 2025-2026 thật — verify thật qua `startDate`/`endDate`, đã có bug suýt chọn nhầm season "2026" vì nó được đánh dấu `isCurrent: true`).
-- **`GET /matches/:id/events` (đã có sẵn từ Phase 2) tự động trả dữ liệu thật** ngay khi `MatchEvent` có data — không cần sửa API cho piece này. Chưa có endpoint public cho Lineups/Statistics/PlayerRating (ngoài scope piece này).
-- Verify thật (2026-08-18): chạy full pipeline trên 3 match Premier League thật (mùa 2025-2026) — 49 event, 111 dòng lineup, 87 player rating, 6 dòng match statistic được ghi đúng vào DB dev; đối chiếu tay xác nhận own-goal/assist/possession đều đúng.
-- **9 loại data admin tự chọn (2026-08-19)** — trang `/admin/scraper` (checkbox multi-select) gọi `POST /admin/scraper-runs` với `dataTypes: string[]` (`ScraperRun.dataTypes`, Postgres `String[]`, default 3 loại cũ `["events","lineups","statistics"]` cho row có sẵn trước migration). Canonical list 9 key ở `SCRAPER_DATA_TYPES` (`apps/api/src/scraper-competitions.ts`) — `--data-types` (comma-separated) truyền NGUYÊN VĂN xuống cả `generate-sofascore-manifest.ts` và `scraper.py` (KHÔNG qua mapping riêng, 1 tầng key duy nhất xuyên suốt pipeline, xem `DATA_TYPE_ENDPOINTS` trong `scraper.py` và `NEEDS_SCRAPE_RELATION` trong `generate-sofascore-manifest.ts`).
-- **Gate "match cần scrape" đổi từ CỐ ĐỊNH theo `events` sang ĐỘNG theo `dataTypes` đang chọn** (`generate-sofascore-manifest.ts`, OR qua từng relation tương ứng) — bug thật đã tránh được: nếu giữ gate cũ, match ĐÃ có `MatchEvent` (từ lần chạy Events trước) sẽ KHÔNG BAO GIỜ được chọn lại dù admin chỉ muốn backfill riêng 1 loại mới (vd shotmap) cho match đó.
-- **6 loại data mới (verify thật 2026-08-19, probe trực tiếp `api.sofascore.com` bằng session bypass sẵn có trước khi code — KHÔNG đoán field)**:
-  - `commentary` → `Commentary` (đã có sẵn schema, RỖNG từ trước piece này — xem CLAUDE.md § AI's `ai_match_summary` limitation) — `GET /event/{id}/comments`. **Bug thật đã gặp + fix**: sort ban đầu theo field `time` bị SAI — 1 số comment "meta" (`endFirstHalf`/`endSecondHalf`/`matchEnded`) THIẾU HẲN field `time` (không phải `0`), `.get("time", 0)` mặc định `0` khiến 3 dòng "kết thúc trận" bị xếp lên ĐẦU seq — phát hiện qua verify DB thật sau ingest (không phải qua đọc code). Fix: sort theo `id` (thứ tự đăng thật, đơn điệu tăng), `minute` của comment thiếu `time` kế thừa (carry-forward) minute của comment liền trước có `time` thật (`map_comments()` trong `scraper.py`).
-  - `shotmap` → model mới `MatchShot` (`xg`/`xgot`/toạ độ/`bodyPart`/`situation` theo TỪNG cú sút — khác `PlayerRating.stats`'s xG/xA TỔNG theo trận) — `GET /event/{id}/shotmap`.
-  - `highlights` → model mới `MatchHighlight` (chỉ lưu link YouTube, KHÔNG host video) — `GET /event/{id}/highlights`.
-  - `averagePositions` → model mới `MatchAveragePosition` (toạ độ (x,y) thật — khác `Formation.formation`, chuỗi sơ đồ vd "4-3-3") — `GET /event/{id}/average-positions`.
-  - `momentum` → model mới `MatchMomentum`, `minute` là **Float** (KHÔNG phải Int — verify thật: có điểm ở phút bù giờ dạng "90.5") — `GET /event/{id}/graph`.
-  - `odds` → model mới `MatchOdds`, admin-only, **CHƯA có UI public hiển thị** (chỉ lưu DB) — `GET /event/{id}/odds/1/all`. 1 dòng/market (KHÔNG phải 1 dòng/choice) — verify thật 1 trận có 18 market, NHIỀU market TRÙNG `marketName` (vd "Match goals" lặp lại theo nhiều mốc Over/Under khác nhau) nên `marketName` một mình KHÔNG unique, phải dùng `id` riêng của Sofascore cho từng market (field `sofascoreMarketId` ở model) làm khoá thật.
-  - Đã cân nhắc và BỎ QUA vĩnh viễn: `/event/{id}/best-players/summary` (trùng `PlayerRating` đã có), `/event/{id}/h2h` (aggregate nhiều mùa, không riêng trận — tính được từ `Match` đã sync, không cần Sofascore), `/event/{id}/votes` (bình chọn của user Sofascore, không phải user app). Chưa làm (để phase sau, khác hẳn shape input theo team/season thay vì theo match): `/team/{id}/players` (roster đầy đủ + market value), `/unique-tournament/{id}/season/{id}/top-players/overall` (33 category thống kê nâng cao/cầu thủ/mùa — xG/xA/sprints/km covered/tackles..., response 2.4MB).
-  - Idempotency khi re-ingest (`ingest-sofascore.ts`): `commentary`/`highlights`/`momentum` dùng `createMany({skipDuplicates: true})` (có unique constraint tự nhiên); `averagePositions`/`odds` dùng upsert theo key (toạ độ/tỉ lệ hợp lệ để update lại); `shotmap` KHÔNG có unique constraint tự nhiên (nhiều cú sút cùng phút vẫn hợp lệ) nên dùng `deleteMany` + `createMany` (xoá hết rồi ghi lại toàn bộ) để tránh nhân đôi khi re-scrape.
-  - Verify thật 2026-08-19 qua cả 2 đường: (1) chạy tay 3 script CLI cho 1 match với đủ 9 loại — 125 commentary, 30 shot, 1 highlight, 27 average position, 92 momentum point, 17 odds market ghi đúng, re-run xác nhận idempotent (không nhân đôi); (2) trigger THẬT qua `POST /admin/scraper-runs` (không phải chạy tay script) với `dataTypes: ["highlights"]`, limit=10 — orchestrator tự chọn đúng 10 match thật thiếu highlights, ghi đúng 18 highlight, xác nhận toàn bộ chain HTTP → subprocess → Postgres hoạt động đúng.
-- **Auto-scrape 7 loại data THEO TRẬN khi match chuyển FINISHED, chạy trong `apps/sync-worker` được deploy (Render, xem `render.yaml`)** (`apps/sync-worker/src/sofascore-match-scrape.ts`'s `scrapeMatchDetailsIfNeeded()`, 2026-08-25) — `events`/`lineups`/`statistics`/`shotmap`/`highlights`/`averagePositions`/`momentum`, KHÔNG kèm `commentary`/`odds` (2 loại này vẫn chỉ scrape qua `/admin/scraper` tay). Trigger ĐÚNG 1 LẦN từ CẢ 2 đường (cùng pattern `ai_match_summary`): `sync-live-matches.ts`'s `applyMatchUpdate()` (đường "nhanh") + `sync-catalog.ts`'s `syncMatches()` (đường "chắc chắn"), guard bằng `status cũ !== FINISHED && status mới === FINISHED` — KHÔNG throttle Map/retry tự động (khác feature cũ dưới đây), vì bản chất chỉ trigger 1 lần/match. Tự build manifest 1 match trong memory (kèm roster đầy đủ 2 đội, cần cho khớp tên cầu thủ Lineups/Ratings) + spawn `scraper.py` (đã bundle Python/`tls_requests` sẵn trong Docker image, xem `apps/sync-worker/Dockerfile`) + ingest trực tiếp qua `ingestSofascoreOutputs()` — không qua bước `generate-sofascore-manifest.ts`/HTTP admin API. Chỉ chạy khi env `SOFASCORE_SCRAPE_ENABLED=true` (chỉ set trên Render, xem `render.yaml` — local dev/docker-compose không có Python/TLS bundle nên tự no-op, không throw).
-  - **Thay cho feature cũ "auto-fetch odds cho match đang LIVE"** (`live-odds.ts`, đã XOÁ 2026-08-25) — feature đó auto-gọi Sofascore MỖI ~30s/tick trong lúc match LIVE/HALFTIME (throttle 3 phút/match qua in-memory Map) để cập nhật `MatchOdds` real-time. **Thất bại hoàn toàn khi verify thật trên Render**: 181/181 lần thử thất bại (không có lần nào thành công), luôn cùng lỗi `ConnectionError: Could not download https://api.sofascore.com/...` khi gọi `soccerdata`'s `read_leagues()` — cùng call thành công ngay lập tức khi chạy từ máy dev local (cùng code/version `wrapper-tls-requests` v1.13.1, đã verify khớp Dockerfile's pinned TLS binary, không phải version drift). Nghi nhiều nhất: IP datacenter egress của Render bị Cloudflare/Sofascore chặn khác IP nhà — CHƯA xác nhận được 100% (Render free tier không có shell để tự debug trực tiếp từ container, phải đợi lần FINISHED thật tiếp theo cùng fix log dưới mới có traceback đầy đủ để chẩn đoán tiếp nếu cần). Quyết định: bỏ hẳn auto-fetch LIVE (không cần data real-time, khác odds thật sự — 7 loại data theo trận này chỉ cần đúng 1 lần SAU khi trận kết thúc, không có áp lực real-time nên không cần retry liên tục nếu Sofascore tạm không tới được).
-  - **Bug thật đã fix cùng lúc (áp dụng cho MỌI lỗi log qua `logError` khi gọi subprocess Python)**: log lỗi ban đầu chỉ giữ `stderr.slice(-1000)` (1000 ký tự CUỐI) gộp vào `message` string (giới hạn 2000 ký tự ở `logError`) — `soccerdata`'s `_download_and_save()` retry 5 lần, log traceback lỗi THẬT (TLS/403/timeout...) qua `logger.exception()` ở MỖI lần retry rồi mới raise 1 `ConnectionError` chung ở cuối; giữ ĐUÔI log nghĩa là chỉ giữ đúng cái wrapper vô nghĩa đó, mất hết traceback thật ở đầu — phát hiện qua đọc `SystemLog` thật (không phải qua đọc code). Fix: truyền full `stderr` qua `detail` param của `logError` (Json field, KHÔNG bị cắt) thay vì dồn vào `message`, xem thêm qua nút "Xem thêm" mới thêm ở `/admin/system-logs` (cả cột Message lẫn Chi tiết, trước đó Message không có cách xem đầy đủ nếu row không có `detail`).
+- KHÔNG để downstream code biết hình dạng JSON thật của provider — luôn map qua canonical model
+  trong `src/types.ts` trước.
+- Provider mới → adapter trong `src/adapters/`, implement `DataProviderAdapter`, KHÔNG sửa
+  canonical model để khớp provider mới.
+- **Mặc định: `football-data.org`** (`FootballDataAdapter`) — không phải API-Football (free tier
+  bị suspend account nhiều lần + quota 100 req/ngày quá chật). football-data.org free tier: 10
+  req/phút, KHÔNG giới hạn/ngày, phủ 13 giải lớn. `ApiFootballAdapter` vẫn giữ làm adapter phụ.
+- Chọn qua `createAdapter()` (`apps/sync-worker/src/provider.ts`), env `DATA_PROVIDER`
+  (`"football-data"` mặc định | `"api-football"`).
+- Mỗi adapter tự throttle qua `rate-limiter.ts`, margin an toàn dưới giới hạn thật (8 req/phút cho
+  cả 2, dưới hard cap 10/phút) — adapter mới PHẢI tự cân nhắc rate limit tương tự.
+- `FootballDataAdapter.fetchPlayers` bắt riêng HTTP 403 từ `GET /teams/{id}` — provider gate theo
+  giải team đang đá **hiện tại**, không theo season param truyền vào (team đã xuống hạng khỏi
+  free-tier sẽ luôn 403 dù hỏi season cũ) — trả `[]` + log warn, không throw, để không chặn cả job.
 
 ### Docker
-- `docker-compose.yml` (root) = data/log/auth/app cho local dev: `postgres`, `redis`, `dozzle` (log viewer, http://localhost:8080), `firebase-emulator` (Auth Emulator, project giả `demo-football-app` — KHÔNG đụng project thật `jankara-e2e-test`; API :9099, UI :4000), `api`, `sync-worker` (profile `worker`, không tự chạy). Tất cả service dài hạn có `restart: unless-stopped`; `postgres`/`redis`/`firebase-emulator`/`api` có HEALTHCHECK, `api` depends_on cả 3 với `condition: service_healthy`.
-- `api` mặc định trỏ `FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099` khi chạy qua `docker compose` — test đăng nhập/verify token KHÔNG cần Firebase project thật. Override qua `.env` (copy từ `.env.example`) nếu muốn verify token thật từ `jankara-e2e-test`.
-- `docker-compose.test.yml` = test cô lập: `postgres-test` riêng (tmpfs, ephemeral) + `test-runner` build từ `Dockerfile.test` (KHÔNG dùng `apps/*/Dockerfile` cho test vì file đó đã prune xuống 1 app + prod deps qua `pnpm deploy`, không đủ để chạy toàn bộ test suite monorepo).
-- `apps/api/Dockerfile`, `apps/sync-worker/Dockerfile` = production image, dùng `pnpm --filter=<pkg> --prod deploy --legacy /deploy/<name>` (pnpm v10 cần `--legacy` nếu không set `inject-workspace-packages=true`) để tách app + deps thật ra khỏi monorepo (không symlink) — pattern chuẩn của pnpm cho Docker. Có `RUN --mount=type=cache,target=/root/.local/share/pnpm/store` ở bước `pnpm install` để build sau nhanh hơn.
-- Thêm app/package mới cần Dockerfile riêng → copy đúng pattern 2 file trên (base alpine + libc6-compat/openssl cho Prisma, build stage chạy `db:generate` + `turbo run build --filter=<pkg>...` + `pnpm deploy --legacy`, runtime stage chỉ copy `/deploy/<name>`).
-- Postgres trong Docker dùng đúng port/user/pass khớp `packages/database/.env.example` (`postgres:postgres@localhost:5432/football_app`) — sửa 1 chỗ phải sửa chỗ kia theo, đừng để lệch.
-- **Cảnh báo máy dev cụ thể**: nếu có Postgres.app (hoặc bất kỳ Postgres native nào) đang chạy trên máy, nó chiếm port 5432 và **âm thầm nhận hết traffic từ host tới `localhost:5432`** thay vì Docker container (bind cụ thể `127.0.0.1` được ưu tiên hơn bind wildcard `0.0.0.0` của Docker) — lệnh `prisma migrate`/`psql` chạy từ host tưởng đang nói với Docker Postgres nhưng thực ra vào native Postgres. Luôn `lsof -i :5432` kiểm tra trước khi debug "sao không thấy data" liên quan Docker Postgres.
+- `docker-compose.yml` (root) = local dev: `postgres`, `redis`, `dozzle` (:8080), `firebase-emulator`
+  (project giả `demo-football-app`, API :9099, UI :4000), `api`, `sync-worker` (profile `worker`).
+- `docker-compose.test.yml` = test cô lập, Postgres riêng ephemeral, build từ `Dockerfile.test`
+  (không dùng `apps/*/Dockerfile` — đã prune xuống 1 app, không đủ chạy toàn bộ test suite).
+- `apps/api/Dockerfile`, `apps/sync-worker/Dockerfile` = production, dùng
+  `pnpm --filter=<pkg> --prod deploy --legacy /deploy/<name>`. Thêm app/package mới → copy đúng
+  pattern 2 file này.
+- **Cảnh báo máy dev**: Postgres.app (hoặc Postgres native khác) chiếm port 5432 sẽ âm thầm nhận
+  hết traffic thay vì Docker container — `lsof -i :5432` trước khi debug "sao không thấy data".
 
-### Web (`apps/web`) — client chính, đã scaffold
-- Next.js (App Router) + `packages/ui`, gọi `apps/api` trực tiếp (REST), Firebase JS SDK cho auth (Web app đã đăng ký riêng trong Firebase project `jankara-e2e-test`).
-- Trang public (browse giải đấu/team/match) nên dùng SSR/ISR cho SEO — đây là lý do chính chọn Next.js thay vì Flutter Web.
+### Web (`apps/web`)
+- Next.js (App Router) + `packages/ui`, gọi `apps/api` trực tiếp (REST), Firebase JS SDK cho auth.
+- Trang public nên dùng SSR/ISR cho SEO.
 - Dùng skill `add-web-page` để scaffold page/feature mới.
-- **shadcn/ui là design system chính từ 2026-08-15** (`apps/web/components.json`, đã setup) — `packages/ui` cũ (Button/Card/Badge/Container/Pagination) đang được migrate dần sang shadcn, KHÔNG rewrite 1 lần. Component/trang MỚI luôn dùng shadcn (`npx shadcn@latest add <component>`), kể cả khi `packages/ui` đã có bản tương đương. Khi tiện sửa 1 trang đang dùng `packages/ui` cũ, đổi luôn sang shadcn nếu không tốn nhiều effort ngoài scope; không thì để nguyên, đừng ép migrate riêng 1 task không liên quan. Icon dùng `lucide-react`. `aliases.utils` trỏ `@football-app/ui` để dùng chung `cn` cũ — nhưng lệnh `shadcn add <component>` tự lỗi vì `packages/ui/package.json` thiếu `exports` field, phải tạm trả `aliases.utils` về `@/lib/utils` lúc chạy `add` rồi sửa tay import sau (chi tiết đầy đủ ở `.claude/agents/web-dev.md`). App chưa có `next-themes`/toggle `.dark` — `dark:` đang chạy theo system preference; nếu `shadcn init`/`add` tự thêm `@custom-variant dark (&:is(.dark *));` vào `globals.css` thì phải xoá, không sẽ tắt im lặng toàn bộ dark mode hiện có.
+- **shadcn/ui là design system chính** — component/trang MỚI luôn dùng shadcn
+  (`npx shadcn@latest add <component>`) kể cả khi `packages/ui` đã có bản tương đương. `shadcn add`
+  tự lỗi vì `packages/ui/package.json` thiếu `exports` field — tạm trả `aliases.utils` về
+  `@/lib/utils` lúc chạy `add` rồi sửa tay import sau (chi tiết ở `.claude/agents/web-dev.md`).
+  Chưa có `next-themes`/toggle `.dark` — nếu `shadcn init`/`add` tự thêm
+  `@custom-variant dark (&:is(.dark *));` vào `globals.css` thì phải xoá, không sẽ tắt dark mode.
 
-### Admin (`apps/web/src/app/admin/*`, ROADMAP Phase 4)
-- **Không phải app/port riêng** — sống chung `apps/web` (đã cân nhắc và bỏ 1 bản `apps/admin` scaffold độc lập trước đó), chỉ khác ở route `/admin/login`. `ConditionalWebChrome` (`apps/web/src/components/ConditionalWebChrome.tsx`) ẩn `NavBar`/`PushNotificationListener` công khai khi path bắt đầu `/admin` — root layout (`app/layout.tsx`) vẫn 1 Server Component duy nhất, KHÔNG tách route-group 2 root layout (đổi lại đơn giản hơn, không phải di chuyển mọi trang cũ).
-- **Auth hoàn toàn tách biệt khỏi Firebase** (khác mọi nơi khác trong app) — username/password thật, bảng `AdminUser` riêng (`username` + bcrypt `passwordHash`), JWT tự ký (`apps/api/src/middleware/admin-auth.ts`'s `requireAdminSession`, `ADMIN_JWT_SECRET` env, hạn 7 ngày). `AdminAuthProvider`/`useAdminAuth()` (`apps/web/src/lib/admin-auth-context.tsx`) lưu token ở `localStorage` — biết đây là tradeoff so với httpOnly cookie (rủi ro XSS), chấp nhận được cho tool nội bộ quy mô nhỏ. KHÔNG dùng `User`/`firebaseUid`/`requireAuth` — admin không phải end-user (không favorites/notifications/search history).
-- **Không có flow tự đăng ký/cấp quyền admin qua UI** — tạo (hoặc reset password) admin DUY NHẤT qua CLI: `pnpm --filter @football-app/api create-admin <username> <password>` (`apps/api/src/scripts/create-admin.ts`, upsert theo username).
-- **CRUD đã build cho Competition/Season/Team/Player/Stadium/Coach/Referee** — 1 khung chung tái dùng (`ResourceTable`/`ResourceFormDialog`/`AdminResourcePage`, `apps/web/src/components/admin/`), mỗi trang chỉ khai báo columns/fields. Backend `POST`/`PATCH` (+ `search`) trên route file tương ứng, `requireAdminSession`. KHÔNG có Delete cho model có `onDelete: Cascade` sâu (Competition/Season/Team/Player) — Prisma Studio vẫn là escape hatch xoá thật.
-- **`Match`**: sửa tỉ số/trạng thái/lịch (`PATCH /matches/:id`) + set tay `LiveMatchState` (`PUT /matches/:id/live`, upsert) qua 1 trang riêng (không dùng khung CRUD chung — 1 match sửa 2 endpoint khác nhau).
-- **`AppConfig`** (feature flags): trang riêng (không dùng khung CRUD chung — `key` là primary key admin tự đặt, không phải cuid server sinh như model khác), value JSON sửa qua textarea.
-- **`NotificationLog`**: trang read-only, lọc theo userId/status/channel.
-- **`/admin/scraper`**: trigger pipeline scrape Sofascore (chọn giải/mùa/limit/loại data, poll `ScraperRun` tới khi xong) — xem "### Scraper" dưới cho chi tiết đầy đủ (9 loại data, kiến trúc, verify thật).
-- Chưa làm (optional, không bắt buộc theo exit criteria): xem danh sách `User` + favorites.
+### Admin (`apps/web/src/app/admin/*`)
+- Sống chung `apps/web` (không phải app/port riêng), chỉ khác route `/admin/login`.
+  `ConditionalWebChrome` ẩn `NavBar`/`PushNotificationListener` khi path bắt đầu `/admin`.
+- **Auth tách biệt hoàn toàn khỏi Firebase** — bảng `AdminUser` riêng (bcrypt `passwordHash`), JWT
+  tự ký (`requireAdminSession`, `ADMIN_JWT_SECRET`). Token lưu `localStorage` (tradeoff so với
+  httpOnly cookie, chấp nhận được cho tool nội bộ). KHÔNG dùng `User`/`firebaseUid`/`requireAuth`.
+- Tạo/reset admin qua CLI: `pnpm --filter @football-app/api create-admin <username> <password>`.
+- **CRUD chung cho Competition/Season/Team/Player/Stadium/Coach/Referee** —
+  `ResourceTable`/`ResourceFormDialog`/`AdminResourcePage`. KHÔNG có Delete cho model có
+  `onDelete: Cascade` sâu — Prisma Studio là escape hatch xoá thật.
+- `Match`: sửa qua `PATCH /matches/:id` + `LiveMatchState` qua `PUT /matches/:id/live` (1 trang, 2
+  endpoint). `AppConfig`: trang riêng, value JSON qua textarea. `NotificationLog`: read-only.
+- `/admin/scraper`: trigger pipeline Sofascore — xem
+  [apps/scraper-sofascore/CLAUDE.md](apps/scraper-sofascore/CLAUDE.md).
 
 ### Authentication (Firebase Auth)
-- Web: Web app đã đăng ký trong `jankara-e2e-test` qua `firebase apps:create WEB` (app id `1:264468798864:web:165e6c75fad5e45e07e715`). Firebase JS SDK ở `apps/web/src/lib/firebase.ts`, config qua `NEXT_PUBLIC_FIREBASE_*` trong `apps/web/.env.local` (gitignored — xem "### Secrets & credentials"; lấy lại bằng `firebase apps:sdkconfig WEB <app-id> --project jankara-e2e-test`, xem `.env.example`). Auth context (Google popup + Facebook popup + username/password tự build) ở `apps/web/src/lib/auth-context.tsx`, UI ở `apps/web/src/app/auth/page.tsx` (tab "Đăng nhập"/"Đăng ký") + `AuthStatus` trong NavBar.
-- **Phone sign-in đã BỎ (2026-08-24)** — verify thật: Firebase Phone Auth KHÔNG có free tier từ ~09/2024, bắt buộc gói Blaze (trả phí) + tính phí theo từng SMS (~$0.01-0.06/SMS tuỳ khu vực). Thay bằng **username/password tự build** cho user thường (khác hoàn toàn `AdminUser`) — `apps/api/src/routes/auth.ts` (`POST /auth/register`, `POST /auth/login`), validate qua zod (fullName 2-100 ký tự; username 3-20 ký tự `[a-zA-Z0-9_]`, lowercase-normalize để unique constraint không phân biệt hoa/thường; password ≥8 ký tự + ≥1 chữ + ≥1 số; confirmPassword phải khớp), hash qua `packages/shared`'s `hashPassword`/`verifyPassword` (bcryptjs, đổi tên từ `admin-password.ts` → `password.ts` vì giờ dùng chung cho cả `AdminUser.passwordHash` lẫn `User.passwordHash`). Đăng nhập/đăng ký thành công KHÔNG tự tạo session riêng — mint 1 Firebase custom token (`firebase-admin`'s `createCustomToken(uid)`), client `signInWithCustomToken()` để ra Firebase ID token THẬT, nhờ vậy `requireAuth`/mọi API hiện có KHÔNG cần sửa gì để hỗ trợ thêm auth method mới. `User.firebaseUid` cho nhóm này là giá trị TỰ SINH (`pw_${randomUUID()}`, không phải Firebase cấp) lưu sẵn trong DB trước, dùng đúng giá trị đó làm `uid` khi mint custom token để `resolveOrCreateUserId()` khớp lại đúng row thay vì tạo trùng. `User.username`/`User.passwordHash` đều nullable (`null` cho user đăng ký qua Google/Facebook). Login trả lỗi CHUNG CHUNG ("Sai tên đăng nhập hoặc mật khẩu") cho cả 3 case (username không tồn tại/sai password/user không có passwordHash) — không tiết lộ username nào tồn tại thật, cùng convention `/admin/login`.
-- Dev local **mặc định** dùng Firebase Auth Emulator qua `connectAuthEmulator` (guard `NODE_ENV === "development"`) — đã verify thật token do emulator cấp có `aud`/`iss` khớp `demo-football-app` (project giả emulator dùng, không phải `jankara-e2e-test`), đúng với `FIREBASE_PROJECT_ID` mặc định của `apps/api`, nên web + api tương thích khi cùng chạy qua Docker emulator.
-- **Test bằng tài khoản Google/Facebook thật** (emulator chỉ nhận fake account tự tạo qua UI của nó, không nối được Google/Facebook thật): set `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=false` trong `apps/web/.env.local` để `apps/web` bỏ qua emulator, nối thẳng `jankara-e2e-test` — PHẢI đổi `apps/api` theo cùng lúc (bỏ `FIREBASE_AUTH_EMULATOR_HOST`, set `FIREBASE_PROJECT_ID=jankara-e2e-test`), không thì `requireAuth` verify token thất bại (token thật có `aud`/`iss` khớp `jankara-e2e-test`, không khớp `demo-football-app` mà emulator-mode `apps/api` đang chờ). Chạy `apps/api` local (không qua Docker) khi cần test kiểu này — xem "## apps/api" trong README.
-- Backend verify token qua `requireAuth` middleware (`apps/api/src/middleware/auth.ts`) dùng `firebase-admin` — chạy qua `pnpm docker:up` đã tự set `FIREBASE_AUTH_EMULATOR_HOST=firebase-emulator:9099` (xem "### Docker"), không cần project thật để test local; set `FIREBASE_PROJECT_ID`/`FIREBASE_SERVICE_ACCOUNT` trong `.env` khi cần verify token thật từ `jankara-e2e-test`. Dùng chung cho mọi client hiện tại (web).
-- `requireAuth` KHÔNG set raw Firebase UID vào context. Sau `verifyIdToken`, nó resolve-or-create `User` row nội bộ theo `User.firebaseUid` (just-in-time provisioning — chưa có flow signup/profile riêng ở Phase 1) rồi `c.set("userId", internalUser.id)`. Vì vậy `c.get("userId")` trong route là `User.id` (cuid) FK-safe, dùng trực tiếp cho query Prisma (ví dụ `FavoriteTeam.userId`/`FavoritePlayer.userId`) — không phải raw Firebase UID. `User.email` là optional (`String?`) vì user đăng ký qua username/password không có email claim.
-- **Facebook login (web)**: code đã wire (`signInWithFacebook` trong `auth-context.tsx`, nút trong `auth/page.tsx`), nhưng cần enable tay ở Firebase Console (Authentication → Sign-in method → Facebook, nhập App ID + App Secret từ developers.facebook.com) + whitelist redirect URI `https://jankara-e2e-test.firebaseapp.com/__/auth/handler` trong cấu hình OAuth của Facebook App đó — không có CLI cho bước này. Chưa enable → lỗi `auth/operation-not-allowed` khi bấm nút.
-- **Web Push notification (Phase 2 Bước 3, FCM)** — **verify thật 2026-08-17: nhận được push thật trên browser**, sau khi fix 5 bug thật (chi tiết đầy đủ ở [ROADMAP.md § Phase 2 Bước 3](docs/architecture/ROADMAP.md#phase-2--real-time--notifications-size-l)):
-  - Service worker `/firebase-messaging-sw.js` KHÔNG phải file tĩnh trong `public/` — đó là 1 Route Handler (`app/firebase-messaging-sw.js/route.ts`) đọc `process.env.NEXT_PUBLIC_FIREBASE_*` server-side lúc request và trả JS content — không cần copy tay giá trị Firebase config vào file nào cả, tự động đúng theo `.env.local`/`.env` đang chạy. Chỉ tự hiện notification khi KHÔNG tab nào của app đang focus.
-  - **Tab đang mở/focus (foreground) KHÔNG tự hiện notification** — đây là hành vi thật của FCM Web (khác biệt quan trọng, dễ tưởng nhầm là bug), phải tự code `onMessage()` + `new Notification()` tay ở phía client (`listenForForegroundMessages()` trong `lib/push-notifications.ts`, mount qua `<PushNotificationListener />` toàn app trong `layout.tsx`) — service worker's `onBackgroundMessage` không cover case này.
-  - Thiếu `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (Firebase Console → Project Settings → Cloud Messaging → Web configuration → Generate key pair) → `getToken()` lỗi khi bấm nút, không chặn build/typecheck.
-  - Thiếu `FIREBASE_SERVICE_ACCOUNT` hợp lệ ở `apps/api` (env, xem "### Authentication" ở trên) → `sendEachForMulticast` lỗi thật `"Could not load the default credentials"` (chỉ `FIREBASE_PROJECT_ID` không đủ để GỬI FCM — khác với `verifyIdToken` chỉ cần `projectId`) — đã catch, ghi `NotificationLog` status `FAILED`, không crash server, nhưng silent nếu không chủ động check bảng này.
-  - `apps/api/src/realtime/redis-subscriber.ts`'s `subscribeChannel()` (dùng bởi `goal-notifier.ts`) phải đợi event Redis `"ready"` trước khi subscribe nếu client chưa kết nối xong — gọi ngay lúc boot (trước khi ioredis với `lazyConnect: false` kết nối xong) từng fail 100% (`enableOfflineQueue: false` không buffer lệnh) khiến subscriber không bao giờ nhận message, không throw ra ngoài nên dễ tưởng đã hoạt động.
-  - Trạng thái nút "Bật thông báo bàn thắng" ở `/favorites` phải tự check lại khi mount (`GET /devices` + so khớp `getToken()` hiện tại) — không chỉ dựa vào state trong session, nếu không reload trang sẽ mất trạng thái "đã bật" dù backend vẫn còn device. `DELETE /devices/:id` để tắt.
-  - **macOS có thể chặn notification của Chrome ở cấp hệ điều hành** (System Settings → Notifications → Google Chrome → "Allow Notifications") độc lập hoàn toàn với quyền "Allow" trong browser (`Notification.permission === "granted"` vẫn đúng, code chạy không lỗi, nhưng popup không hiện) — không phải bug code, luôn kiểm tra cả 2 lớp khi debug push không hiện trên macOS.
-- `firebase-tools` CLI (đã cài global) dùng cho `firebase emulators:start`/`firebase login`.
+- Web app đăng ký trong Firebase project `jankara-e2e-test` (dùng chung, không riêng app này). SDK
+  ở `apps/web/src/lib/firebase.ts`, config qua `NEXT_PUBLIC_FIREBASE_*` (`.env.local`, gitignored).
+  Auth context (Google/Facebook popup + username/password) ở `lib/auth-context.tsx`.
+- **Phone sign-in đã BỎ** (không có free tier từ Firebase, tính phí theo SMS) — thay bằng
+  **username/password tự build** (`apps/api/src/routes/auth.ts`) cho user thường, khác hoàn toàn
+  `AdminUser`. Đăng ký/đăng nhập thành công mint 1 Firebase custom token
+  (`createCustomToken(uid)`), client `signInWithCustomToken()` ra ID token THẬT — nhờ vậy
+  `requireAuth` không cần sửa gì để hỗ trợ auth method mới. `User.firebaseUid` cho nhóm này là giá
+  trị TỰ SINH (`pw_${randomUUID()}`), không phải Firebase cấp.
+- Dev local mặc định dùng Firebase Auth Emulator (`connectAuthEmulator`, guard
+  `NODE_ENV === "development"`). Test với account Google/Facebook thật → set
+  `NEXT_PUBLIC_USE_FIREBASE_EMULATOR=false` + đổi `apps/api` sang `FIREBASE_PROJECT_ID` thật cùng lúc
+  (2 bên phải khớp `aud`/`iss`, không thì `requireAuth` verify fail).
+- `requireAuth` KHÔNG set raw Firebase UID vào context — resolve-or-create `User` theo
+  `firebaseUid` rồi `c.set("userId", internalUser.id)` (cuid, FK-safe).
+- **Facebook login**: code đã wire nhưng cần enable tay ở Firebase Console (Sign-in method →
+  Facebook, App ID/Secret) + whitelist redirect URI — chưa enable thì lỗi `auth/operation-not-allowed`.
+- **Web Push (FCM)** — hoạt động thật, các điểm cần nhớ:
+  - Service worker `/firebase-messaging-sw.js` là 1 Route Handler (không phải file tĩnh) — tự đọc
+    env server-side, không cần copy config tay.
+  - Tab đang focus KHÔNG tự hiện notification (hành vi thật của FCM Web) — phải tự code
+    `onMessage()` + `new Notification()` ở client (`listenForForegroundMessages()`).
+  - Thiếu `FIREBASE_SERVICE_ACCOUNT` ở `apps/api` → gửi FCM lỗi "Could not load default
+    credentials" (khác `verifyIdToken`, chỉ cần `projectId`) — đã catch, ghi `NotificationLog`
+    FAILED, không crash, nhưng silent nếu không chủ động check bảng đó.
+  - `subscribeChannel()` phải đợi Redis `"ready"` trước khi subscribe, không sẽ miss message vô
+    thời hạn mà không throw lỗi gì.
+  - macOS có thể chặn notification ở cấp OS (System Settings) độc lập với quyền browser — kiểm tra
+    cả 2 lớp khi debug push không hiện.
 
 ## Git / branch protection
 
-- `main` và `develop` yêu cầu PR để merge (không cho push thẳng, không cho force-push/xoá branch).
-- Nhánh feature không bị giới hạn — push thẳng lên feature branch bình thường, mở PR khi cần merge vào `develop`.
+- `main` và `develop` yêu cầu PR để merge (không push thẳng, không force-push/xoá branch).
+- Nhánh feature không bị giới hạn — push thẳng, mở PR khi cần merge vào `develop`.
