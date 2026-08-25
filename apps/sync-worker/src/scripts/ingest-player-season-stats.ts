@@ -3,6 +3,7 @@
  * Postgres — chạy:
  *   pnpm --filter @football-app/sync-worker ingest-player-season-stats <outputPath>
  */
+import "../load-env";
 import { ingestPlayerSeasonStats } from "../ingest-player-season-stats";
 
 async function main() {

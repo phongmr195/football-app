@@ -10,6 +10,7 @@
  * syncCompetitions() (bootstrap phát hiện giải MỚI chưa có trong DB) — có chủ đích, xem CLAUDE.md/
  * plan feature này: chỉ re-sync 1 competition+season ĐÃ TỒN TẠI, không phải discover giải mới.
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { createAdapter } from "../provider";
 import { syncCompetitionSeason, syncSeasons } from "../sync-catalog";

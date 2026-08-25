@@ -2,6 +2,7 @@
  * Đọc output/ (sinh bởi apps/scraper-sofascore/scraper.py) và ghi vào Postgres — chạy:
  *   pnpm --filter @football-app/sync-worker ingest-sofascore [outputDir]
  */
+import "../load-env";
 import { ingestSofascoreOutputs } from "../ingest-sofascore";
 
 async function main() {

@@ -8,6 +8,7 @@
  * tại" — verify thật 2026-08-19: Girona FC/RCD Mallorca/Real Oviedo, xem CLAUDE.md § Scraper),
  * KHÔNG phải nguồn thay thế football-data.org cho team đã có data.
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { writeFileSync } from "node:fs";
 

@@ -2,6 +2,7 @@
  * Đọc roster-output/ (sinh bởi apps/scraper-sofascore/backfill-roster.py) và ghi vào Postgres — chạy:
  *   pnpm --filter @football-app/sync-worker ingest-sofascore-roster [outputDir]
  */
+import "../load-env";
 import { ingestSofascoreRosters } from "../ingest-sofascore-roster";
 
 async function main() {

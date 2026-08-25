@@ -12,6 +12,7 @@
  * delay bị 429 RESOURCE_EXHAUSTED giữa chừng). `AnthropicAdapter`/`GeminiAdapter`/`GroqAdapter`
  * không tự throttle, nên throttle ở tầng script này. 4.5s/request an toàn dưới 15 req/phút.
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { generateMatchSummaryIfNeeded } from "../match-summary";
 
