@@ -6,7 +6,7 @@ import { generateMatchSummaryIfNeeded } from "./match-summary";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
 import { readExternalRefId, scrapeMatchDetailsIfNeeded } from "./sofascore-match-scrape";
-import { refreshTopScorersIfNeeded, syncStandingsFromMatches } from "./sync-catalog";
+import { refreshTopScorersIfNeeded, syncStandingsFromMatches, syncTeamAggregates } from "./sync-catalog";
 
 // Kèm tên đội (select tối thiểu) — cần cho MatchFinishedEvent's homeTeamName/awayTeamName mà
 // không phải query thêm 1 lần nữa trong applyMatchUpdate().
@@ -164,6 +164,15 @@ async function applyMatchUpdate(
     // lý do/pattern generateMatchSummaryIfNeeded ngay trên. KHÔNG await, không chặn tick tiếp theo.
     void syncStandingsFromMatches(dbMatch.seasonId).catch((err) => {
       void logError(`syncLiveMatches: syncStandingsFromMatches thất bại cho season ${dbMatch.seasonId}`, err);
+    });
+
+    // TeamStatistics/CleanSheet (trang /teams/[id]'s "Thống kê mùa giải gần nhất") — cùng vấn đề/
+    // lý do/pattern syncStandingsFromMatches ngay trên (tính hoàn toàn từ Match local, KHÔNG gọi
+    // provider) — trước đây CHỈ cập nhật qua full-sync tay (syncCompetitionSeason()) hoặc admin
+    // bấm recompute (/admin/team-statistics), có thể lag sau lần sync tay gần nhất dù match mới
+    // liên tục FINISHED (bug thật báo 2026-08-25, cùng loại bug đã fix cho Standing 2026-08-24).
+    void syncTeamAggregates(dbMatch.seasonId).catch((err) => {
+      void logError(`syncLiveMatches: syncTeamAggregates thất bại cho season ${dbMatch.seasonId}`, err);
     });
 
     // Top scorers/assists (PlayerStatistics.goals/assists) — cùng vấn đề "chỉ cập nhật khi sync
