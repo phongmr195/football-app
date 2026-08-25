@@ -18,6 +18,23 @@ const SOFASCORE_COMPETITIONS: Record<string, string> = {
   "2015": "FRA-Ligue 1",
 };
 
+// 7 loại data — KHÔNG kèm "commentary"/"odds" (khác 9 loại đầy đủ ở apps/api/src/
+// scraper-competitions.ts's SCRAPER_DATA_TYPES, dùng cho pipeline admin trigger tay). Quyết định
+// (2026-08-25): bỏ auto-fetch odds cho match LIVE (feature cũ, xem git history's live-odds.ts —
+// 181/181 lần thử thất bại thật trên Render, ConnectionError khi gọi Sofascore, nghi IP datacenter
+// bị chặn khác IP nhà — xem SystemLog trước lúc bị xoá cho chi tiết) — đổi qua scrape 1 LẦN DUY
+// NHẤT ngay khi match chuyển FINISHED, không cần data theo thời gian thực (khác odds, cần cập
+// nhật liên tục trong lúc đá) nên không có nhu cầu retry liên tục nếu Sofascore tạm không tới được.
+const MATCH_LEVEL_DATA_TYPES = [
+  "events",
+  "lineups",
+  "statistics",
+  "shotmap",
+  "highlights",
+  "averagePositions",
+  "momentum",
+];
+
 // football-data.org đặt tên season theo NĂM BẮT ĐẦU ("2025") — soccerdata cần "2025-26". Duplicate
 // của scraper-competitions.ts's toSofascoreSeasonString(), cùng lý do trên.
 function toSofascoreSeasonString(dbSeasonName: string): string {
@@ -32,13 +49,7 @@ export function readExternalRefId(externalRef: unknown): string | null {
   return typeof id === "string" ? id : null;
 }
 
-// Throttle trong memory — KHÔNG cần bảng DB riêng để track "lần cuối fetch" (MatchOdds không có
-// cột timestamp, xem packages/database/prisma/schema.prisma). Reset khi process restart — chấp
-// nhận được, tệ nhất chỉ tốn 1 lần fetch thừa ngay sau redeploy.
-const REFRESH_INTERVAL_MS = 3 * 60 * 1000;
-const lastFetchedAt = new Map<string, number>();
-
-interface LiveMatchInfo {
+interface FinishedMatchInfo {
   id: string;
   competitionId: string;
   seasonId: string;
@@ -46,9 +57,13 @@ interface LiveMatchInfo {
   awayTeamId: string;
 }
 
+async function loadRoster(teamId: string) {
+  return prisma.player.findMany({ where: { teamId }, select: { id: true, name: true } });
+}
+
 // spawn() đơn giản hoá — KHÔNG import apps/api/src/process-runner.ts (cross-app, xem CLAUDE.md).
-// Chỉ cần spawn + đợi exit + gom stderr, không cần timeout/kill phức tạp như bên đó (odds chỉ 1
-// request/match, không có batch lớn như scraper admin).
+// Chỉ cần spawn + đợi exit + gom stderr, không cần timeout/kill phức tạp như bên đó (1 match/lần
+// gọi, không có batch lớn như scraper admin).
 function runPython(args: string[]): Promise<{ code: number | null; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn("python3", args);
@@ -61,32 +76,34 @@ function runPython(args: string[]): Promise<{ code: number | null; stderr: strin
   });
 }
 
-// Gọi khi sync-live-matches.ts phát hiện match đang LIVE/HALFTIME — tự build manifest 1 match
-// (không cần bước generate-sofascore-manifest.ts riêng, đã có đủ thông tin trong tay), spawn
-// scraper.py --data-types odds (đã bundle sẵn trong Docker image, xem Dockerfile), rồi ingest
-// trực tiếp qua ingestSofascoreOutputs() (cùng process, cùng app — không duplicate logic upsert).
-// CHỈ chạy khi LIVE_ODDS_ENABLED=true (deploy Render mới có Python/TLS binary bundle sẵn — local
-// dev/docker-compose KHÔNG set biến này, tự skip, không throw lỗi Python-not-found mỗi tick).
-export async function refreshLiveOddsIfNeeded(match: LiveMatchInfo): Promise<void> {
-  if (process.env.LIVE_ODDS_ENABLED !== "true") return;
+// Gọi ĐÚNG 1 LẦN khi match VỪA chuyển sang FINISHED (từ cả sync-live-matches.ts's applyMatchUpdate
+// VÀ sync-catalog.ts's syncMatches(), cùng guard "status !== FINISHED && m.status === FINISHED" ở
+// cả 2 nơi — không cần throttle Map riêng ở đây vì bản chất chỉ trigger 1 lần/match, khác hẳn
+// live-odds.ts cũ (mỗi tick trong lúc LIVE, cần throttle để không gọi liên tục). Tự build manifest
+// 1 match trong memory (không cần bước generate-sofascore-manifest.ts riêng), spawn scraper.py
+// (đã bundle sẵn trong Docker image, xem Dockerfile), rồi ingest trực tiếp qua
+// ingestSofascoreOutputs() (cùng process, cùng app — không duplicate logic upsert). CHỈ chạy khi
+// SOFASCORE_SCRAPE_ENABLED=true (deploy Render mới có Python/TLS binary bundle sẵn — local dev/
+// docker-compose KHÔNG set biến này, tự skip, không throw lỗi Python-not-found mỗi lần match
+// FINISHED). Thất bại (Sofascore không tới được, tên đội không khớp game_id...) KHÔNG retry tự
+// động — admin có thể tự backfill tay qua /admin/scraper nếu cần.
+export async function scrapeMatchDetailsIfNeeded(match: FinishedMatchInfo): Promise<void> {
+  if (process.env.SOFASCORE_SCRAPE_ENABLED !== "true") return;
 
-  const last = lastFetchedAt.get(match.id);
-  if (last && Date.now() - last < REFRESH_INTERVAL_MS) return;
-
-  const [competition, season, homeTeam, awayTeam] = await Promise.all([
+  const [competition, season, homeTeam, awayTeam, homeRoster, awayRoster] = await Promise.all([
     prisma.competition.findUniqueOrThrow({ where: { id: match.competitionId } }),
     prisma.season.findUniqueOrThrow({ where: { id: match.seasonId } }),
     prisma.team.findUniqueOrThrow({ where: { id: match.homeTeamId } }),
     prisma.team.findUniqueOrThrow({ where: { id: match.awayTeamId } }),
+    loadRoster(match.homeTeamId),
+    loadRoster(match.awayTeamId),
   ]);
 
   const externalRefId = readExternalRefId(competition.externalRef);
   const sofascoreKey = externalRefId ? SOFASCORE_COMPETITIONS[externalRefId] : undefined;
   if (!sofascoreKey) return; // Giải không có Sofascore support (vd Champions League) — bỏ qua, không phải lỗi.
 
-  lastFetchedAt.set(match.id, Date.now());
-
-  const workDir = mkdtempSync(join(tmpdir(), "live-odds-"));
+  const workDir = mkdtempSync(join(tmpdir(), "sofascore-match-"));
   const manifestPath = join(workDir, "manifest.json");
   const outputDir = join(workDir, "output");
   try {
@@ -101,23 +118,29 @@ export async function refreshLiveOddsIfNeeded(match: LiveMatchInfo): Promise<voi
           homeTeamName: homeTeam.name,
           awayTeamName: awayTeam.name,
           kickoffAt: new Date().toISOString(),
-          homeRoster: [],
-          awayRoster: [],
+          homeRoster,
+          awayRoster,
         },
       ],
     };
     writeFileSync(manifestPath, JSON.stringify(manifest));
 
-    const result = await runPython(["scraper/scraper.py", manifestPath, outputDir, "--data-types", "odds"]);
+    const result = await runPython([
+      "scraper/scraper.py",
+      manifestPath,
+      outputDir,
+      "--data-types",
+      MATCH_LEVEL_DATA_TYPES.join(","),
+    ]);
     if (result.code !== 0) {
       // stderr đầy đủ đi vào `detail` (Json field, không bị cắt) — KHÔNG dồn vào message (chỉ
-      // 2000 ký tự, xem logger.ts's logError). Bug thật đã gặp (2026-08-25): soccerdata's
-      // _download_and_save() retry 5 lần, log lỗi thật (TLS/403/timeout...) qua logger.exception ở
-      // MỖI lần retry rồi mới raise 1 ConnectionError chung "Could not download {url}" — cắt
-      // stderr.slice(-1000) (giữ ĐUÔI) chỉ còn lại đúng cái wrapper vô nghĩa đó, mất hết traceback
-      // thật ở đầu. Xem đầy đủ qua "Xem thêm" ở /admin/system-logs.
+      // 2000 ký tự, xem logger.ts's logError). Bug thật đã gặp ở live-odds.ts cũ (2026-08-25):
+      // soccerdata's _download_and_save() retry 5 lần, log lỗi thật (TLS/403/timeout...) qua
+      // logger.exception ở MỖI lần retry rồi mới raise 1 ConnectionError chung — cắt
+      // stderr.slice(-1000) (giữ ĐUÔI) chỉ còn lại wrapper vô nghĩa, mất hết traceback thật ở đầu.
+      // Xem đầy đủ qua "Xem thêm" ở /admin/system-logs.
       void logError(
-        `refreshLiveOddsIfNeeded: scraper.py thất bại cho match ${match.id} (exit ${result.code})`,
+        `scrapeMatchDetailsIfNeeded: scraper.py thất bại cho match ${match.id} (exit ${result.code})`,
         result.stderr,
       );
       return;
@@ -125,7 +148,7 @@ export async function refreshLiveOddsIfNeeded(match: LiveMatchInfo): Promise<voi
 
     if (readdirSync(outputDir).length === 0) return;
     const summary = await ingestSofascoreOutputs(outputDir);
-    console.log(`refreshLiveOddsIfNeeded: match ${match.id} — oddsUpserted=${summary.oddsUpserted}`);
+    console.log(`scrapeMatchDetailsIfNeeded: match ${match.id} — ${JSON.stringify(summary)}`);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }

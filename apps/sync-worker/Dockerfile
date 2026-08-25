@@ -23,12 +23,13 @@ FROM base AS runtime
 ENV NODE_ENV=production
 
 # Debian (glibc) chứ KHÔNG Alpine (musl) — verify thật 2026-08-22: tls_requests's native library
-# (Go, dùng cho live-odds auto-fetch, xem apps/sync-worker/src/live-odds.ts) load lỗi trên musl
-# ("initial-exec TLS resolves to dynamic definition", lỗi ELF relocation của binary Go trên musl,
-# KHÔNG liên quan network) — cả bản "xgo" (generic) và "alpine" (musl-specific) đều fail, chỉ bản
-# "ubuntu" (glibc) trên node:20-slim mới load + gọi Sofascore thật thành công. Đổi base image ảnh
-# hưởng CẢ profile sync-worker 1 lượt (docker-compose.yml) — chấp nhận được, Debian slim hỗ trợ
-# Node y hệt Alpine, không phần nào phụ thuộc musl.
+# (Go, dùng để auto-scrape Sofascore khi match FINISHED, xem apps/sync-worker/src/
+# sofascore-match-scrape.ts) load lỗi trên musl ("initial-exec TLS resolves to dynamic
+# definition", lỗi ELF relocation của binary Go trên musl, KHÔNG liên quan network) — cả bản "xgo"
+# (generic) và "alpine" (musl-specific) đều fail, chỉ bản "ubuntu" (glibc) trên node:20-slim mới
+# load + gọi Sofascore thật thành công. Đổi base image ảnh hưởng CẢ profile sync-worker 1 lượt
+# (docker-compose.yml) — chấp nhận được, Debian slim hỗ trợ Node y hệt Alpine, không phần nào phụ
+# thuộc musl.
 RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip curl \
   && rm -rf /var/lib/apt/lists/*
 
@@ -52,8 +53,8 @@ ENV TLS_LIBRARY_PATH=/opt/tls-client.so
 WORKDIR /app
 COPY --from=build /deploy/sync-worker .
 # Chỉ cần đúng 1 file scraper.py (không cần generate-sofascore-manifest.ts's roster lookup hay
-# requirements.txt riêng — đã pip install trực tiếp ở trên) — live-odds.ts tự build manifest
-# trong memory, không qua bước generate-manifest riêng như pipeline admin-scraper.
+# requirements.txt riêng — đã pip install trực tiếp ở trên) — sofascore-match-scrape.ts tự build
+# manifest trong memory, không qua bước generate-manifest riêng như pipeline admin-scraper.
 COPY apps/scraper-sofascore/scraper.py ./scraper/scraper.py
 
 CMD ["node", "dist/local.js"]

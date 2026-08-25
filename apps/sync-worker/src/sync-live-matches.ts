@@ -1,11 +1,11 @@
 import type { CanonicalMatch, DataProviderAdapter } from "@football-app/data-provider";
 import { prisma } from "@football-app/database";
 import type { GoalEvent, RealtimeTransport } from "@football-app/realtime";
-import { readExternalRefId, refreshLiveOddsIfNeeded } from "./live-odds";
 import { logError } from "./logger";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
 import { createAdapter } from "./provider";
 import { createPublisher } from "./realtime";
+import { readExternalRefId, scrapeMatchDetailsIfNeeded } from "./sofascore-match-scrape";
 import { refreshTopScorersIfNeeded, syncStandingsFromMatches } from "./sync-catalog";
 
 // Kèm tên đội (select tối thiểu) — cần cho MatchFinishedEvent's homeTeamName/awayTeamName mà
@@ -178,6 +178,15 @@ async function applyMatchUpdate(
       );
     });
 
+    // Scrape Sofascore (events/lineups+ratings/statistics/shotmap/highlights/averagePositions/
+    // momentum) ĐÚNG 1 LẦN ngay khi match vừa FINISHED — xem sofascore-match-scrape.ts (tự no-op
+    // khi SOFASCORE_SCRAPE_ENABLED không set). Thay cho auto-fetch odds cũ (live-odds.ts, đã xoá
+    // 2026-08-25 — 181/181 lần thử thất bại thật trên Render). KHÔNG await, cùng lý do các job
+    // nền khác trong block này.
+    void scrapeMatchDetailsIfNeeded(dbMatch).catch((err) => {
+      void logError(`syncLiveMatches: scrapeMatchDetailsIfNeeded thất bại cho match ${dbMatch.id}`, err);
+    });
+
     // Push noti "trận đấu kết thúc" cho user có đội yêu thích đá trận này (apps/api's
     // match-finished-notifier.ts subscribe kênh này) — cùng lý do KHÔNG await với goalEvents ở
     // trên, chỉ khác kênh global riêng thay vì per-match.
@@ -195,15 +204,6 @@ async function applyMatchUpdate(
     } catch (err) {
       void logError(`syncLiveMatches: publishMatchFinished thất bại cho match ${dbMatch.id}`, err);
     }
-  }
-
-  // Odds auto-refresh cho match đang LIVE/HALFTIME — xem live-odds.ts (tự no-op khi
-  // LIVE_ODDS_ENABLED không set, tự throttle 3 phút/match). KHÔNG await — cùng lý do
-  // generateMatchSummaryIfNeeded ở trên, không làm chậm tick sync tiếp theo.
-  if (match.status === "LIVE" || match.status === "HALFTIME") {
-    void refreshLiveOddsIfNeeded(dbMatch).catch((err) => {
-      void logError(`syncLiveMatches: refreshLiveOddsIfNeeded thất bại cho match ${dbMatch.id}`, err);
-    });
   }
 }
 

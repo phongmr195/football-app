@@ -3,7 +3,7 @@ import { prisma } from "@football-app/database";
 // Duplicate của apps/api/src/logger.ts — apps/api và apps/sync-worker không import code qua lại
 // (2 app riêng, xem CLAUDE.md). Chỉ ghi ERROR/WARN vào SystemLog (KHÔNG mọi console.log) — dùng ở
 // đúng các catch-block "fire-and-forget không được throw ra ngoài" đã có sẵn (sync-live-matches.ts,
-// live-odds.ts, poll-live-matches.ts...), nơi lỗi trước đây biến mất im lặng vào stdout/stderr của
+// sofascore-match-scrape.ts, poll-live-matches.ts...), nơi lỗi trước đây biến mất im lặng vào stdout/stderr của
 // Render. Luôn console.error/warn NHƯ CŨ song song — ghi DB là lớp bổ sung, không thay thế.
 function toDetail(err: unknown): object | undefined {
   if (err instanceof Error) return { message: err.message, stack: err.stack?.slice(0, 4000) };

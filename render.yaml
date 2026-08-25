@@ -6,10 +6,16 @@
 #
 # KHÔNG deploy apps/api/apps/web qua file này — apps/api/apps/web ngoài scope piece deploy đầu
 # tiên này. Scraping đầy đủ (9+1 loại data qua /admin/scraper) vẫn chạy tay ở local (quyết định
-# đã chốt) — CHỈ riêng odds cho match đang LIVE/HALFTIME được auto-fetch từ chính service này
-# (2026-08-22, xem apps/sync-worker/src/live-odds.ts + Dockerfile's Python/tls_requests bundle —
-# verify thật node:*-alpine KHÔNG chạy được lib native TLS này trên musl, phải đổi sang Debian
-# (node:24-slim) — riêng bản thân version 20->24 là nâng cấp EOL runtime, không liên quan musl).
+# đã chốt) — riêng 7 loại data theo TRẬN (events/lineups+ratings/statistics/shotmap/highlights/
+# averagePositions/momentum, KHÔNG kèm commentary/odds) được auto-scrape từ chính service này
+# ĐÚNG 1 LẦN ngay khi match chuyển FINISHED (2026-08-25, xem apps/sync-worker/src/
+# sofascore-match-scrape.ts + Dockerfile's Python/tls_requests bundle — verify thật node:*-alpine
+# KHÔNG chạy được lib native TLS này trên musl, phải đổi sang Debian (node:24-slim) — riêng bản
+# thân version 20->24 là nâng cấp EOL runtime, không liên quan musl). Feature cũ ở đây từng là
+# auto-fetch ODDS cho match đang LIVE (mỗi ~30s/tick) — bỏ (2026-08-25) vì 181/181 lần thử thất
+# bại thật (ConnectionError gọi Sofascore, nghi IP datacenter Render bị chặn khác IP nhà) mà vẫn
+# tốn tài nguyên/log mỗi tick; đổi sang scrape 1 lần lúc FINISHED vừa giảm tải vừa không cần data
+# real-time như odds.
 #
 # Setup trên Render: "New" -> "Blueprint" -> chọn repo này -> Render tự đọc file này. Sau khi
 # tạo, vào service -> Environment, set 2 secret KHÔNG khai báo value ở đây (sync: false, xem
@@ -34,5 +40,5 @@ services:
         sync: false
       - key: LIVE_POLL_INTERVAL_MS
         value: "30000"
-      - key: LIVE_ODDS_ENABLED
+      - key: SOFASCORE_SCRAPE_ENABLED
         value: "true"
