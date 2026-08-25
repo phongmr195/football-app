@@ -14,6 +14,7 @@
  * `AnthropicAdapter`/`GeminiAdapter` không tự throttle (khác `packages/data-provider`'s adapter),
  * nên throttle ở tầng script này. 4.5s/request an toàn dưới 15 req/phút.
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { generatePlayerSummaryIfNeeded } from "../player-summary";
 

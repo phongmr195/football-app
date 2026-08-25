@@ -8,6 +8,7 @@
  * CLAUDE.md § Scraper), nên cần roster ĐẦY ĐỦ CỦA MỌI team (không chỉ team roster rỗng như
  * generate-roster-backfill-manifest.ts) để so khớp tên cầu thủ theo đúng team Sofascore trả về.
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { writeFileSync } from "node:fs";
 

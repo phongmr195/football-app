@@ -11,6 +11,7 @@
  * Delay giữa mỗi request — cùng lý do/giá trị đã áp dụng ở backfill-match-summaries.ts/
  * backfill-player-summaries.ts (Gemini free tier 15 req/phút, xem CLAUDE.md § AI).
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { generatePlayerComparisonIfNeeded } from "../player-comparison";
 

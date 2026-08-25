@@ -11,6 +11,7 @@
  * 2025-08-15 → 2026-05-24 = "mùa 2025-2026" thật, KHÔNG PHẢI season "2026" — season đó là
  * 2026-08-21 → 2027-05-30, mùa TIẾP THEO, dù được đánh dấu isCurrent=true tại thời điểm chạy).
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { writeFileSync } from "node:fs";
 

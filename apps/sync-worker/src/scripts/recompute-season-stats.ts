@@ -12,6 +12,7 @@
  * throttle — không cần thiết cho 1 lần chạy tay), skip season nào competition thiếu externalRef
  * hợp lệ hoặc provider khác DATA_PROVIDER hiện tại (không throw, log rồi tiếp tục season khác).
  */
+import "../load-env";
 import { prisma } from "@football-app/database";
 import { createAdapter } from "../provider";
 import { syncStandingsFromMatches, syncTopScorers } from "../sync-catalog";

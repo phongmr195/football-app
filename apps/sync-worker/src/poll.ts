@@ -1,3 +1,4 @@
+import "./load-env";
 import { createServer } from "node:http";
 import { logError } from "./logger";
 import { runLivePollingLoop } from "./poll-live-matches";

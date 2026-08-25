@@ -1,3 +1,4 @@
+import "./load-env";
 import { syncAll } from "./sync-all";
 import { syncLiveMatches } from "./sync-live-matches";
 
