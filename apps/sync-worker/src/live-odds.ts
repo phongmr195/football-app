@@ -110,7 +110,16 @@ export async function refreshLiveOddsIfNeeded(match: LiveMatchInfo): Promise<voi
 
     const result = await runPython(["scraper/scraper.py", manifestPath, outputDir, "--data-types", "odds"]);
     if (result.code !== 0) {
-      void logError(`refreshLiveOddsIfNeeded: scraper.py thất bại cho match ${match.id} (exit ${result.code}): ${result.stderr.slice(-1000)}`);
+      // stderr đầy đủ đi vào `detail` (Json field, không bị cắt) — KHÔNG dồn vào message (chỉ
+      // 2000 ký tự, xem logger.ts's logError). Bug thật đã gặp (2026-08-25): soccerdata's
+      // _download_and_save() retry 5 lần, log lỗi thật (TLS/403/timeout...) qua logger.exception ở
+      // MỖI lần retry rồi mới raise 1 ConnectionError chung "Could not download {url}" — cắt
+      // stderr.slice(-1000) (giữ ĐUÔI) chỉ còn lại đúng cái wrapper vô nghĩa đó, mất hết traceback
+      // thật ở đầu. Xem đầy đủ qua "Xem thêm" ở /admin/system-logs.
+      void logError(
+        `refreshLiveOddsIfNeeded: scraper.py thất bại cho match ${match.id} (exit ${result.code})`,
+        result.stderr,
+      );
       return;
     }
 
