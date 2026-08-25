@@ -3,6 +3,7 @@ import { prisma } from "@football-app/database";
 import { calculateTeamSeasonStatistics, rankCleanSheetTeams, rankStandings } from "@football-app/shared";
 import { logError, logWarn } from "./logger";
 import { generateMatchSummaryIfNeeded } from "./match-summary";
+import { scrapeMatchDetailsIfNeeded } from "./sofascore-match-scrape";
 
 // Thứ tự phụ thuộc bắt buộc: syncCompetitions -> syncSeasons -> syncTeams -> syncPlayers,
 // syncStandings/syncMatches cần competition+season đã sync, syncMatches cần team đã sync.
@@ -270,6 +271,18 @@ export async function syncMatches(
       void generateMatchSummaryIfNeeded(matchId).catch((err) => {
         void logError(`syncMatches: generateMatchSummaryIfNeeded thất bại cho match ${matchId}`, err);
       });
+
+      // Đường "chắc chắn" cho scrapeMatchDetailsIfNeeded, cùng lý do/pattern
+      // generateMatchSummaryIfNeeded ngay trên — xem sofascore-match-scrape.ts.
+      void scrapeMatchDetailsIfNeeded({
+        id: matchId,
+        competitionId: competition.id,
+        seasonId: season.id,
+        homeTeamId: homeTeam.id,
+        awayTeamId: awayTeam.id,
+      }).catch((err) => {
+        void logError(`syncMatches: scrapeMatchDetailsIfNeeded thất bại cho match ${matchId}`, err);
+      });
     }
   }
 
@@ -446,9 +459,9 @@ function readExternalRef(externalRef: unknown): ExternalRef | null {
   return typeof provider === "string" && typeof id === "string" ? { provider, id } : null;
 }
 
-// Throttle trong memory theo (competitionId, seasonId) — KHÔNG dùng cột DB riêng, cùng lý do/
-// pattern live-odds.ts's lastFetchedAt (reset khi process restart, chấp nhận được, tệ nhất tốn 1
-// request thừa ngay sau redeploy). Tránh gọi provider nhiều lần liên tiếp khi nhiều match cùng
+// Throttle trong memory theo (competitionId, seasonId) — KHÔNG dùng cột DB riêng (reset khi
+// process restart, chấp nhận được, tệ nhất tốn 1 request thừa ngay sau redeploy). Tránh gọi
+// provider nhiều lần liên tiếp khi nhiều match cùng
 // giải/mùa FINISHED gần nhau (vd nhiều trận cùng kickoff 15:00 UTC kết thúc trong vài phút).
 const TOP_SCORERS_REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 const topScorersLastFetchedAt = new Map<string, number>();
