@@ -23,7 +23,10 @@ from urllib.parse import quote
 
 import soccerdata as sd
 
+import sofascore_tls_patch
 from scraper import normalize_team_name
+
+sofascore_tls_patch.apply()
 
 REQUEST_DELAY_SECONDS = 3.0
 

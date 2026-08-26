@@ -26,6 +26,10 @@ from typing import Any
 
 import soccerdata as sd
 
+import sofascore_tls_patch
+
+sofascore_tls_patch.apply()
+
 REQUEST_DELAY_SECONDS = 3.0
 
 TEAM_SUFFIX_RE = re.compile(r"\b(fc|afc|cf)\b")
