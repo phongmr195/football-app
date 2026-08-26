@@ -35,23 +35,25 @@ export function StandingsFilters({ competitions }: StandingsFiltersProps) {
 
   useEffect(() => {
     if (!competitionId) return;
-    let cancelled = false;
+    // AbortController, not just a `cancelled` flag — see MatchFilters.tsx for why.
+    const controller = new AbortController();
 
     (async () => {
       setLoadingSeasons(true);
       try {
-        const detail = await apiGetClient<CompetitionDetail>(`/competitions/${competitionId}`);
-        if (!cancelled) setSeasons(detail.seasons);
+        const detail = await apiGetClient<CompetitionDetail>(`/competitions/${competitionId}`, undefined, {
+          signal: controller.signal,
+        });
+        setSeasons(detail.seasons);
+        setLoadingSeasons(false);
       } catch {
-        if (!cancelled) setSeasons([]);
-      } finally {
-        if (!cancelled) setLoadingSeasons(false);
+        if (controller.signal.aborted) return;
+        setSeasons([]);
+        setLoadingSeasons(false);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [competitionId]);
 
   const seasonOptions = competitionId && !loadingSeasons ? seasons : [];

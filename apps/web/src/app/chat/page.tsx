@@ -27,23 +27,22 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
         const idToken = await getIdToken();
         const data = await apiGetClient<ApiListResponse<ChatSessionSummary>>(
           "/chat/sessions",
           { pageSize: 20 },
-          { idToken },
+          { idToken, signal: controller.signal },
         );
-        if (!cancelled) setSessions(data.items);
+        setSessions(data.items);
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error("ChatPage: tải lịch sử session thất bại", err);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ tải lại khi user đổi, không cần refetch mỗi lần sessionId đổi (list tự cập nhật sau khi gửi xong)
   }, [user]);
 

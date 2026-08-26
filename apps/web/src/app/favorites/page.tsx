@@ -56,18 +56,17 @@ export default function FavoritesPage() {
     if (typeof window === "undefined" || !("Notification" in window)) return;
     if (Notification.permission !== "granted") return;
 
-    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       setNotificationStatus("checking");
       try {
         const [token, idToken] = await Promise.all([requestPushPermission(), getIdToken()]);
         if (!token) {
-          if (!cancelled) setNotificationStatus("idle");
+          setNotificationStatus("idle");
           return;
         }
-        const devices = await listDevices(idToken);
+        const devices = await listDevices(idToken, controller.signal);
         const existing = devices.find((d) => d.fcmToken === token);
-        if (cancelled) return;
         if (existing) {
           setDeviceId(existing.id);
           setNotificationStatus("enabled");
@@ -75,14 +74,13 @@ export default function FavoritesPage() {
           setNotificationStatus("idle");
         }
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error("check existing device registration failed", err);
-        if (!cancelled) setNotificationStatus("idle");
+        setNotificationStatus("idle");
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [user, getIdToken]);
 
   async function handleEnableNotifications() {
