@@ -145,10 +145,14 @@ pnpm docker:down
   `/matches/[id]` (không phụ thuộc live), realtime qua kênh Redis riêng
   `live:match:${matchId}:comments` (khác kênh `LiveUpdateEvent`), forward qua WS dưới message type
   `"comment.new"` — xem `apps/api/src/lib/redis.ts`'s `publishComment()` +
-  `apps/api/src/realtime/ws-server.ts`. `@mention` CHỈ resolve được username của user ĐÃ TỪNG
-  comment trận đó (không có endpoint search user toàn hệ thống — chủ đích, tránh lộ username tuỳ
-  ý). Publish trực tiếp từ `apps/api` (KHÔNG dùng `packages/realtime`'s `RealtimeTransport` —
-  interface đó chủ ý chỉ dành cho sync-worker, xem doc comment ở `publisher.interface.ts`).
+  `apps/api/src/realtime/ws-server.ts`. Publish trực tiếp từ `apps/api` (KHÔNG dùng
+  `packages/realtime`'s `RealtimeTransport` — interface đó chủ ý chỉ dành cho sync-worker).
+  `@mention` chỉ gợi ý/resolve user ĐANG CÙNG CHAT (comment trong 30 phút gần nhất), theo
+  `mentionHandle` = username, hoặc slug từ `displayName` cho user Google/Facebook (không có
+  username) — xem `mentionHandleOf()` trong `apps/api/src/routes/match-comments.ts`. User được
+  mention nhận `Notification` (+ FCM nếu có `Device`, type `"mention"`) — gọi trực tiếp trong route
+  POST (không qua Redis pub/sub như goal/match-finished notifier, vì phát hiện lẫn xử lý đã cùng 1
+  process).
 
 ### Admin (`apps/web/src/app/admin/*`)
 - Sống chung `apps/web` (không phải app/port riêng), chỉ khác route `/admin/login`.

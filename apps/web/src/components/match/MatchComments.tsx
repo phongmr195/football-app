@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
-import { MessageSquare, Send } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { MessageSquare, Send, Smile } from "lucide-react";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -14,6 +15,13 @@ const MENTION_SPLIT_RE = /(@[a-zA-Z0-9_]{2,40})/g;
 // Stable reference (không phải `[]` literal mới mỗi render) — dùng trong useMemo's deps dưới, nếu
 // không memo hoá lại chạy mỗi render trong lúc đang loading.
 const EMPTY_COMMENTS: MatchComment[] = [];
+
+// Bộ emoji cố định, không cần thư viện emoji-picker riêng (nặng, không cần thiết cho nhu cầu
+// "thả 1 emoji nhanh" ở khung comment) — ưu tiên vài emoji hay dùng cho bóng đá trước.
+const QUICK_EMOJIS = [
+  "⚽", "🔥", "👏", "🎉", "😂", "😍", "😮", "😭", "👍", "👎",
+  "❤️", "💪", "🙌", "🤔", "😴", "🥳", "🎯", "🏆", "🟨", "🟥",
+];
 
 function authorLabel(author: MatchCommentAuthor): string {
   return author.displayName ?? "Người dùng";
@@ -69,6 +77,7 @@ export function MatchComments({ matchId }: { matchId: string }) {
 
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const comments = commentsQuery.data ?? EMPTY_COMMENTS;
 
@@ -107,6 +116,21 @@ export function MatchComments({ matchId }: { matchId: string }) {
 
   function pickMention(mentionHandle: string) {
     setInput((prev) => prev.replace(/@[a-zA-Z0-9_]*$/, `@${mentionHandle} `));
+  }
+
+  // Chèn đúng vị trí con trỏ (không phải luôn nối vào cuối) — đọc selectionStart/End TRƯỚC khi
+  // setInput (state cũ), rồi set lại vị trí con trỏ sau emoji vừa chèn ở frame kế tiếp (DOM value
+  // chỉ cập nhật xong sau khi React re-render).
+  function insertEmoji(emoji: string) {
+    const el = textareaRef.current;
+    const start = el?.selectionStart ?? input.length;
+    const end = el?.selectionEnd ?? input.length;
+    setInput((prev) => prev.slice(0, start) + emoji + prev.slice(end));
+    const cursor = start + emoji.length;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(cursor, cursor);
+    });
   }
 
   async function handleSubmit() {
@@ -177,6 +201,7 @@ export function MatchComments({ matchId }: { matchId: string }) {
           ) : null}
           <div className="flex items-end gap-2">
             <Textarea
+              ref={textareaRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -184,6 +209,28 @@ export function MatchComments({ matchId }: { matchId: string }) {
               rows={2}
               className="flex-1 resize-none"
             />
+            <Popover>
+              <PopoverTrigger
+                className={buttonVariants({ variant: "outline", size: "icon" })}
+                aria-label="Chèn emoji"
+              >
+                <Smile className="h-4 w-4" aria-hidden="true" />
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-2">
+                <div className="grid grid-cols-5 gap-1">
+                  {QUICK_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => insertEmoji(emoji)}
+                      className="rounded-md p-1.5 text-lg hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
             <Button
               type="button"
               size="icon"

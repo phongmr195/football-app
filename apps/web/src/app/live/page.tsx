@@ -6,9 +6,14 @@ import { apiGet } from "@/lib/api-client";
 import { competitionDisplayName, formatKickoffAt, matchStatusMeta } from "@/lib/format";
 import type { Match } from "@/lib/types";
 
-// Match LIVE/HALFTIME/SCHEDULED có link, đổi khá thường xuyên (admin thêm/xoá link, trận
-// chuyển LIVE) — revalidate ngắn hơn hẳn các trang browse khác (thường 1800s).
-export const revalidate = 60;
+// Match LIVE/HALFTIME/SCHEDULED có link, đổi khá thường xuyên (admin thêm/xoá link, trận chuyển
+// LIVE) — dynamic (không phải ISR revalidate ngắn) vì: (1) đúng nhất cho dữ liệu đổi liên tục,
+// (2) khớp convention các trang browse khác (matches/page.tsx, competitions/[id] — đều dynamic
+// vì đọc searchParams/params). "/live" không có param nào nên KHÔNG tự động dynamic như các trang
+// đó — không khai báo tường minh sẽ bị Next.js coi là static, tự gọi apiGet() lúc BUILD TIME thay
+// vì request time, và build sẽ FAIL nếu API_URL không có sẵn lúc build (bug thật gặp 2026-08-26 —
+// "/live" là trang DUY NHẤT trong app expose lỗ hổng này vì là trang duy nhất bị static hoá).
+export const dynamic = "force-dynamic";
 
 async function getLiveStreamMatches(): Promise<Match[]> {
   const { items } = await apiGet<{ items: Match[] }>("/matches/live-streams");

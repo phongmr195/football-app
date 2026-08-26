@@ -1,8 +1,10 @@
 import { zValidator } from "@hono/zod-validator";
 import { prisma } from "@football-app/database";
 import { Hono } from "hono";
+import { getMessaging } from "firebase-admin/messaging";
 import { z } from "zod";
-import { requireAuth } from "../middleware/auth";
+import { getFirebaseApp, requireAuth } from "../middleware/auth";
+import { logError } from "../logger";
 import { publishComment, type MatchCommentAuthor, type MatchCommentBroadcast } from "../lib/redis";
 
 const matchIdParamSchema = z.object({ id: z.string() });
@@ -49,6 +51,64 @@ function mentionHandleOf(user: { username: string | null; displayName: string | 
 function toAuthor(user: AuthorRow): MatchCommentAuthor {
   const displayName = user.profile?.displayName ?? null;
   return { id: user.id, displayName, mentionHandle: mentionHandleOf({ username: user.username, displayName }) };
+}
+
+// Cùng pattern goal-notifier.ts/match-finished-notifier.ts (ghi Notification in-app TRƯỚC, luôn
+// luôn — KHÔNG phụ thuộc user có Device hay không; FCM chỉ là kênh gửi THÊM) — khác 2 notifier đó
+// ở chỗ gọi TRỰC TIẾP trong process apps/api (route POST này), không qua Redis pub/sub, vì
+// nguồn phát hiện (comment vừa tạo) và nơi xử lý (route này) đã cùng 1 process sẵn, không cần hop
+// cross-process như goal/match-finished (phát hiện ở sync-worker, xử lý ở apps/api).
+async function notifyMentionedUsers(params: {
+  matchId: string;
+  commentId: string;
+  authorName: string;
+  content: string;
+  mentionedUserIds: string[];
+}): Promise<void> {
+  const { matchId, commentId, authorName, content, mentionedUserIds } = params;
+  if (mentionedUserIds.length === 0) return;
+
+  const users = await prisma.user.findMany({
+    where: { id: { in: mentionedUserIds } },
+    include: { devices: true },
+  });
+
+  const title = `${authorName} đã nhắc đến bạn`;
+  const body = content.length > 120 ? `${content.slice(0, 120)}…` : content;
+  const data = { type: "mention", matchId, commentId };
+
+  for (const user of users) {
+    try {
+      const notification = await prisma.notification.create({
+        data: { userId: user.id, type: "mention", title, body, data },
+      });
+
+      if (user.devices.length === 0) continue; // không có device -> chỉ ghi in-app, không gửi FCM
+
+      const tokens = user.devices.map((d) => d.fcmToken);
+      const response = await getMessaging(getFirebaseApp()).sendEachForMulticast({
+        tokens,
+        notification: { title, body },
+        data,
+      });
+
+      await prisma.notificationLog.createMany({
+        data: response.responses.map((r) => ({
+          notificationId: notification.id,
+          channel: "FCM" as const,
+          status: r.success ? ("SENT" as const) : ("FAILED" as const),
+          error: r.success ? null : (r.error?.message ?? "unknown FCM error"),
+        })),
+      });
+
+      const failedCount = response.responses.filter((r) => !r.success).length;
+      if (failedCount > 0) {
+        void logError(`match-comments: ${failedCount}/${tokens.length} FCM send thất bại cho user ${user.id}`);
+      }
+    } catch (err) {
+      void logError(`match-comments: gửi mention notification thất bại cho user ${user.id}`, err);
+    }
+  }
 }
 
 // Chỉ tối đa 10 comment/user/60s — chặn spam cơ bản, không cần AppConfig riêng (khác chat's cap,
@@ -140,6 +200,19 @@ export const matchCommentsRoute = new Hono()
         author: toAuthor(created.user),
       };
       void publishComment(payload);
+
+      // Tự mention chính mình (hiếm, nhưng có thể) không cần notify — loại userId (tác giả) khỏi
+      // danh sách nhận thông báo, KHÔNG đụng tới mentionedUserIds đã lưu (vẫn phản ánh đúng ai
+      // được tag trong nội dung).
+      void notifyMentionedUsers({
+        matchId,
+        commentId: created.id,
+        authorName: payload.author.displayName ?? "Một người dùng",
+        content,
+        mentionedUserIds: created.mentionedUserIds.filter((id) => id !== userId),
+      }).catch((err) => {
+        void logError(`match-comments: notifyMentionedUsers thất bại cho comment ${created.id}`, err);
+      });
 
       return c.json(payload, 201);
     },
