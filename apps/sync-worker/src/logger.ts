@@ -6,7 +6,13 @@ import { prisma } from "@football-app/database";
 // sofascore-match-scrape.ts, poll-live-matches.ts...), nơi lỗi trước đây biến mất im lặng vào stdout/stderr của
 // Render. Luôn console.error/warn NHƯ CŨ song song — ghi DB là lớp bổ sung, không thay thế.
 function toDetail(err: unknown): object | undefined {
-  if (err instanceof Error) return { message: err.message, stack: err.stack?.slice(0, 4000) };
+  if (err instanceof Error) {
+    const detail: Record<string, unknown> = { message: err.message, stack: err.stack?.slice(0, 4000) };
+    // fetch's real error reason (ENOTFOUND/timeout...) lives in `cause`, not message.
+    if (err.cause !== undefined) detail.cause = toDetail(err.cause);
+    if (err instanceof AggregateError) detail.errors = err.errors.map((e) => toDetail(e));
+    return detail;
+  }
   if (err === undefined) return undefined;
   // Object thường (không phải Error) — lưu nguyên (Prisma Json field nhận trực tiếp), KHÔNG
   // String() nó (sẽ ra "[object Object]" vô dụng, bug thật gặp lúc verify 2026-08-24).

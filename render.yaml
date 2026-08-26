@@ -18,10 +18,9 @@
 # real-time như odds.
 #
 # Setup trên Render: "New" -> "Blueprint" -> chọn repo này -> Render tự đọc file này. Sau khi
-# tạo, vào service -> Environment, set 2 secret KHÔNG khai báo value ở đây (sync: false, xem
-# dưới): DATABASE_URL (connection string Neon), FOOTBALL_DATA_API_KEY (key thật). REDIS_URL
-# CHỦ Ý không khai báo — createPublisher() (apps/sync-worker/src/realtime.ts) tự no-op an toàn
-# khi thiếu, không cần Redis cho service này.
+# tạo, vào service -> Environment, set 4 secret KHÔNG khai báo value ở đây (sync: false, xem
+# dưới): DATABASE_URL, FOOTBALL_DATA_API_KEY, GEMINI_API_KEY, GROQ_API_KEY. REDIS_URL CHỦ Ý
+# không khai báo — createPublisher() tự no-op an toàn khi thiếu.
 services:
   - type: web
     name: football-app-sync-worker-live
@@ -42,3 +41,11 @@ services:
         value: "30000"
       - key: SOFASCORE_SCRAPE_ENABLED
         value: "true"
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_FALLBACK_PROVIDER
+        value: groq
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

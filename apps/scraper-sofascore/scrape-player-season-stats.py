@@ -21,7 +21,10 @@ from typing import Any
 
 import soccerdata as sd
 
+import sofascore_tls_patch
 from scraper import match_player, normalize_team_name
+
+sofascore_tls_patch.apply()
 
 BASE_URL = "https://api.sofascore.com/api/v1"
 
