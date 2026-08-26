@@ -17,10 +17,11 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import { getWsBaseUrl } from "./api-client";
-import type { LiveMatchState } from "./types";
+import type { LiveMatchState, MatchComment } from "./types";
 
 type ServerMessage =
   | { type: "match.snapshot"; matchId: string; data: LiveMatchState | null }
+  | { type: "comment.new"; matchId: string; data: MatchComment }
   | { type: "error"; message: string }
   // Unknown/future message types shouldn't crash the handler.
   | { type: string; [key: string]: unknown };
@@ -46,6 +47,11 @@ const activeMatchIds = new Set<string>();
 
 /** Wire messages queued because the socket isn't open yet (still connecting, or not created). */
 const pendingMessages: string[] = [];
+
+/** matchId -> callbacks to invoke for each `comment.new` — a plain listener registry (not
+ * React Query cache overwrite like `match.snapshot`) since comments need to be APPENDED to a
+ * list, not replaced. */
+const commentListeners = new Map<string, Set<(comment: MatchComment) => void>>();
 
 function send(message: Record<string, unknown>): void {
   const payload = JSON.stringify(message);
@@ -75,6 +81,11 @@ function handleMessage(event: MessageEvent<string>): void {
   if (message.type === "match.snapshot") {
     const snapshot = message as { type: "match.snapshot"; matchId: string; data: LiveMatchState | null };
     latestQueryClient?.setQueryData(["match", snapshot.matchId, "live"], snapshot.data);
+  } else if (message.type === "comment.new") {
+    const commentMsg = message as { type: "comment.new"; matchId: string; data: MatchComment };
+    for (const listener of commentListeners.get(commentMsg.matchId) ?? []) {
+      listener(commentMsg.data);
+    }
   } else if (message.type === "error") {
     // Not user-facing — see plan doc, malformed/unrecognized client messages only.
     console.warn("[realtime] server reported an error:", (message as { message: string }).message);
@@ -135,8 +146,11 @@ function ensureSocket(): void {
  * Returns an unsubscribe function; call it from a `useEffect` cleanup. Only sends the wire
  * `unsubscribe` message once every caller for that matchId has unsubscribed.
  */
-export function subscribeToMatch(matchId: string, queryClient: QueryClient): () => void {
-  latestQueryClient = queryClient;
+// Wire-level subscribe, shared by subscribeToMatch/subscribeToMatchComments below — the server
+// subscribes to BOTH the live-state and comments Redis channels on the same `{type:"subscribe"}`
+// message (see apps/api's ws-server.ts), so there's only ever one wire subscription per matchId
+// regardless of which purpose(s) a caller needs it for.
+function ensureWireSubscription(matchId: string): () => void {
   ensureSocket();
 
   const count = refCounts.get(matchId) ?? 0;
@@ -159,5 +173,25 @@ export function subscribeToMatch(matchId: string, queryClient: QueryClient): () 
     } else {
       refCounts.set(matchId, current - 1);
     }
+  };
+}
+
+export function subscribeToMatch(matchId: string, queryClient: QueryClient): () => void {
+  latestQueryClient = queryClient;
+  return ensureWireSubscription(matchId);
+}
+
+/** Subscribe to new comments for `matchId`. `onComment` is called once per newly-arrived
+ * comment — dedup against already-loaded comments is the caller's job (see `use-match-comments.ts`). */
+export function subscribeToMatchComments(matchId: string, onComment: (comment: MatchComment) => void): () => void {
+  const listeners = commentListeners.get(matchId) ?? new Set();
+  listeners.add(onComment);
+  commentListeners.set(matchId, listeners);
+
+  const unsubscribeWire = ensureWireSubscription(matchId);
+  return () => {
+    listeners.delete(onComment);
+    if (listeners.size === 0) commentListeners.delete(matchId);
+    unsubscribeWire();
   };
 }

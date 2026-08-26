@@ -134,6 +134,21 @@ pnpm docker:down
   `@/lib/utils` lúc chạy `add` rồi sửa tay import sau (chi tiết ở `.claude/agents/web-dev.md`).
   Chưa có `next-themes`/toggle `.dark` — nếu `shadcn init`/`add` tự thêm
   `@custom-variant dark (&:is(.dark *));` vào `globals.css` thì phải xoá, không sẽ tắt dark mode.
+- **Live stream** (`Match.liveStreamUrl`, admin nhập tay) — `components/match/LiveStreamPlayer.tsx`
+  tự phân loại: link YouTube (watch/embed/live/youtu.be) → `<iframe>` embed; còn lại coi là HLS
+  `.m3u8` → `<video>` + `hls.js` (Safari phát HLS native, không cần lib). Chỉ hiện trong
+  `LiveMatchPanel` (đã tự gate theo live state thật qua client poll, không dùng `match.status` từ
+  ISR có thể stale). Menu `/live` (`GET /matches/live-streams`) liệt kê match LIVE/HALFTIME/
+  SCHEDULED **có link** — khác `GET /matches/live` (dùng cho ticker trang chủ, trả MỌI match LIVE
+  bất kể có link hay không), không gộp chung 2 endpoint.
+- **Comment trận đấu** (`MatchComment`, `components/match/MatchComments.tsx`) — hiện trên toàn bộ
+  `/matches/[id]` (không phụ thuộc live), realtime qua kênh Redis riêng
+  `live:match:${matchId}:comments` (khác kênh `LiveUpdateEvent`), forward qua WS dưới message type
+  `"comment.new"` — xem `apps/api/src/lib/redis.ts`'s `publishComment()` +
+  `apps/api/src/realtime/ws-server.ts`. `@mention` CHỈ resolve được username của user ĐÃ TỪNG
+  comment trận đó (không có endpoint search user toàn hệ thống — chủ đích, tránh lộ username tuỳ
+  ý). Publish trực tiếp từ `apps/api` (KHÔNG dùng `packages/realtime`'s `RealtimeTransport` —
+  interface đó chủ ý chỉ dành cho sync-worker, xem doc comment ở `publisher.interface.ts`).
 
 ### Admin (`apps/web/src/app/admin/*`)
 - Sống chung `apps/web` (không phải app/port riêng), chỉ khác route `/admin/login`.
@@ -146,7 +161,8 @@ pnpm docker:down
   `ResourceTable`/`ResourceFormDialog`/`AdminResourcePage`. KHÔNG có Delete cho model có
   `onDelete: Cascade` sâu — Prisma Studio là escape hatch xoá thật.
 - `Match`: sửa qua `PATCH /matches/:id` + `LiveMatchState` qua `PUT /matches/:id/live` (1 trang, 2
-  endpoint). `AppConfig`: trang riêng, value JSON qua textarea. `NotificationLog`: read-only.
+  endpoint) — cùng form có field `liveStreamUrl` (YouTube hoặc HLS `.m3u8`, xem "### Web" dưới cho
+  cách nhúng). `AppConfig`: trang riêng, value JSON qua textarea. `NotificationLog`: read-only.
 - `/admin/scraper`: trigger pipeline Sofascore — xem
   [apps/scraper-sofascore/CLAUDE.md](apps/scraper-sofascore/CLAUDE.md).
 

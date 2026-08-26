@@ -6,6 +6,7 @@ import { Badge, Card, Container } from "@football-app/ui";
 import { ApiError, apiGet } from "@/lib/api-client";
 import { BackButton } from "@/components/BackButton";
 import { LiveMatchPanel } from "@/components/LiveMatchPanel";
+import { MatchComments } from "@/components/match/MatchComments";
 import { MatchDetailTabs } from "@/components/match/MatchDetailTabs";
 import { MatchEventsTimeline } from "@/components/match/MatchEventsTimeline";
 import { MatchLineups } from "@/components/match/MatchLineups";
@@ -187,7 +188,9 @@ export default async function MatchDetailPage({
         oddsSlot={showOdds ? <MatchOdds odds={odds} /> : undefined}
       />
 
-      <LiveMatchPanel matchId={match.id} kickoffAt={match.kickoffAt} />
+      <LiveMatchPanel matchId={match.id} kickoffAt={match.kickoffAt} liveStreamUrl={match.liveStreamUrl} />
+
+      <MatchComments matchId={match.id} />
     </Container>
   );
 }

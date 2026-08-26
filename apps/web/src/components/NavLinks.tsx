@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Calendar, ListOrdered, MessageCircle, Scale, Trophy, type LucideIcon } from "lucide-react";
+import { Calendar, ListOrdered, MessageCircle, Radio, Scale, Trophy, type LucideIcon } from "lucide-react";
 import { cn } from "@football-app/ui";
 
 const LINKS: { href: string; label: string; icon: LucideIcon }[] = [
+  { href: "/live", label: "Trực tiếp", icon: Radio },
   { href: "/competitions", label: "Giải đấu", icon: Trophy },
   { href: "/standings", label: "Bảng xếp hạng", icon: ListOrdered },
   { href: "/matches", label: "Lịch thi đấu", icon: Calendar },

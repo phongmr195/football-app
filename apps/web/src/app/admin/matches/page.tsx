@@ -182,6 +182,7 @@ function MatchEditForms({
   const [matchStatus, setMatchStatus] = useState<MatchStatus>(match.status);
   const [homeScore, setHomeScore] = useState(match.homeScore == null ? "" : String(match.homeScore));
   const [awayScore, setAwayScore] = useState(match.awayScore == null ? "" : String(match.awayScore));
+  const [liveStreamUrl, setLiveStreamUrl] = useState(match.liveStreamUrl ?? "");
   const [matchSubmitting, setMatchSubmitting] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
 
@@ -206,6 +207,7 @@ function MatchEditForms({
           status: matchStatus,
           homeScore: homeScore === "" ? null : Number(homeScore),
           awayScore: awayScore === "" ? null : Number(awayScore),
+          liveStreamUrl: liveStreamUrl.trim() === "" ? null : liveStreamUrl.trim(),
         },
         { idToken: token },
       );
@@ -283,6 +285,16 @@ function MatchEditForms({
             <Label htmlFor="away-score">Tỉ số khách</Label>
             <Input id="away-score" type="number" value={awayScore} onChange={(e) => setAwayScore(e.target.value)} />
           </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="live-stream-url">Link live stream (YouTube hoặc HLS .m3u8)</Label>
+          <Input
+            id="live-stream-url"
+            type="text"
+            placeholder="https://youtube.com/watch?v=... hoặc https://.../stream.m3u8"
+            value={liveStreamUrl}
+            onChange={(e) => setLiveStreamUrl(e.target.value)}
+          />
         </div>
         {matchError ? <p className="text-sm text-red-600 dark:text-red-400">{matchError}</p> : null}
         <DialogFooter>

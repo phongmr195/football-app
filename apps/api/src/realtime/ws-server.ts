@@ -5,10 +5,12 @@ import type { LiveUpdateEvent } from "@football-app/realtime";
 import { ConnectionRegistry, type WebSocketLike } from "./connection-registry";
 import { subscribeChannel, unsubscribeChannel } from "./redis-subscriber";
 import { logError } from "../logger";
+import { commentChannelFor, type MatchCommentBroadcast } from "../lib/redis";
 
 // Message protocol (wire contract dùng chung với apps/web — xem plan Phase 2 Bước 2 § Phần 3):
 // Client -> Server: { type: "subscribe", matchId } | { type: "unsubscribe", matchId }
 // Server -> Client: { type: "match.snapshot", matchId, data: LiveMatchState | LiveUpdateEvent | null }
+//                   { type: "comment.new", matchId, data: MatchCommentBroadcast } — comment mới
 //                   { type: "error", message } cho message sai format/không nhận diện được.
 //
 // KHÔNG có match.event/match.status_change — chưa có event ingestion thật (Bước 1 xác nhận
@@ -57,9 +59,24 @@ export function attachWebSocketServer(server: HttpServer): void {
           safeSend(ws, { type: "match.snapshot", matchId, data: event });
         }
       });
+      // Kênh riêng cho comment — subscribe cùng lúc, theo cùng lifecycle 0->1 (registry đã lo
+      // đếm), forward dưới message type khác để client dedup theo type thay vì theo shape payload.
+      subscribeChannel(commentChannelFor(matchId), (raw) => {
+        let comment: MatchCommentBroadcast;
+        try {
+          comment = JSON.parse(raw) as MatchCommentBroadcast;
+        } catch (err) {
+          void logError(`ws-server: parse Redis comment message thất bại cho match ${matchId}`, err);
+          return;
+        }
+        for (const ws of registry.getSubscribers(matchId)) {
+          safeSend(ws, { type: "comment.new", matchId, data: comment });
+        }
+      });
     },
     onLastUnsubscribe(matchId) {
       unsubscribeChannel(channelFor(matchId));
+      unsubscribeChannel(commentChannelFor(matchId));
     },
   });
 

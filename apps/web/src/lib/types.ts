@@ -87,6 +87,8 @@ export interface Match {
   // null khi chưa scrape odds cho match này, hoặc match đã FINISHED (loại khỏi batch tính ở
   // apps/api's attachPrimaryOdds — xem apps/api/src/routes/matches.ts).
   primaryOdds: PrimaryOdds | null;
+  // Admin nhập tay — YouTube link thường hoặc URL HLS (.m3u8), xem components/match/LiveStreamPlayer.tsx.
+  liveStreamUrl: string | null;
 }
 
 export interface LiveMatchState {
@@ -103,6 +105,23 @@ export interface AiMatchSummary {
   content: string;
   model: string;
   createdAt: string;
+}
+
+export interface MatchCommentAuthor {
+  id: string;
+  displayName: string | null;
+  // @token dùng để tag user này (username hoặc slug từ displayName) — null nếu không tag được.
+  mentionHandle: string | null;
+}
+
+export interface MatchComment {
+  id: string;
+  matchId: string;
+  content: string;
+  // User.id đã resolve — CHỈ gồm user đã từng comment trận này (xem apps/api/src/routes/match-comments.ts).
+  mentionedUserIds: string[];
+  createdAt: string;
+  author: MatchCommentAuthor;
 }
 
 export interface MatchDetail extends Match {

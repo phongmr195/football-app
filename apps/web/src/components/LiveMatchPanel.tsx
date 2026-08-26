@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Activity } from "lucide-react";
 import { Badge, Card } from "@football-app/ui";
+import { LiveStreamPlayer } from "@/components/match/LiveStreamPlayer";
 import { estimateLiveMinute, formatMatchEventLabel, matchStatusMeta } from "@/lib/format";
 import { useLiveMatch, useMatchEvents, type MatchEventsResponse } from "@/lib/use-live-match";
 import type { MatchEvent } from "@/lib/types";
@@ -10,6 +11,10 @@ import type { MatchEvent } from "@/lib/types";
 export interface LiveMatchPanelProps {
   matchId: string;
   kickoffAt: string;
+  // Link admin nhập qua /admin/matches (Match.liveStreamUrl) — lấy từ MatchDetail server-rendered
+  // ở matches/[id]/page.tsx, KHÔNG phải từ GET /matches/:id/live (state ephemeral, không mang giá
+  // trị admin set 1 lần này).
+  liveStreamUrl: string | null;
 }
 
 /**
@@ -20,7 +25,7 @@ export interface LiveMatchPanelProps {
  * (see `lib/use-live-match.ts`) and renders nothing on its own whenever there's no live state yet
  * or the match isn't currently LIVE/HALFTIME.
  */
-export function LiveMatchPanel({ matchId, kickoffAt }: LiveMatchPanelProps) {
+export function LiveMatchPanel({ matchId, kickoffAt, liveStreamUrl }: LiveMatchPanelProps) {
   const { data: liveState } = useLiveMatch(matchId);
   const [seenSeq, setSeenSeq] = useState(0);
   const [events, setEvents] = useState<MatchEvent[]>([]);
@@ -71,6 +76,8 @@ export function LiveMatchPanel({ matchId, kickoffAt }: LiveMatchPanelProps) {
           </span>
         ) : null}
       </div>
+
+      {liveStreamUrl ? <LiveStreamPlayer url={liveStreamUrl} /> : null}
 
       <div className="text-center text-2xl font-bold text-zinc-900 dark:text-zinc-50">
         {liveState.homeScore} - {liveState.awayScore}

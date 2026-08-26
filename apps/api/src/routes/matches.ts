@@ -29,6 +29,7 @@ const matchUpdateSchema = z.object({
   status: z.enum(MATCH_STATUS_VALUES).optional(),
   homeScore: z.number().int().nullable().optional(),
   awayScore: z.number().int().nullable().optional(),
+  liveStreamUrl: z.string().url().nullable().optional(),
 });
 
 const liveStateUpsertSchema = z.object({
@@ -181,6 +182,28 @@ export const matchesRoute = new Hono()
     const response = { items };
     await cacheSet(LIVE_MATCHES_CACHE_KEY, response, LIVE_MATCHES_CACHE_TTL_SECONDS);
     return c.json(response);
+  })
+  // Cho trang "Trực tiếp" (menu /live) — CHỈ match có liveStreamUrl (khác /matches/live ở trên,
+  // dùng cho ticker trang chủ, trả MỌI match LIVE bất kể có link hay không). LIVE/HALFTIME trước
+  // (xem được ngay), SCHEDULED sau theo kickoff gần nhất — enum không có thứ tự tự nhiên khớp ý
+  // muốn nên sort tay, số match có link luôn nhỏ nên rẻ hơn 1 query phức tạp.
+  .get("/matches/live-streams", async (c) => {
+    const matches = await prisma.match.findMany({
+      where: { status: { in: ["LIVE", "HALFTIME", "SCHEDULED"] }, liveStreamUrl: { not: null } },
+      include: {
+        homeTeam: { select: teamSelect },
+        awayTeam: { select: teamSelect },
+        competition: { select: { id: true, name: true, logoUrl: true, externalRef: true } },
+      },
+    });
+    const byKickoffAsc = (a: { kickoffAt: Date }, b: { kickoffAt: Date }) =>
+      a.kickoffAt.getTime() - b.kickoffAt.getTime();
+    const rawItems = matches
+      .filter((m) => m.status === "LIVE" || m.status === "HALFTIME")
+      .sort(byKickoffAsc)
+      .concat(matches.filter((m) => m.status === "SCHEDULED").sort(byKickoffAsc));
+    const items = await attachPrimaryOdds(rawItems);
+    return c.json({ items });
   })
   .get("/matches/:id", zValidator("param", z.object({ id: z.string() })), async (c) => {
     const { id } = c.req.valid("param");

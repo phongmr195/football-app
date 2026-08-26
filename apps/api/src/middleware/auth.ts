@@ -35,12 +35,33 @@ declare module "hono" {
 // User.id (cuid) nội bộ, FK-safe cho các bảng như FavoriteTeam/FavoritePlayer — không phải
 // raw Firebase UID. Chưa có flow signup/profile riêng ở Phase 1 nên provision just-in-time
 // ở request đầu tiên.
-async function resolveOrCreateUserId(firebaseUid: string, email: string | undefined): Promise<string> {
-  const existing = await prisma.user.findUnique({ where: { firebaseUid } });
-  if (existing) return existing.id;
+async function resolveOrCreateUserId(
+  firebaseUid: string,
+  email: string | undefined,
+  name: string | undefined,
+): Promise<string> {
+  const existing = await prisma.user.findUnique({ where: { firebaseUid }, include: { profile: true } });
+  if (existing) {
+    // Backfill UserProfile.displayName cho user đăng nhập Google/Facebook — trước giờ KHÔNG có
+    // gì ghi field này (chỉ set cho username/password qua auth.ts's /auth/register), nên mọi nơi
+    // đọc displayName (vd MatchComments.tsx) đều rơi về fallback chung chung. CHỈ set khi còn
+    // trống — không ghi đè nếu user đã tự đổi tên trong app sau này.
+    if (name && !existing.profile?.displayName) {
+      await prisma.userProfile.upsert({
+        where: { userId: existing.id },
+        create: { userId: existing.id, displayName: name },
+        update: { displayName: name },
+      });
+    }
+    return existing.id;
+  }
 
   const created = await prisma.user.create({
-    data: { firebaseUid, email: email ?? null },
+    data: {
+      firebaseUid,
+      email: email ?? null,
+      profile: name ? { create: { displayName: name } } : undefined,
+    },
   });
   return created.id;
 }
@@ -65,7 +86,11 @@ export const requireAuth: MiddlewareHandler = createMiddleware(async (c, next) =
   // (2026-08-20): native Postgres âm thầm giành port 5432 khỏi Docker (xem CLAUDE.md § Docker),
   // mọi request tưởng "token sai" trong lúc thật ra DB đang trỏ sai — nhét chung vào 1 try/catch
   // với verifyIdToken() che mất lỗi DB thật, làm debug đi sai hướng.
-  const userId = await resolveOrCreateUserId(decoded.uid, decoded.email);
+  const userId = await resolveOrCreateUserId(
+    decoded.uid,
+    decoded.email,
+    typeof decoded.name === "string" ? decoded.name : undefined,
+  );
   c.set("userId", userId);
 
   await next();
@@ -90,5 +115,9 @@ export async function tryResolveUserId(c: Context): Promise<string | undefined> 
 
   // Cùng lý do requireAuth ở trên — lỗi DB ở đây không phải "chưa đăng nhập", để throw ra ngoài
   // thay vì coi như user ẩn danh (che mất lỗi thật).
-  return await resolveOrCreateUserId(decoded.uid, decoded.email);
+  return await resolveOrCreateUserId(
+    decoded.uid,
+    decoded.email,
+    typeof decoded.name === "string" ? decoded.name : undefined,
+  );
 }

@@ -40,6 +40,7 @@ model User {
   aiUsageLogs          AiUsageLog[]
   subscriptions        Subscription[]
   playerCompareHistories PlayerCompareHistory[]
+  matchComments        MatchComment[]
 
   @@map("users")
 }
@@ -500,11 +501,14 @@ model Match {
   refereeId String?
   referee   Referee? @relation(fields: [refereeId], references: [id])
 
-  kickoffAt   DateTime
-  status      MatchStatus @default(SCHEDULED)
-  homeScore   Int?
-  awayScore   Int?
-  externalRef Json?
+  kickoffAt     DateTime
+  status        MatchStatus @default(SCHEDULED)
+  homeScore     Int?
+  awayScore     Int?
+  externalRef   Json?
+  // Admin nhập tay qua /admin/matches — YouTube link thường (tự convert sang embed) hoặc URL
+  // HLS (.m3u8) trực tiếp, xem apps/web/src/components/match/LiveStreamPlayer.tsx.
+  liveStreamUrl String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -523,6 +527,9 @@ model Match {
   momentum         MatchMomentum[]
   odds             MatchOdds[]
   aiSummary        AiMatchSummary?
+  // Đặt tên khác `commentaries` (Sofascore text commentary, model Commentary ở trên) để tránh
+  // nhầm — đây là bình luận user thường viết, xem model MatchComment dưới.
+  userComments     MatchComment[]
 
   @@index([status, kickoffAt])
   @@map("matches")
@@ -541,6 +548,26 @@ model LiveMatchState {
   updatedAt    DateTime    @updatedAt
 
   @@map("live_match_state")
+}
+
+// User comment trên trang chi tiết trận đấu (không phụ thuộc trạng thái live) — hiển thị realtime
+// qua WebSocket, xem apps/api/src/routes/match-comments.ts + apps/api/src/lib/redis.ts's
+// publishComment(). @mention (mentionedUserIds) CHỈ resolve được username của user ĐÃ TỪNG comment
+// trận này (phạm vi tag hẹp, không expose toàn bộ user hệ thống).
+model MatchComment {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  content          String
+  mentionedUserIds String[] @default([])
+
+  createdAt DateTime @default(now())
+
+  @@index([matchId, createdAt])
+  @@map("match_comments")
 }
 
 model MatchStatistic {
