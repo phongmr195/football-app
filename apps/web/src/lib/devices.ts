@@ -23,8 +23,8 @@ export async function registerDevice(fcmToken: string, idToken: string | null): 
 
 /** GET /devices — current user's registered devices, used to detect "already enabled on this
  * browser" on page load (match by fcmToken against a freshly-fetched token). */
-export async function listDevices(idToken: string | null): Promise<Device[]> {
-  const { items } = await apiGetClient<{ items: Device[] }>("/devices", undefined, { idToken });
+export async function listDevices(idToken: string | null, signal?: AbortSignal): Promise<Device[]> {
+  const { items } = await apiGetClient<{ items: Device[] }>("/devices", undefined, { idToken, signal });
   return items;
 }
 

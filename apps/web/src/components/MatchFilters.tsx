@@ -35,23 +35,27 @@ export function MatchFilters({ competitions }: MatchFiltersProps) {
     // repo's lint config flags synchronous setState calls in an effect body as an
     // anti-pattern, react-hooks/set-state-in-effect).
     if (!competitionId) return;
-    let cancelled = false;
+    // AbortController, not just a `cancelled` flag — a flag only skips the stale setState, it
+    // doesn't stop the request itself, so StrictMode's dev-only double-effect still fired 2 real
+    // network calls per competition change.
+    const controller = new AbortController();
 
     (async () => {
       setLoadingSeasons(true);
       try {
-        const detail = await apiGetClient<CompetitionDetail>(`/competitions/${competitionId}`);
-        if (!cancelled) setSeasons(detail.seasons);
+        const detail = await apiGetClient<CompetitionDetail>(`/competitions/${competitionId}`, undefined, {
+          signal: controller.signal,
+        });
+        setSeasons(detail.seasons);
+        setLoadingSeasons(false);
       } catch {
-        if (!cancelled) setSeasons([]);
-      } finally {
-        if (!cancelled) setLoadingSeasons(false);
+        if (controller.signal.aborted) return;
+        setSeasons([]);
+        setLoadingSeasons(false);
       }
     })();
 
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [competitionId]);
 
   // Don't render stale/in-flight season options: none without a competition selected, and

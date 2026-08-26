@@ -24,24 +24,23 @@ export default function CompareHistoryPage() {
 
   useEffect(() => {
     if (!user) return;
-    let cancelled = false;
+    const controller = new AbortController();
     (async () => {
       try {
         const idToken = await getIdToken();
         const data = await apiGetClient<{ items: PlayerCompareHistoryEntry[] }>(
           "/players/compare/history",
           undefined,
-          { idToken },
+          { idToken, signal: controller.signal },
         );
-        if (!cancelled) setItems(data.items);
+        setItems(data.items);
       } catch (err) {
+        if (controller.signal.aborted) return;
         console.error("CompareHistoryPage: tải lịch sử thất bại", err);
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Không thể tải lịch sử.");
+        setError(err instanceof ApiError ? err.message : "Không thể tải lịch sử.");
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [user, getIdToken]);
 
   return (
