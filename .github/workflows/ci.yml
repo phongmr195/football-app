@@ -1,0 +1,104 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main, develop]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      # sync-catalog.test.ts chạy against Postgres thật (xem CLAUDE.md § Docker) — cần service
+      # tương đương ở CI, không mock Prisma.
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: football_app
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/football_app?schema=public
+      # apps/web calls getAuth() at module scope (lib/firebase.ts), which throws
+      # auth/invalid-api-key synchronously if NEXT_PUBLIC_FIREBASE_API_KEY is unset — this fails
+      # the static prerender of "/" and "/auth" during `next build`. CI has no apps/web/.env.local
+      # (gitignored, real values are project-specific — see CLAUDE.md § Authentication), and
+      # doesn't need one: no real Firebase network call happens during a build, only at runtime
+      # when a user actually signs in, so any well-formed placeholder value is enough here.
+      # NOTE: /admin/* (ROADMAP Phase 4) lives inside apps/web too but does NOT use Firebase at
+      # all (separate username/password + JWT auth, see apps/api/src/middleware/admin-auth.ts) —
+      # it doesn't need any of these Firebase vars.
+      NEXT_PUBLIC_FIREBASE_API_KEY: AIzaSyFAKE0000000000000000000000000
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: fake-project.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: fake-project
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: fake-project.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+      NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000000000"
+      NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID: G-0000000000
+      # Admin auth JWT signing secret (apps/api/src/middleware/admin-auth.ts) — fake value is
+      # fine here, same reasoning as the Firebase vars above (no real admin login happens in CI).
+      ADMIN_JWT_SECRET: ci-fake-admin-jwt-secret-not-for-production-use
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm db:generate
+
+      - name: Apply migrations
+        run: pnpm --filter @football-app/database exec prisma migrate deploy
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+  secretlint:
+    # Job riêng để chạy song song với "build" (không phải vì version — cả 2 job đều đã lên
+    # Node 24 sau khi Docker base image đổi từ node:20-alpine, xem apps/*/Dockerfile/
+    # Dockerfile.test — Node 24 thoả luôn @secretlint/secretlint-rule-preset-recommend's yêu cầu
+    # >=22, không còn là lý do tách job như trước nữa, nhưng vẫn giữ tách để CI nhanh hơn).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Scan for secrets
+        run: pnpm secretlint

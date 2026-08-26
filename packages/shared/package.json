@@ -1,0 +1,20 @@
+{
+  "name": "@football-app/shared",
+  "private": true,
+  "version": "0.0.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@football-app/config": "workspace:*",
+    "typescript": "^5.7.0"
+  }
+}

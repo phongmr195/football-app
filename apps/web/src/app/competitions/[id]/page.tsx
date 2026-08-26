@@ -1,0 +1,112 @@
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { CalendarRange, ChevronRight } from "lucide-react";
+import { Badge, Card, Container } from "@football-app/ui";
+import { ApiError, apiGet } from "@/lib/api-client";
+import { BackButton } from "@/components/BackButton";
+import { competitionDisplayName, competitionTypeMeta, formatSeasonRange } from "@/lib/format";
+import type { CompetitionDetail } from "@/lib/types";
+
+// Competition + season list rarely changes — long ISR window is fine.
+export const revalidate = 3600;
+
+async function getCompetition(id: string) {
+  try {
+    return await apiGet<CompetitionDetail>(`/competitions/${id}`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export default async function CompetitionDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const competition = await getCompetition(id);
+
+  if (!competition) notFound();
+
+  const { label, variant } = competitionTypeMeta(competition.type);
+  const displayName = competitionDisplayName(competition);
+  const seasons = [...competition.seasons].sort(
+    (a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()
+  );
+
+  return (
+    <Container size="md" className="py-10">
+      <BackButton />
+      <Card className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center">
+        {competition.logoUrl ? (
+          <Image
+            src={competition.logoUrl}
+            alt={displayName}
+            width={64}
+            height={64}
+            className="h-16 w-16 object-contain"
+          />
+        ) : (
+          <div className="h-16 w-16 rounded bg-zinc-100 dark:bg-zinc-800" />
+        )}
+        <div className="flex flex-col gap-2">
+          <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+            {displayName}
+          </h1>
+          <div className="flex items-center gap-2">
+            <Badge variant={variant}>{label}</Badge>
+            {competition.countryCode ? (
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">
+                {competition.countryCode}
+              </span>
+            ) : null}
+          </div>
+          <Link
+            href={`/matches?competitionId=${competition.id}`}
+            className="flex items-center gap-1 text-sm text-zinc-700 hover:underline dark:text-zinc-300"
+          >
+            Xem lịch thi đấu
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </Link>
+        </div>
+      </Card>
+
+      <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+        <CalendarRange className="h-5 w-5" aria-hidden="true" />
+        Mùa giải
+      </h2>
+
+      {seasons.length === 0 ? (
+        <Card className="text-sm text-zinc-500 dark:text-zinc-400">
+          Chưa có dữ liệu mùa giải cho giải đấu này.
+        </Card>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {seasons.map((season) => (
+            <li key={season.id}>
+              <Link href={`/standings?competitionId=${competition.id}&seasonId=${season.id}`}>
+                <Card
+                  padding="sm"
+                  className="flex items-center justify-between transition-colors hover:border-zinc-300 dark:hover:border-zinc-700"
+                >
+                  <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                    Mùa {season.name} ({formatSeasonRange(season.startDate, season.endDate)})
+                  </span>
+                  <div className="flex items-center gap-2">
+                    {season.isCurrent ? <Badge variant="success">Đang diễn ra</Badge> : null}
+                    <span className="flex items-center gap-1 text-sm text-zinc-500 dark:text-zinc-400">
+                      Xem bảng xếp hạng
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                  </div>
+                </Card>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Container>
+  );
+}

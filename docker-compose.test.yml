@@ -1,0 +1,27 @@
+name: football-app-test
+
+services:
+  postgres-test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: football_app_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    tmpfs:
+      - /var/lib/postgresql/data # ephemeral — không cần persist giữa các lần chạy test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres-test:5432/football_app_test?schema=public
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+    command: sh -c "pnpm --filter @football-app/database exec prisma db push --skip-generate && pnpm test"

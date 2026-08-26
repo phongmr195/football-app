@@ -1,0 +1,7 @@
+{
+  "**/*": ["secretlint"],
+  "**/{google-services.json,GoogleService-Info.plist,firebase_options.dart}": ["sh scripts/block-credential-files.sh"],
+  "**/*.{p12,pem,pfx}": ["sh scripts/block-credential-files.sh"],
+  "**/*serviceAccount*.json": ["sh scripts/block-credential-files.sh"],
+  "**/{id_rsa,id_rsa.pub,id_ed25519}": ["sh scripts/block-credential-files.sh"]
+}

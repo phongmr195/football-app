@@ -1,0 +1,11 @@
+# syntax=docker/dockerfile:1
+# Image dùng để chạy toàn bộ test suite monorepo trong CI/local — KHÔNG dùng để deploy.
+# Khác apps/*/Dockerfile: giữ nguyên devDependencies + source toàn monorepo (không prune).
+FROM node:24-alpine
+RUN apk add --no-cache libc6-compat openssl
+RUN corepack enable
+WORKDIR /repo
+COPY . .
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+RUN pnpm --filter @football-app/database db:generate
+CMD ["pnpm", "test"]

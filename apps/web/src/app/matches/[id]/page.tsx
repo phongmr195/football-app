@@ -1,0 +1,193 @@
+import Image from "next/image";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { Clock, Sparkles } from "lucide-react";
+import { Badge, Card, Container } from "@football-app/ui";
+import { ApiError, apiGet } from "@/lib/api-client";
+import { BackButton } from "@/components/BackButton";
+import { LiveMatchPanel } from "@/components/LiveMatchPanel";
+import { MatchDetailTabs } from "@/components/match/MatchDetailTabs";
+import { MatchEventsTimeline } from "@/components/match/MatchEventsTimeline";
+import { MatchLineups } from "@/components/match/MatchLineups";
+import { MatchOdds } from "@/components/match/MatchOdds";
+import { MatchPlayerRatings } from "@/components/match/MatchPlayerRatings";
+import { MatchStatisticsBars } from "@/components/match/MatchStatisticsBars";
+import {
+  competitionDisplayName,
+  formatGoalScorerLabel,
+  formatKickoffAt,
+  groupGoalScorersByTeam,
+  matchStatusMeta,
+} from "@/lib/format";
+import type {
+  MatchDetail,
+  MatchEvent,
+  MatchLineupsResponse,
+  MatchOddsResponse,
+  MatchStatisticsResponse,
+} from "@/lib/types";
+
+// A single match's data (score/status) is essentially frozen once FINISHED, so this stays
+// long-window ISR — same window as the list. Live matches are handled separately by
+// `<LiveMatchPanel>` below, which polls client-side and is mounted unconditionally (see its own
+// doc comment for why this page's `match.status`, however stale, must never gate it).
+export const revalidate = 1800;
+
+async function getMatch(id: string) {
+  try {
+    return await apiGet<MatchDetail>(`/matches/${id}`);
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export default async function MatchDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const match = await getMatch(id);
+
+  if (!match) notFound();
+
+  // Chỉ có data cho match đã scrape (apps/scraper-sofascore, Premier League 2025-2026, chưa full
+  // mùa) — 2 endpoint mới trả cấu trúc rỗng hợp lệ (không 404) khi chưa có, các component con tự
+  // render empty-state. Fetch song song, không phụ thuộc nhau.
+  const [events, lineups, statistics, odds] = await Promise.all([
+    apiGet<{ items: MatchEvent[] }>(`/matches/${id}/events`),
+    apiGet<MatchLineupsResponse>(`/matches/${id}/lineups`),
+    apiGet<MatchStatisticsResponse>(`/matches/${id}/statistics`),
+    apiGet<MatchOddsResponse>(`/matches/${id}/odds`),
+  ]);
+
+  // Odds hết ý nghĩa khi FINISHED (thị trường đã đóng) — chỉ hiện tab khi match còn SCHEDULED/LIVE
+  // VÀ thật sự có odds đã scrape, khác 4 slot còn lại (luôn hiện, tự render empty-state).
+  const showOdds = (match.status === "SCHEDULED" || match.status === "LIVE") && odds.items.length > 0;
+
+  const { label, variant } = matchStatusMeta(match.status);
+  const hasScore = match.homeScore !== null && match.awayScore !== null;
+  const competitionName = competitionDisplayName(match.competition);
+  const { home: homeGoals, away: awayGoals } = groupGoalScorersByTeam(events.items, match.homeTeam.id);
+
+  return (
+    <Container size="md" className="py-10">
+      <BackButton />
+      <Link
+        href={`/competitions/${match.competition.id}`}
+        className="mb-6 flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+      >
+        {match.competition.logoUrl ? (
+          <Image
+            src={match.competition.logoUrl}
+            alt={competitionName}
+            width={20}
+            height={20}
+            className="h-5 w-5 object-contain"
+          />
+        ) : null}
+        <span>{competitionName}</span>
+      </Link>
+
+      <Card className="flex flex-col items-center gap-6 py-8">
+        <div className="flex items-center gap-2">
+          <Badge variant={variant}>{label}</Badge>
+        </div>
+
+        <div className="flex w-full items-center justify-around gap-4">
+          <Link
+            href={`/teams/${match.homeTeam.id}`}
+            className="flex flex-1 flex-col items-center gap-3 text-center hover:underline"
+          >
+            {match.homeTeam.logoUrl ? (
+              <Image
+                src={match.homeTeam.logoUrl}
+                alt={match.homeTeam.name}
+                width={64}
+                height={64}
+                className="h-16 w-16 object-contain"
+              />
+            ) : (
+              <div className="h-16 w-16 rounded bg-zinc-100 dark:bg-zinc-800" />
+            )}
+            <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+              {match.homeTeam.name}
+            </span>
+          </Link>
+
+          <div className="text-3xl font-bold text-zinc-900 dark:text-zinc-50">
+            {hasScore ? `${match.homeScore} - ${match.awayScore}` : "vs"}
+          </div>
+
+          <Link
+            href={`/teams/${match.awayTeam.id}`}
+            className="flex flex-1 flex-col items-center gap-3 text-center hover:underline"
+          >
+            {match.awayTeam.logoUrl ? (
+              <Image
+                src={match.awayTeam.logoUrl}
+                alt={match.awayTeam.name}
+                width={64}
+                height={64}
+                className="h-16 w-16 object-contain"
+              />
+            ) : (
+              <div className="h-16 w-16 rounded bg-zinc-100 dark:bg-zinc-800" />
+            )}
+            <span className="font-semibold text-zinc-900 dark:text-zinc-50">
+              {match.awayTeam.name}
+            </span>
+          </Link>
+        </div>
+
+        {/* Block riêng, TÁCH khỏi row logo+tên ở trên (không nằm trong 2 <Link>) — nếu nhét chung,
+            2 cột có số dòng ghi bàn khác nhau (vd 1 đội không ghi bàn) làm `items-center` của row
+            đó lệch tâm logo/tên giữa 2 đội. Spacer giữa ẩn (`invisible`) nhưng vẫn render đúng text
+            tỉ số để chiếm đúng width, giữ 2 cột ghi bàn thẳng hàng dưới đúng tên đội tương ứng. */}
+        {homeGoals.length > 0 || awayGoals.length > 0 ? (
+          <div className="-mt-4 flex w-full items-start justify-around gap-4">
+            <ul className="flex flex-1 flex-col items-center gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              {homeGoals.map((goal) => (
+                <li key={goal.id}>{formatGoalScorerLabel(goal)}</li>
+              ))}
+            </ul>
+            <div className="invisible text-3xl font-bold" aria-hidden="true">
+              {hasScore ? `${match.homeScore} - ${match.awayScore}` : "vs"}
+            </div>
+            <ul className="flex flex-1 flex-col items-center gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              {awayGoals.map((goal) => (
+                <li key={goal.id}>{formatGoalScorerLabel(goal)}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        <p className="flex items-center gap-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+          <Clock className="h-4 w-4" aria-hidden="true" />
+          {formatKickoffAt(match.kickoffAt)}
+        </p>
+      </Card>
+
+      {match.aiSummary ? (
+        <Card className="mt-6 flex flex-col gap-2 py-6">
+          <h2 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            Tóm tắt trận đấu
+          </h2>
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">{match.aiSummary.content}</p>
+        </Card>
+      ) : null}
+
+      <MatchDetailTabs
+        eventsSlot={<MatchEventsTimeline events={events.items} />}
+        lineupsSlot={<MatchLineups lineups={lineups} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />}
+        ratingsSlot={<MatchPlayerRatings lineups={lineups} homeTeam={match.homeTeam} awayTeam={match.awayTeam} />}
+        statisticsSlot={<MatchStatisticsBars statistics={statistics} />}
+        oddsSlot={showOdds ? <MatchOdds odds={odds} /> : undefined}
+      />
+
+      <LiveMatchPanel matchId={match.id} kickoffAt={match.kickoffAt} />
+    </Container>
+  );
+}

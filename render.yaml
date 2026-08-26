@@ -1,0 +1,51 @@
+# Render Blueprint cho apps/sync-worker's live-match poll loop (docker-compose.yml's
+# "sync-worker-live" service) — xem docs/ hoặc plan deploy cho lý do đầy đủ (Render free tier
+# CHỈ có Web Service miễn phí, KHÔNG có Background Worker free — nên khai báo type: web ở đây,
+# poll.ts tự mở 1 HTTP health server khi có PORT env var, hoàn toàn tách biệt khỏi poll loop
+# chính, chỉ để Render/keep-alive ping (vd UptimeRobot) có endpoint để gọi).
+#
+# KHÔNG deploy apps/api/apps/web qua file này — apps/api/apps/web ngoài scope piece deploy đầu
+# tiên này. Scraping đầy đủ (9+1 loại data qua /admin/scraper) vẫn chạy tay ở local (quyết định
+# đã chốt) — riêng 7 loại data theo TRẬN (events/lineups+ratings/statistics/shotmap/highlights/
+# averagePositions/momentum, KHÔNG kèm commentary/odds) được auto-scrape từ chính service này
+# ĐÚNG 1 LẦN ngay khi match chuyển FINISHED (2026-08-25, xem apps/sync-worker/src/
+# sofascore-match-scrape.ts + Dockerfile's Python/tls_requests bundle — verify thật node:*-alpine
+# KHÔNG chạy được lib native TLS này trên musl, phải đổi sang Debian (node:24-slim) — riêng bản
+# thân version 20->24 là nâng cấp EOL runtime, không liên quan musl). Feature cũ ở đây từng là
+# auto-fetch ODDS cho match đang LIVE (mỗi ~30s/tick) — bỏ (2026-08-25) vì 181/181 lần thử thất
+# bại thật (ConnectionError gọi Sofascore, nghi IP datacenter Render bị chặn khác IP nhà) mà vẫn
+# tốn tài nguyên/log mỗi tick; đổi sang scrape 1 lần lúc FINISHED vừa giảm tải vừa không cần data
+# real-time như odds.
+#
+# Setup trên Render: "New" -> "Blueprint" -> chọn repo này -> Render tự đọc file này. Sau khi
+# tạo, vào service -> Environment, set 4 secret KHÔNG khai báo value ở đây (sync: false, xem
+# dưới): DATABASE_URL, FOOTBALL_DATA_API_KEY, GEMINI_API_KEY, GROQ_API_KEY. REDIS_URL CHỦ Ý
+# không khai báo — createPublisher() tự no-op an toàn khi thiếu.
+services:
+  - type: web
+    name: football-app-sync-worker-live
+    runtime: docker
+    dockerfilePath: apps/sync-worker/Dockerfile
+    dockerContext: .
+    dockerCommand: node dist/poll.js
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DATA_PROVIDER
+        value: football-data
+      - key: FOOTBALL_DATA_API_KEY
+        sync: false
+      - key: LIVE_POLL_INTERVAL_MS
+        value: "30000"
+      - key: SOFASCORE_SCRAPE_ENABLED
+        value: "true"
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_FALLBACK_PROVIDER
+        value: groq
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

@@ -1,0 +1,129 @@
+name: football-app
+
+services:
+  # ---- data ----
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: football_app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- log ----
+  dozzle:
+    image: amir20/dozzle:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # ---- auth emulator (local dev — xem CLAUDE.md § Authentication) ----
+  firebase-emulator:
+    build:
+      context: infrastructure/docker/firebase-emulator
+    restart: unless-stopped
+    ports:
+      - "9099:9099" # Auth emulator API
+      - "4000:4000" # Emulator UI (xem/tạo test user qua browser)
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:9099', r => process.exit(0)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---- app services ----
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/football_app?schema=public
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-demo-football-app}
+      FIREBASE_AUTH_EMULATOR_HOST: ${FIREBASE_AUTH_EMULATOR_HOST:-firebase-emulator:9099}
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', r => process.exit(r.statusCode===200?0:1)).on('error', () => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      firebase-emulator:
+        condition: service_healthy
+
+  sync-worker:
+    build:
+      context: .
+      dockerfile: apps/sync-worker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/football_app?schema=public
+      API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
+      DATA_PROVIDER: ${DATA_PROVIDER:-football-data}
+      SYNC_MODE: ${SYNC_MODE:-}
+      SYNC_COMPETITION_IDS: ${SYNC_COMPETITION_IDS:-}
+      SYNC_SEASON_YEAR: ${SYNC_SEASON_YEAR:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - worker # chạy on-demand: docker compose --profile worker run sync-worker
+
+  # Live-match polling loop dài hạn (Phase 2 Bước 1) — tái dùng image sync-worker, chỉ đổi
+  # command sang entrypoint poll.ts (build ra dist/poll.js). on-demand qua profile "worker",
+  # KHÔNG tự chạy cùng docker:up, giống sync-worker ở trên.
+  sync-worker-live:
+    build:
+      context: .
+      dockerfile: apps/sync-worker/Dockerfile
+    command: ["node", "dist/poll.js"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/football_app?schema=public
+      API_FOOTBALL_KEY: ${API_FOOTBALL_KEY:-}
+      FOOTBALL_DATA_API_KEY: ${FOOTBALL_DATA_API_KEY:-}
+      DATA_PROVIDER: ${DATA_PROVIDER:-football-data}
+      LIVE_POLL_INTERVAL_MS: ${LIVE_POLL_INTERVAL_MS:-30000}
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - worker # chạy on-demand: pnpm docker:worker:live
+
+volumes:
+  postgres_data:
+  redis_data:

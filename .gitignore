@@ -1,0 +1,50 @@
+# Node
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.turbo/
+
+# Env
+.env
+.env.local
+.env.*.local
+
+# Prisma
+packages/database/generated/
+
+# Terraform
+infrastructure/terraform/.terraform/
+infrastructure/terraform/*.tfstate
+infrastructure/terraform/*.tfstate.backup
+infrastructure/terraform/.terraform.lock.hcl
+infrastructure/terraform/*.tfvars
+
+# Python (apps/scraper-sofascore — component Python đầu tiên, xem CLAUDE.md § Scraper)
+apps/scraper-sofascore/.venv/
+apps/scraper-sofascore/.cache/
+apps/scraper-sofascore/manifest.json
+# manifests/<runId>.json — sinh bởi apps/api's scraper-orchestrator.ts (trang admin scraper),
+# khác manifest.json (CLI thủ công) ở trên — mỗi run 1 file riêng, không commit.
+apps/scraper-sofascore/manifests/
+apps/scraper-sofascore/output/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# pnpm local store — chỉ xuất hiện nếu ai đó dùng --store-dir trỏ vào đây (workaround cho lỗi
+# ERR_PNPM_UNEXPECTED_STORE khi global store config lệch máy) — có thể lên tới hàng trăm MB/hàng
+# chục nghìn file, không bao giờ nên commit.
+.pnpm-store/
+
+# IDE
+.vscode/*
+!.vscode/extensions.json
+.idea/

@@ -1,0 +1,1097 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== User Module ====================
+
+model User {
+  id          String   @id @default(cuid())
+  // Bắt buộc + unique cho MỌI user, kể cả đăng ký username/password (xem "### Authentication —
+  // username/password" trong CLAUDE.md) — lúc đó firebaseUid là giá trị TỰ SINH (không phải
+  // Firebase cấp), dùng để mint 1 Firebase custom token (firebase-admin's createCustomToken(uid))
+  // ngay khi đăng ký/đăng nhập thành công. Client signInWithCustomToken() bằng token đó ->
+  // Firebase tự tạo user thật với ĐÚNG uid này -> requireAuth's resolveOrCreateUserId() (tìm theo
+  // firebaseUid) khớp lại đúng row đã tạo sẵn ở đây, không tạo trùng. Nhờ vậy middleware/auth.ts
+  // KHÔNG cần sửa gì để hỗ trợ thêm 1 auth method mới.
+  firebaseUid String   @unique
+  email       String?  @unique
+  // Cả 2 field CHỈ có giá trị cho user đăng ký qua username/password (null cho Google/Facebook) —
+  // xem apps/api/src/routes/auth.ts. username lưu dạng LOWERCASE (chuẩn hoá lúc đăng ký) để
+  // unique constraint không phân biệt hoa/thường mà không cần citext extension.
+  username     String?  @unique
+  passwordHash String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profile              UserProfile?
+  favoriteTeams        FavoriteTeam[]
+  favoritePlayers      FavoritePlayer[]
+  notificationSetting  NotificationSetting?
+  devices              Device[]
+  notifications        Notification[]
+  chatHistories        ChatHistory[]
+  searchHistories      SearchHistory[]
+  aiUsageLogs          AiUsageLog[]
+  subscriptions        Subscription[]
+  playerCompareHistories PlayerCompareHistory[]
+
+  @@map("users")
+}
+
+// Hoàn toàn tách biệt khỏi User/Firebase auth — apps/web's /admin/* (ROADMAP Phase 4) dùng
+// username/password + JWT tự ký (apps/api/src/routes/admin.ts, middleware/admin-auth.ts),
+// không verify qua Firebase. Admin không phải end-user (không favorites/notifications/search
+// history) nên không tái dùng bảng User — xem CLAUDE.md § Authentication cho lý do đầy đủ.
+model AdminUser {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  scraperRuns ScraperRun[]
+  syncRuns    SyncRun[]
+
+  @@map("admin_users")
+}
+
+model UserProfile {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String?
+  avatarUrl   String?
+  locale      String  @default("vi")
+
+  @@map("user_profiles")
+}
+
+model FavoriteTeam {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@map("favorite_teams")
+}
+
+model FavoritePlayer {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, playerId])
+  @@map("favorite_players")
+}
+
+model NotificationSetting {
+  id                String  @id @default(cuid())
+  userId            String  @unique
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalAlerts        Boolean @default(true)
+  matchStartAlerts  Boolean @default(true)
+  matchResultAlerts Boolean @default(true)
+  newsAlerts        Boolean @default(false)
+
+  @@map("notification_settings")
+}
+
+enum DevicePlatform {
+  IOS
+  ANDROID
+  WEB
+}
+
+model Device {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fcmToken    String         @unique
+  platform    DevicePlatform
+  lastActiveAt DateTime      @default(now())
+  createdAt   DateTime       @default(now())
+
+  @@map("devices")
+}
+
+// ==================== Competition Module ====================
+
+enum CompetitionType {
+  LEAGUE
+  CUP
+  INTERNATIONAL
+}
+
+model Competition {
+  id          String          @id @default(cuid())
+  name        String
+  type        CompetitionType
+  countryCode String?
+  logoUrl     String?
+  // Unique expression index on (externalRef->>'provider', externalRef->>'id') — raw migration
+  // 20260814000000_add_external_ref_provider_id_unique_index, KHÔNG hiện trong schema này (Prisma
+  // DSL không hỗ trợ expression index). Xem CLAUDE.md § Database.
+  externalRef Json?
+
+  seasons     Season[]
+  matches     Match[]
+  scraperRuns ScraperRun[]
+  syncRuns    SyncRun[]
+
+  @@map("competitions")
+}
+
+model Season {
+  id            String   @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  name          String   // ví dụ "2025/2026"
+  startDate     DateTime
+  endDate       DateTime
+  isCurrent     Boolean  @default(false)
+
+  rounds             Round[]
+  stages             Stage[]
+  matches            Match[]
+  standings          Standing[]
+  teamStatistics     TeamStatistics[]
+  teamRankings       TeamRanking[]
+  playerStatistics   PlayerStatistics[]
+  topScorers         TopScorer[]
+  topAssists         TopAssist[]
+  cleanSheets        CleanSheet[]
+  scraperRuns        ScraperRun[]
+  syncRuns           SyncRun[]
+
+  @@unique([competitionId, name])
+  @@map("seasons")
+}
+
+model Round {
+  id          String   @id @default(cuid())
+  seasonId    String
+  season      Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name        String
+  roundNumber Int?
+  startDate   DateTime?
+  endDate     DateTime?
+
+  matches Match[]
+
+  @@map("rounds")
+}
+
+model Stage {
+  id         String @id @default(cuid())
+  seasonId   String
+  season     Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  name       String
+  stageOrder Int    @default(0)
+
+  matches Match[]
+
+  @@map("stages")
+}
+
+// ==================== Team Module ====================
+
+model Team {
+  id          String  @id @default(cuid())
+  name        String
+  shortName   String?
+  logoUrl     String?
+  countryCode String?
+  founded     Int?
+  stadiumId   String?
+  stadium     Stadium? @relation(fields: [stadiumId], references: [id])
+  externalRef Json?
+
+  logos            TeamLogo[]
+  coaches          Coach[]
+  homeMatches      Match[]          @relation("HomeTeam")
+  awayMatches      Match[]          @relation("AwayTeam")
+  favoritedBy      FavoriteTeam[]
+  statistics       TeamStatistics[]
+  rankings         TeamRanking[]
+  standings        Standing[]
+  players          Player[]
+  matchStatistics  MatchStatistic[]
+  matchEvents      MatchEvent[]
+  matchLineups     MatchLineup[]
+  formations       Formation[]
+  teamRatings      TeamRating[]
+  matchShots            MatchShot[]
+  matchAveragePositions MatchAveragePosition[]
+  playerTransfersFrom PlayerTransfer[] @relation("TransferFromTeam")
+  playerTransfersTo   PlayerTransfer[] @relation("TransferToTeam")
+  playerCareers    PlayerCareer[]
+  playerContracts  PlayerContract[]
+  cleanSheets      CleanSheet[]
+
+  @@map("teams")
+}
+
+model TeamLogo {
+  id        String  @id @default(cuid())
+  teamId    String
+  team      Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  url       String
+  season    String?
+  isCurrent Boolean @default(false)
+
+  @@map("team_logos")
+}
+
+model Stadium {
+  id          String  @id @default(cuid())
+  name        String
+  city        String?
+  countryCode String?
+  capacity    Int?
+
+  teams Team[]
+
+  @@map("stadiums")
+}
+
+model Coach {
+  id          String    @id @default(cuid())
+  name        String
+  nationality String?
+  birthDate   DateTime?
+  teamId      String?
+  team        Team?     @relation(fields: [teamId], references: [id])
+
+  @@map("coaches")
+}
+
+model TeamStatistics {
+  id            String  @id @default(cuid())
+  teamId        String
+  team          Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  seasonId      String
+  season        Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  wins          Int     @default(0)
+  draws         Int     @default(0)
+  losses        Int     @default(0)
+  goalsFor      Int     @default(0)
+  goalsAgainst  Int     @default(0)
+  cleanSheets   Int     @default(0)
+  raw           Json?
+
+  @@unique([teamId, seasonId])
+  @@map("team_statistics")
+}
+
+model TeamRanking {
+  id          String @id @default(cuid())
+  teamId      String
+  team        Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  seasonId    String
+  season      Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  rankingType String // ví dụ "domestic", "world"
+  rank        Int
+  points      Float?
+
+  @@map("team_rankings")
+}
+
+// ==================== Player Module ====================
+
+model Player {
+  id          String    @id @default(cuid())
+  name        String
+  dateOfBirth DateTime?
+  nationality String?
+  position    String?
+  heightCm    Int?
+  teamId      String?
+  team        Team?     @relation(fields: [teamId], references: [id])
+  externalRef Json?
+
+  favoritedBy       FavoritePlayer[]
+  statistics        PlayerStatistics[]
+  awards            PlayerAward[]
+  transfers         PlayerTransfer[]
+  careers           PlayerCareer[]
+  injuries          PlayerInjury[]
+  contracts         PlayerContract[]
+  matchEvents       MatchEvent[]      @relation("EventPlayer")
+  relatedMatchEvents MatchEvent[]     @relation("EventRelatedPlayer")
+  matchLineups      MatchLineup[]
+  ratings           PlayerRating[]
+  matchShots            MatchShot[]
+  matchAveragePositions MatchAveragePosition[]
+  aiSummary         AiPlayerSummary?
+  aiComparisonsAsPlayerA AiPlayerComparison[] @relation("AiPlayerComparisonPlayerA")
+  aiComparisonsAsPlayerB AiPlayerComparison[] @relation("AiPlayerComparisonPlayerB")
+  topScorerEntries  TopScorer[]
+  topAssistEntries  TopAssist[]
+
+  @@map("players")
+}
+
+model PlayerStatistics {
+  id             String  @id @default(cuid())
+  playerId       String
+  player         Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  seasonId       String
+  season         Season  @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  appearances    Int     @default(0)
+  goals          Int     @default(0)
+  assists        Int     @default(0)
+  yellowCards    Int     @default(0)
+  redCards       Int     @default(0)
+  minutesPlayed  Int     @default(0)
+  // Field nâng cao (2026-08-20) — chỉ Sofascore's season top-players điền được (football-data.org's
+  // top-scorers không có), xem apps/sync-worker/src/ingest-player-season-stats.ts. Nullable vì
+  // KHÔNG phải cầu thủ nào cũng lọt top-50 mỗi category (xem CLAUDE.md § Scraper) — thiếu field
+  // nghĩa là "không có data", KHÔNG phải "giá trị = 0" (khác appearances/goals/assists/...ở trên,
+  // vốn @default(0) vì luôn tính được từ football-data.org's top-scorers list nếu có row).
+  rating             Float?
+  expectedGoals      Float?
+  expectedAssists    Float?
+  tackles            Int?
+  interceptions      Int?
+  keyPasses          Int?
+  successfulDribbles Int?
+  kilometersCovered  Float?
+  topSpeed           Float?
+  saves              Int?
+  cleanSheet         Int?
+  raw            Json?
+
+  @@unique([playerId, seasonId])
+  @@map("player_statistics")
+}
+
+model PlayerAward {
+  id            String   @id @default(cuid())
+  playerId      String
+  player        Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  title         String
+  season        String?
+  competitionId String?
+
+  @@map("player_awards")
+}
+
+enum TransferType {
+  PERMANENT
+  LOAN
+  FREE
+}
+
+model PlayerTransfer {
+  id           String       @id @default(cuid())
+  playerId     String
+  player       Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  fromTeamId   String?
+  fromTeam     Team?        @relation("TransferFromTeam", fields: [fromTeamId], references: [id])
+  toTeamId     String?
+  toTeam       Team?        @relation("TransferToTeam", fields: [toTeamId], references: [id])
+  transferDate DateTime
+  fee          Float?
+  type         TransferType
+
+  @@map("player_transfers")
+}
+
+model PlayerCareer {
+  id           String    @id @default(cuid())
+  playerId     String
+  player       Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  teamId       String
+  team         Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  startDate    DateTime
+  endDate      DateTime?
+  appearances  Int       @default(0)
+  goals        Int       @default(0)
+
+  @@map("player_careers")
+}
+
+enum InjuryStatus {
+  ACTIVE
+  RECOVERED
+}
+
+model PlayerInjury {
+  id             String       @id @default(cuid())
+  playerId       String
+  player         Player       @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  type           String
+  startDate      DateTime
+  expectedReturn DateTime?
+  status         InjuryStatus @default(ACTIVE)
+
+  @@map("player_injuries")
+}
+
+model PlayerContract {
+  id        String    @id @default(cuid())
+  playerId  String
+  player    Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team      @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  startDate DateTime
+  endDate   DateTime?
+  salary    Float?
+  currency  String?
+
+  @@map("player_contracts")
+}
+
+// ==================== Referee ====================
+
+model Referee {
+  id          String  @id @default(cuid())
+  name        String
+  nationality String?
+  externalRef Json?
+
+  matches Match[]
+
+  @@map("referees")
+}
+
+// ==================== Match Module ====================
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  HALFTIME
+  FINISHED
+  POSTPONED
+  CANCELLED
+}
+
+model Match {
+  id            String      @id @default(cuid())
+  competitionId String
+  competition   Competition @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  seasonId      String
+  season        Season      @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  roundId       String?
+  round         Round?      @relation(fields: [roundId], references: [id])
+  stageId       String?
+  stage         Stage?      @relation(fields: [stageId], references: [id])
+
+  homeTeamId String
+  homeTeam   Team   @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId String
+  awayTeam   Team   @relation("AwayTeam", fields: [awayTeamId], references: [id])
+
+  stadiumId String?
+  refereeId String?
+  referee   Referee? @relation(fields: [refereeId], references: [id])
+
+  kickoffAt   DateTime
+  status      MatchStatus @default(SCHEDULED)
+  homeScore   Int?
+  awayScore   Int?
+  externalRef Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  liveState        LiveMatchState?
+  statistics       MatchStatistic[]
+  events           MatchEvent[]
+  lineups          MatchLineup[]
+  formations       Formation[]
+  playerRatings    PlayerRating[]
+  teamRatings      TeamRating[]
+  commentaries     Commentary[]
+  shots            MatchShot[]
+  highlights       MatchHighlight[]
+  averagePositions MatchAveragePosition[]
+  momentum         MatchMomentum[]
+  odds             MatchOdds[]
+  aiSummary        AiMatchSummary?
+
+  @@index([status, kickoffAt])
+  @@map("matches")
+}
+
+// Denormalized, đọc nhanh cho REST live snapshot + nguồn cache Redis.
+// Xem docs/architecture/data-provider-and-realtime-plan.md § 3.1
+model LiveMatchState {
+  matchId      String      @id
+  match        Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  status       MatchStatus
+  minute       Int?
+  homeScore    Int         @default(0)
+  awayScore    Int         @default(0)
+  lastEventSeq Int         @default(0)
+  updatedAt    DateTime    @updatedAt
+
+  @@map("live_match_state")
+}
+
+model MatchStatistic {
+  id     String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId  String
+  team    Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  shotsOnGoal  Int?
+  shotsOffGoal Int?
+  possession   Float?
+  corners      Int?
+  fouls        Int?
+  offsides     Int?
+  raw          Json?
+
+  @@unique([matchId, teamId])
+  @@map("match_statistics")
+}
+
+enum MatchEventType {
+  GOAL
+  OWN_GOAL
+  PENALTY
+  YELLOW_CARD
+  RED_CARD
+  SUBSTITUTION
+  VAR
+}
+
+// seq tăng dần theo matchId — dùng để dedup & catch-up khi client reconnect WebSocket
+model MatchEvent {
+  id       String         @id @default(cuid())
+  matchId  String
+  match    Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  seq      Int
+  minute   Int
+  type     MatchEventType
+  teamId   String?
+  team     Team?          @relation(fields: [teamId], references: [id])
+  playerId String?
+  player   Player?        @relation("EventPlayer", fields: [playerId], references: [id])
+
+  relatedPlayerId String? // vd: người kiến tạo, hoặc cầu thủ vào sân khi thay người
+  relatedPlayer   Player? @relation("EventRelatedPlayer", fields: [relatedPlayerId], references: [id])
+
+  detail Json?
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, seq])
+  @@map("match_events")
+}
+
+model MatchLineup {
+  id          String  @id @default(cuid())
+  matchId     String
+  match       Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId      String
+  team        Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      Player  @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  position    String?
+  shirtNumber Int?
+  isStarting  Boolean @default(true)
+
+  @@unique([matchId, playerId])
+  @@map("match_lineups")
+}
+
+model Formation {
+  id        String @id @default(cuid())
+  matchId   String
+  match     Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  formation String // ví dụ "4-3-3"
+  positions Json?
+
+  @@unique([matchId, teamId])
+  @@map("formations")
+}
+
+model PlayerRating {
+  id       String @id @default(cuid())
+  matchId  String
+  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  rating   Float
+  // Thống kê chi tiết theo trận (touches/passes/tackles/...) từ nguồn cung cấp — không model hoá
+  // riêng từng field (khác nhau tuỳ nguồn), giống pattern `raw` ở MatchStatistic/AiUsageLog.
+  stats    Json?
+
+  @@unique([matchId, playerId])
+  @@map("player_ratings")
+}
+
+model TeamRating {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId  String
+  team    Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  rating  Float
+
+  @@unique([matchId, teamId])
+  @@map("team_ratings")
+}
+
+model Commentary {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  minute  Int
+  seq     Int
+  text    String
+
+  @@unique([matchId, seq])
+  @@map("commentaries")
+}
+
+// Từng cú sút trong trận (Sofascore's /event/{id}/shotmap, verify thật 2026-08-19) — xg/xgot theo
+// cú sút (khác PlayerRating.stats's xG/xA TỔNG theo trận). `playerId` nullable — cùng convention
+// MatchEvent.player (match_player() trong scraper.py có thể không khớp được tên).
+model MatchShot {
+  id        String  @id @default(cuid())
+  matchId   String
+  match     Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId  String?
+  player    Player? @relation(fields: [playerId], references: [id])
+  minute    Int
+  shotType  String // "goal" | "save" | "miss" | "block" (verify thật 2026-08-19)
+  situation String?
+  bodyPart  String?
+  xg        Float?
+  xgot      Float?
+  x         Float
+  y         Float
+  raw       Json
+
+  @@index([matchId])
+  @@map("match_shots")
+}
+
+// Link video highlight YouTube thật (Sofascore's /event/{id}/highlights) — chỉ lưu link, KHÔNG
+// host video. `url`/`sourceUrl` trong response thật thường trùng giá trị (verify 2026-08-19) —
+// chỉ giữ `url`, không thêm field trùng lặp.
+model MatchHighlight {
+  id           String  @id @default(cuid())
+  matchId      String
+  match        Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  title        String
+  url          String
+  thumbnailUrl String?
+
+  @@unique([matchId, url])
+  @@map("match_highlights")
+}
+
+// Vị trí trung bình mỗi cầu thủ trên sân (Sofascore's /event/{id}/average-positions) — khác
+// Formation.formation (chuỗi sơ đồ vd "4-3-3"), đây là toạ độ (x,y) thật để vẽ sơ đồ trực quan.
+model MatchAveragePosition {
+  id       String @id @default(cuid())
+  matchId  String
+  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  averageX Float
+  averageY Float
+
+  @@unique([matchId, playerId])
+  @@map("match_average_positions")
+}
+
+// Đường "momentum" trận đấu theo phút (Sofascore's /event/{id}/graph) — `minute` là Float, KHÔNG
+// phải Int (verify thật 2026-08-19: có điểm ở phút bù giờ dạng "90.5").
+model MatchMomentum {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  minute  Float
+  value   Int
+
+  @@unique([matchId, minute])
+  @@map("match_momentum")
+}
+
+// Tỉ lệ cược nhà cái (Sofascore's /event/{id}/odds/1/all) — admin-only, CHƯA có UI public hiển thị
+// (xem CLAUDE.md § Scraper). 1 dòng/market (KHÔNG phải 1 dòng/choice — verify thật 2026-08-19: 1
+// trận có 18 market, nhiều market TRÙNG `marketName` — vd "Match goals" lặp lại ứng với nhiều mốc
+// Over/Under khác nhau — nên `marketName` một mình KHÔNG unique, phải dùng `sofascoreMarketId`
+// (Sofascore's `id` riêng từng market) làm khoá. `raw` giữ nguyên cả object market (gồm
+// `choices`/`marketGroup`/`marketPeriod`) — không tách field, phù hợp mức độ ưu tiên thấp của loại
+// data này.
+model MatchOdds {
+  id                String @id @default(cuid())
+  matchId           String
+  match             Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  sofascoreMarketId Int
+  marketName        String
+  raw               Json
+
+  @@unique([matchId, sofascoreMarketId])
+  @@map("match_odds")
+}
+
+// ==================== Standing Module ====================
+
+model Standing {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  position Int
+  played   Int   @default(0)
+  win      Int   @default(0)
+  draw     Int   @default(0)
+  loss     Int   @default(0)
+  gf       Int   @default(0)
+  ga       Int   @default(0)
+  gd       Int   @default(0)
+  points   Int   @default(0)
+  form     Json?
+
+  @@unique([seasonId, teamId])
+  @@map("standings")
+}
+
+model TopScorer {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  goals    Int
+  rank     Int
+
+  @@unique([seasonId, playerId])
+  @@map("top_scorers")
+}
+
+model TopAssist {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  playerId String
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  assists  Int
+  rank     Int
+
+  @@unique([seasonId, playerId])
+  @@map("top_assists")
+}
+
+model CleanSheet {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  count    Int
+  rank     Int
+
+  @@unique([seasonId, teamId])
+  @@map("clean_sheets")
+}
+
+// ==================== AI Module ====================
+// Embedding/vector column sẽ thêm ở Phase 4 khi wiring pgvector thật
+// (xem docs/architecture/PROJECT_PLAN.md § 7.1)
+
+model AiMatchSummary {
+  id        String   @id @default(cuid())
+  matchId   String   @unique
+  match     Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  content   String
+  model     String
+  createdAt DateTime @default(now())
+
+  @@map("ai_match_summary")
+}
+
+model AiPlayerSummary {
+  id        String   @id @default(cuid())
+  playerId  String   @unique
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  content   String
+  model     String
+  createdAt DateTime @default(now())
+
+  @@map("ai_player_summary")
+}
+
+// So sánh 2 cầu thủ bằng AI (ROADMAP Phase 5) — khác AiMatchSummary/AiPlayerSummary (1 FK
+// @unique), đây là quan hệ 2 FK nên cần canonical order để (A,B) và (B,A) luôn map về đúng 1
+// row: route tự canonicalize (playerAId = min theo string compare) TRƯỚC khi đọc/ghi, không dựa
+// vào caller gửi đúng thứ tự. TTL 7 ngày giống AiPlayerSummary — stats CẢ HAI cầu thủ đổi trong
+// mùa, không đông cứng như match.
+model AiPlayerComparison {
+  id        String   @id @default(cuid())
+  playerAId String
+  playerA   Player   @relation("AiPlayerComparisonPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerBId String
+  playerB   Player   @relation("AiPlayerComparisonPlayerB", fields: [playerBId], references: [id], onDelete: Cascade)
+  content   String
+  model     String
+  createdAt DateTime @default(now())
+
+  @@unique([playerAId, playerBId])
+  histories PlayerCompareHistory[]
+
+  @@map("ai_player_comparison")
+}
+
+// Lịch sử so sánh CỦA TỪNG USER — khác AiPlayerComparison (cache CHUNG, không gắn user). Ghi/bump
+// mỗi lần POST /players/compare trả 200 cho user đó (kể cả cache hit — user vẫn "vừa xem" cặp
+// này), KHÔNG tính vào AiUsageLog cap (đó chỉ tính LLM call thật). unique theo (userId,
+// comparisonId) — re-xem cùng cặp chỉ bump viewedAt, không tạo dòng mới.
+model PlayerCompareHistory {
+  id           String             @id @default(cuid())
+  userId       String
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comparisonId String
+  comparison   AiPlayerComparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  viewedAt     DateTime           @default(now())
+
+  @@unique([userId, comparisonId])
+  @@map("player_compare_history")
+}
+
+enum ChatRole {
+  USER
+  ASSISTANT
+}
+
+model ChatHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String
+  role      ChatRole
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([userId, sessionId])
+  @@map("chat_history")
+}
+
+model PromptTemplate {
+  id       String @id @default(cuid())
+  key      String @unique
+  template String
+  version  Int    @default(1)
+
+  @@map("prompt_templates")
+}
+
+model Embedding {
+  id         String   @id @default(cuid())
+  sourceType String   // ví dụ "match_summary", "commentary"
+  sourceId   String
+  content    String
+  model      String
+  createdAt  DateTime @default(now())
+
+  @@index([sourceType, sourceId])
+  @@map("embeddings")
+}
+
+model AiUsageLog {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  feature      String   // ví dụ "chat", "match_summary", "player_compare"
+  tokensInput  Int      @default(0)
+  tokensOutput Int      @default(0)
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("ai_usage_logs")
+}
+
+// ==================== System Log Module ====================
+
+// Lỗi/warning quan trọng từ apps/api và apps/sync-worker (service dài hạn) — trước đó CHỈ có
+// console.error/warn, đi thẳng ra stdout/stderr, không có gì lưu lại được (Render's log stream tự
+// mất theo thời gian, không ai xem trừ khi chủ động mở dashboard đúng lúc). KHÔNG ghi mọi
+// console.log (sẽ phình DB vô ích) — chỉ các catch-block "fire-and-forget không được throw ra
+// ngoài" đã có sẵn trong code (sync-live-matches.ts, live-odds.ts, poll-live-matches.ts,
+// goal-notifier.ts...) và lỗi 500 chưa bắt được ở tầng route (app.onError trong apps/api/src/
+// app.ts) — đây chính xác là các chỗ lỗi "biến mất im lặng" hiện tại.
+enum SystemLogService {
+  API
+  SYNC_WORKER
+}
+
+enum SystemLogLevel {
+  WARN
+  ERROR
+}
+
+model SystemLog {
+  id        String           @id @default(cuid())
+  service   SystemLogService
+  level     SystemLogLevel
+  message   String
+  detail    Json?
+  createdAt DateTime         @default(now())
+
+  @@index([service, level, createdAt])
+  @@map("system_logs")
+}
+
+// ==================== Notification Module ====================
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  logs NotificationLog[]
+
+  @@map("notifications")
+}
+
+enum NotificationChannel {
+  FCM
+  EMAIL
+}
+
+enum NotificationLogStatus {
+  SENT
+  FAILED
+}
+
+model NotificationLog {
+  id             String                 @id @default(cuid())
+  notificationId String
+  notification   Notification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  channel        NotificationChannel
+  status         NotificationLogStatus
+  error          String?
+  sentAt         DateTime               @default(now())
+
+  @@map("notification_logs")
+}
+
+// Lịch sử chạy pipeline scrape Sofascore từ trang admin (ROADMAP — trước đó chỉ chạy tay 3 bước
+// CLI, xem apps/scraper-sofascore). Mỗi row là 1 lần admin bấm "Áp dụng" — apps/api spawn 3
+// subprocess (generate-manifest -> python scraper.py -> ingest) và cập nhật row này theo tiến độ.
+enum ScraperRunStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
+
+model ScraperRun {
+  id                   String           @id @default(cuid())
+  competitionId        String
+  competition          Competition      @relation(fields: [competitionId], references: [id])
+  seasonId             String
+  season               Season           @relation(fields: [seasonId], references: [id])
+  requestedLimit       Int
+  // Loại data admin chọn scrape (vd "events","lineups","statistics","commentary","shotmap",
+  // "highlights","averagePositions","momentum","odds") — xem SCRAPER_DATA_TYPES trong
+  // apps/api/src/scraper-competitions.ts. Default 3 loại cũ — giữ đúng hành vi các ScraperRun đã
+  // tồn tại trước migration này (Prisma 6 hỗ trợ default list literal trên Postgres).
+  dataTypes            String[] @default(["events", "lineups", "statistics"])
+  status               ScraperRunStatus @default(PENDING)
+  matchesFound         Int?
+  matchesScraped       Int?
+  ingestSummary        Json?
+  errorMessage         String?
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?       @relation(fields: [createdByAdminUserId], references: [id])
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime         @default(now())
+
+  @@map("scraper_runs")
+}
+
+// Lịch sử chạy đồng bộ danh mục football-data.org (teams/players/standings/matches/topScorers)
+// từ trang admin — trước đó chỉ chạy tay qua CLI (SYNC_MODE=catalog, xem
+// apps/sync-worker/src/sync-all.ts). Reuse ScraperRunStatus (cùng semantics
+// PENDING/RUNNING/SUCCESS/FAILED, không cần enum riêng). Khác ScraperRun: không có
+// requestedLimit/dataTypes (luôn sync đầy đủ 1 competition+season, không theo trận/loại data).
+model SyncRun {
+  id                   String           @id @default(cuid())
+  competitionId        String
+  competition          Competition      @relation(fields: [competitionId], references: [id])
+  seasonId             String
+  season               Season           @relation(fields: [seasonId], references: [id])
+  status               ScraperRunStatus @default(PENDING)
+  resultSummary        Json?
+  errorMessage         String?
+  createdByAdminUserId String?
+  createdByAdminUser   AdminUser?       @relation(fields: [createdByAdminUserId], references: [id])
+  startedAt            DateTime?
+  finishedAt           DateTime?
+  createdAt            DateTime         @default(now())
+
+  @@map("sync_runs")
+}
+
+model Subscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic     String   // ví dụ "team:123", "match:456"
+  createdAt DateTime @default(now())
+
+  @@unique([userId, topic])
+  @@map("subscriptions")
+}
+
+// ==================== Search ====================
+
+model SearchHistory {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  query     String
+  createdAt DateTime @default(now())
+
+  @@map("search_history")
+}
+
+// ==================== Platform / Ops Module ====================
+
+model AppConfig {
+  key         String   @id
+  value       Json
+  description String?
+  isEnabled   Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+
+  @@map("app_config")
+}

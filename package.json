@@ -1,0 +1,39 @@
+{
+  "name": "football-app",
+  "private": true,
+  "version": "0.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter @football-app/database db:generate",
+    "db:migrate": "pnpm --filter @football-app/database db:migrate",
+    "db:studio": "pnpm --filter @football-app/database exec prisma studio",
+    "docker:up": "docker compose up -d postgres redis dozzle firebase-emulator api",
+    "docker:auth-ui": "open http://localhost:4000/auth",
+    "docker:down": "docker compose down",
+    "docker:logs": "open http://localhost:8080",
+    "docker:worker": "docker compose --profile worker run --rm sync-worker",
+    "docker:worker:live": "docker compose --profile worker up sync-worker-live",
+    "docker:test": "docker compose -f docker-compose.test.yml up --build --abort-on-container-exit --exit-code-from test-runner; docker compose -f docker-compose.test.yml down -v",
+    "secretlint": "secretlint --secretlintignore .gitignore \"**/*\"",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@secretlint/secretlint-rule-preset-recommend": "^13.0.4",
+    "eslint": "^9.17.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.3.0",
+    "secretlint": "^13.0.4",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.19.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}

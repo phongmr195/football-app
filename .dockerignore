@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.turbo
+**/build
+packages/database/generated
+apps/mobile
+.git
+.github
+docs
+*.md
+.env
+.env.*
+!.env.example
