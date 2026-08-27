@@ -52,9 +52,8 @@ ENV TLS_LIBRARY_PATH=/opt/tls-client.so
 
 WORKDIR /app
 COPY --from=build /deploy/sync-worker .
-# Chỉ cần đúng 1 file scraper.py (không cần generate-sofascore-manifest.ts's roster lookup hay
-# requirements.txt riêng — đã pip install trực tiếp ở trên) — sofascore-match-scrape.ts tự build
-# manifest trong memory, không qua bước generate-manifest riêng như pipeline admin-scraper.
-COPY apps/scraper-sofascore/scraper.py ./scraper/scraper.py
+# scraper.py imports sofascore_tls_patch.py — copy cả 2 (bug thật: quên copy file thứ 2 gây
+# ModuleNotFoundError trên Render).
+COPY apps/scraper-sofascore/scraper.py apps/scraper-sofascore/sofascore_tls_patch.py ./scraper/
 
 CMD ["node", "dist/local.js"]
