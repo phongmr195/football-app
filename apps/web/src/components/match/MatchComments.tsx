@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { MessageSquare, Send, Smile } from "lucide-react";
+import { AtSign, MessageSquare, Send, Smile } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
-import { useMatchComments, usePostMatchComment } from "@/lib/use-match-comments";
+import { useCurrentUserId, useMatchComments, usePostMatchComment } from "@/lib/use-match-comments";
 import type { MatchComment, MatchCommentAuthor } from "@/lib/types";
 
 const MENTION_SPLIT_RE = /(@[a-zA-Z0-9_]{2,40})/g;
@@ -25,6 +25,28 @@ const QUICK_EMOJIS = [
 
 function authorLabel(author: MatchCommentAuthor): string {
   return author.displayName ?? "Người dùng";
+}
+
+function readMentionStorageKey(matchId: string): string {
+  return `mentionsRead:${matchId}`;
+}
+
+function loadReadMentionIds(matchId: string): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(readMentionStorageKey(matchId));
+    return raw ? new Set(JSON.parse(raw)) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function saveReadMentionIds(matchId: string, ids: Set<string>): void {
+  try {
+    localStorage.setItem(readMentionStorageKey(matchId), JSON.stringify([...ids]));
+  } catch {
+    // localStorage có thể bị chặn (private mode...) — bỏ qua, chỉ mất phần "đã đọc" persist
+  }
 }
 
 /** Render content với `@username` được tô đậm — cùng regex charset đã dùng ở backend
@@ -47,9 +69,12 @@ function CommentContent({ content }: { content: string }) {
   );
 }
 
-function CommentRow({ comment }: { comment: MatchComment }) {
+function CommentRow({ comment, rowRef }: { comment: MatchComment; rowRef?: (el: HTMLLIElement | null) => void }) {
   return (
-    <li className="flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900">
+    <li
+      ref={rowRef}
+      className="flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+    >
       <div className="flex items-baseline gap-2">
         <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           {authorLabel(comment.author)}
@@ -72,14 +97,47 @@ function CommentRow({ comment }: { comment: MatchComment }) {
  * username) — xem apps/api/src/routes/match-comments.ts. */
 export function MatchComments({ matchId }: { matchId: string }) {
   const { user, loading: authLoading } = useAuth();
+  const { data: currentUserId } = useCurrentUserId();
   const commentsQuery = useMatchComments(matchId);
   const postComment = usePostMatchComment(matchId);
 
   const [input, setInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const rowRefs = useRef<Map<string, HTMLLIElement>>(new Map());
+  // Set true ngay sau khi tự mình đăng comment thành công — effect dưới đọc cờ này khi `comments`
+  // đổi (list đã có comment mới) rồi mới scroll, tránh scroll trước khi DOM render xong.
+  const pendingScrollRef = useRef(false);
 
   const comments = commentsQuery.data ?? EMPTY_COMMENTS;
+
+  // Lazy init (không phải effect) — chỉ đọc 1 lần lúc mount, matchId ổn định suốt vòng đời
+  // component (route đổi match thì component tự unmount/remount theo Next.js).
+  const [readMentionIds, setReadMentionIds] = useState<Set<string>>(() => loadReadMentionIds(matchId));
+
+  useEffect(() => {
+    if (!pendingScrollRef.current) return;
+    pendingScrollRef.current = false;
+    listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
+  }, [comments]);
+
+  // Bình luận mention mình mà chưa nhấn xem qua (persist trong localStorage theo trận, xem
+  // markMentionRead dưới).
+  const unreadMentions = useMemo(() => {
+    if (!currentUserId) return [];
+    return comments.filter((c) => c.mentionedUserIds.includes(currentUserId) && !readMentionIds.has(c.id));
+  }, [comments, currentUserId, readMentionIds]);
+
+  function markMentionRead(commentId: string) {
+    rowRefs.current.get(commentId)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setReadMentionIds((prev) => {
+      if (prev.has(commentId)) return prev;
+      const next = new Set(prev).add(commentId);
+      saveReadMentionIds(matchId, next);
+      return next;
+    });
+  }
 
   // `Date.now()` không được gọi trong render/useMemo (react-hooks/purity) — tính qua effect,
   // refresh mỗi phút thay vì tick liên tục (đủ mượt cho 1 gợi ý autocomplete, không cần chính xác
@@ -140,6 +198,7 @@ export function MatchComments({ matchId }: { matchId: string }) {
     try {
       await postComment.mutateAsync(content);
       setInput("");
+      pendingScrollRef.current = true;
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 429
@@ -168,9 +227,16 @@ export function MatchComments({ matchId }: { matchId: string }) {
       ) : comments.length === 0 ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">Chưa có bình luận nào.</p>
       ) : (
-        <ul className="flex max-h-96 flex-col gap-1 overflow-y-auto">
+        <ul ref={listRef} className="flex max-h-96 flex-col gap-1 overflow-y-auto">
           {comments.map((comment) => (
-            <CommentRow key={comment.id} comment={comment} />
+            <CommentRow
+              key={comment.id}
+              comment={comment}
+              rowRef={(el) => {
+                if (el) rowRefs.current.set(comment.id, el);
+                else rowRefs.current.delete(comment.id);
+              }}
+            />
           ))}
         </ul>
       )}
@@ -209,6 +275,29 @@ export function MatchComments({ matchId }: { matchId: string }) {
               rows={2}
               className="flex-1 resize-none"
             />
+            {unreadMentions.length > 0 ? (
+              <Popover>
+                <PopoverTrigger className="flex h-9 items-center gap-0.5 rounded-full border border-amber-300 bg-amber-50 px-2 text-xs font-semibold text-amber-700 hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-400 dark:hover:bg-amber-900">
+                  <AtSign className="h-3.5 w-3.5" aria-hidden="true" />
+                  {unreadMentions.length}
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-64 p-1">
+                  <ul className="flex flex-col gap-0.5">
+                    {unreadMentions.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          onClick={() => markMentionRead(c.id)}
+                          className="w-full truncate rounded px-2 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800"
+                        >
+                          <span className="font-medium">{authorLabel(c.author)}:</span> {c.content}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </PopoverContent>
+              </Popover>
+            ) : null}
             <Popover>
               <PopoverTrigger
                 className={buttonVariants({ variant: "outline", size: "icon" })}

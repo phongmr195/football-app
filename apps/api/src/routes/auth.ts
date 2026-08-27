@@ -5,7 +5,7 @@ import { hashPassword, verifyPassword } from "@football-app/shared";
 import { getAuth } from "firebase-admin/auth";
 import { Hono } from "hono";
 import { z } from "zod";
-import { getFirebaseApp } from "../middleware/auth";
+import { getFirebaseApp, requireAuth } from "../middleware/auth";
 import { logError } from "../logger";
 
 // Đăng ký/đăng nhập username+password cho USER THƯỜNG — hoàn toàn khác admin.ts's /admin/login
@@ -118,4 +118,9 @@ export const authRoute = new Hono()
     }
 
     return c.json({ customToken });
+  })
+  // Client chỉ biết Firebase UID, không biết internal User.id (cuid) mà mentionedUserIds/author.id
+  // dùng — cần endpoint này để so khớp "mình có bị mention không".
+  .get("/auth/me", requireAuth, async (c) => {
+    return c.json({ id: c.get("userId") });
   });

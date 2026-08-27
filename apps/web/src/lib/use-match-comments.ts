@@ -38,6 +38,22 @@ export function useMatchComments(matchId: string) {
   return query;
 }
 
+/** Internal User.id (cuid) của người đang đăng nhập — client chỉ có sẵn Firebase UID, cần fetch
+ * riêng để so khớp với mentionedUserIds/author.id (đều là internal id). */
+export function useCurrentUserId() {
+  const { user, getIdToken } = useAuth();
+  return useQuery({
+    queryKey: ["me", user?.uid ?? null],
+    queryFn: async () => {
+      const idToken = await getIdToken();
+      const { id } = await apiGetClient<{ id: string }>("/auth/me", undefined, { idToken });
+      return id;
+    },
+    enabled: !!user,
+    staleTime: Infinity,
+  });
+}
+
 export function usePostMatchComment(matchId: string) {
   const { getIdToken } = useAuth();
   const queryClient = useQueryClient();
