@@ -51,32 +51,45 @@ function getRedirectTarget(): string {
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
 
+// Validator theo từng field — vừa dùng cho live inline error (theo touched state, xem AuthPage),
+// vừa dùng lại trong validateRegisterForm() cho lần chặn submit cuối cùng, tránh lặp rule 2 nơi.
+function validateFullName(value: string): string | null {
+  const trimmed = value.trim();
+  if (trimmed.length < 2 || trimmed.length > 100) return "Họ tên phải có 2-100 ký tự";
+  return null;
+}
+
+function validateUsername(value: string): string | null {
+  if (value.length < 3 || value.length > 20) return "Tên đăng nhập phải có 3-20 ký tự";
+  if (!USERNAME_PATTERN.test(value)) return "Tên đăng nhập chỉ gồm chữ, số và dấu gạch dưới";
+  return null;
+}
+
+function validatePassword(value: string): string | null {
+  if (value.length < 8) return "Mật khẩu phải có ít nhất 8 ký tự";
+  if (!/[A-Za-z]/.test(value)) return "Mật khẩu phải có ít nhất 1 chữ cái";
+  if (!/[A-Z]/.test(value)) return "Mật khẩu phải có ít nhất 1 chữ hoa";
+  if (!/[0-9]/.test(value)) return "Mật khẩu phải có ít nhất 1 chữ số";
+  return null;
+}
+
+function validateConfirmPassword(password: string, confirmPassword: string): string | null {
+  if (password !== confirmPassword) return "Xác nhận mật khẩu không khớp";
+  return null;
+}
+
 function validateRegisterForm(
   fullName: string,
   username: string,
   password: string,
   confirmPassword: string,
 ): string | null {
-  const trimmedFullName = fullName.trim();
-  if (trimmedFullName.length < 2 || trimmedFullName.length > 100) {
-    return "Họ tên phải có 2-100 ký tự";
-  }
-  if (username.length < 3 || username.length > 20) {
-    return "Tên đăng nhập phải có 3-20 ký tự";
-  }
-  if (!USERNAME_PATTERN.test(username)) {
-    return "Tên đăng nhập chỉ gồm chữ, số và dấu gạch dưới";
-  }
-  if (password.length < 8) {
-    return "Mật khẩu phải có ít nhất 8 ký tự";
-  }
-  if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
-    return "Mật khẩu phải có ít nhất 1 chữ cái và 1 chữ số";
-  }
-  if (password !== confirmPassword) {
-    return "Xác nhận mật khẩu không khớp";
-  }
-  return null;
+  return (
+    validateFullName(fullName) ??
+    validateUsername(username) ??
+    validatePassword(password) ??
+    validateConfirmPassword(password, confirmPassword)
+  );
 }
 
 /**
@@ -99,6 +112,26 @@ export default function AuthPage() {
   const [registerUsername, setRegisterUsername] = useState("");
   const [registerPassword, setRegisterPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Field nào đã bị blur ít nhất 1 lần — chỉ hiện lỗi field đó từ đó trở đi (tránh báo lỗi ngay ký
+  // tự đầu tiên). Sau khi touched, lỗi tính lại LIVE mỗi lần gõ (derive thẳng từ state, không lưu
+  // string lỗi riêng) — không cần debounce vì validator chỉ so sánh string, rẻ.
+  const [registerTouched, setRegisterTouched] = useState({
+    fullName: false,
+    username: false,
+    password: false,
+    confirmPassword: false,
+  });
+  function touchRegisterField(field: keyof typeof registerTouched) {
+    setRegisterTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+  }
+
+  const fullNameError = registerTouched.fullName ? validateFullName(fullName) : null;
+  const usernameError = registerTouched.username ? validateUsername(registerUsername) : null;
+  const passwordError = registerTouched.password ? validatePassword(registerPassword) : null;
+  const confirmPasswordError = registerTouched.confirmPassword
+    ? validateConfirmPassword(registerPassword, confirmPassword)
+    : null;
 
   // Vào /auth khi phiên Firebase đã đăng nhập sẵn (session cũ còn hiệu lực) — vẫn phải redirect
   // về `redirect`, không chỉ dừng ở thông báo "đã đăng nhập" bên dưới.
@@ -169,12 +202,12 @@ export default function AuthPage() {
   async function handleRegister(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    // Đảm bảo lỗi field nào cũng hiện ra dù user chưa blur qua (vd submit ngay sau khi chỉ gõ 1
+    // field) — lỗi hiện inline dưới từng field, không cần setError() chung nữa.
+    setRegisterTouched({ fullName: true, username: true, password: true, confirmPassword: true });
 
     const validationError = validateRegisterForm(fullName, registerUsername, registerPassword, confirmPassword);
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
+    if (validationError) return;
 
     setPending(true);
     try {
@@ -266,8 +299,11 @@ export default function AuthPage() {
                     id="register-fullname"
                     autoComplete="name"
                     value={fullName}
+                    aria-invalid={!!fullNameError}
                     onChange={(event) => setFullName(event.target.value)}
+                    onBlur={() => touchRegisterField("fullName")}
                   />
+                  {fullNameError ? <p className="text-xs text-destructive">{fullNameError}</p> : null}
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="register-username">Tên đăng nhập</Label>
@@ -276,8 +312,11 @@ export default function AuthPage() {
                     autoComplete="username"
                     placeholder="3-20 ký tự, chữ/số/gạch dưới"
                     value={registerUsername}
+                    aria-invalid={!!usernameError}
                     onChange={(event) => setRegisterUsername(event.target.value)}
+                    onBlur={() => touchRegisterField("username")}
                   />
+                  {usernameError ? <p className="text-xs text-destructive">{usernameError}</p> : null}
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="register-password">Mật khẩu</Label>
@@ -285,10 +324,13 @@ export default function AuthPage() {
                     id="register-password"
                     type="password"
                     autoComplete="new-password"
-                    placeholder="Ít nhất 8 ký tự, có chữ và số"
+                    placeholder="Ít nhất 8 ký tự, có chữ hoa và số"
                     value={registerPassword}
+                    aria-invalid={!!passwordError}
                     onChange={(event) => setRegisterPassword(event.target.value)}
+                    onBlur={() => touchRegisterField("password")}
                   />
+                  {passwordError ? <p className="text-xs text-destructive">{passwordError}</p> : null}
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <Label htmlFor="register-confirm-password">Xác nhận mật khẩu</Label>
@@ -297,8 +339,13 @@ export default function AuthPage() {
                     type="password"
                     autoComplete="new-password"
                     value={confirmPassword}
+                    aria-invalid={!!confirmPasswordError}
                     onChange={(event) => setConfirmPassword(event.target.value)}
+                    onBlur={() => touchRegisterField("confirmPassword")}
                   />
+                  {confirmPasswordError ? (
+                    <p className="text-xs text-destructive">{confirmPasswordError}</p>
+                  ) : null}
                 </div>
                 <Button type="submit" variant="outline" disabled={pending}>
                   Đăng ký

@@ -33,8 +33,8 @@ function registerBody(overrides: Partial<Record<string, string>> = {}) {
   return {
     fullName: "Nguyễn Văn A",
     username: uniqueUsername(),
-    password: "password123",
-    confirmPassword: "password123",
+    password: "Password123",
+    confirmPassword: "Password123",
     ...overrides,
   };
 }
