@@ -61,6 +61,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
 export interface MatchCommentAuthor {
   id: string;
   displayName: string | null;
+  avatarUrl: string | null;
   // @token dùng để tag user này — username nếu có (user đăng ký username/password), không thì
   // slug từ displayName (Google/Facebook không có username) — null nếu không tag được (không có
   // cả 2). Xem apps/api/src/routes/match-comments.ts's computeMentionHandle().
