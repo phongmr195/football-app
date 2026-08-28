@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { LogIn } from "lucide-react";
 import { ApiError } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
@@ -31,6 +31,22 @@ function extractAuthErrorMessage(err: unknown, fallback: string): string {
     }
   }
   return fallback;
+}
+
+// Chỉ nhận path nội bộ ("/...") — chặn "//evil.com" (protocol-relative, browser hiểu như redirect
+// ra ngoài) lỡ lọt vào query param `redirect`.
+function safeRedirectTarget(raw: string | null): string {
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
+// Đọc thẳng window.location.search tại thời điểm gọi (không qua useSearchParams()) — verify thật
+// 2026-08-28: useSearchParams() trong Suspense boundary trả về giá trị cũ khi vào /auth qua
+// client-side <Link> transition (server log cho thấy URL đúng có ?redirect=... nhưng router.push
+// sau khi login vẫn đi "/"), đọc trực tiếp DOM tránh hẳn caching layer đó.
+function getRedirectTarget(): string {
+  if (typeof window === "undefined") return "/";
+  return safeRedirectTarget(new URLSearchParams(window.location.search).get("redirect"));
 }
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]+$/;
@@ -84,6 +100,12 @@ export default function AuthPage() {
   const [registerPassword, setRegisterPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  // Vào /auth khi phiên Firebase đã đăng nhập sẵn (session cũ còn hiệu lực) — vẫn phải redirect
+  // về `redirect`, không chỉ dừng ở thông báo "đã đăng nhập" bên dưới.
+  useEffect(() => {
+    if (user) router.push(getRedirectTarget());
+  }, [user, router]);
+
   if (user) {
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 lg:px-8">
@@ -103,7 +125,7 @@ export default function AuthPage() {
     setPending(true);
     try {
       await signInWithGoogle();
-      router.push("/");
+      router.push(getRedirectTarget());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng nhập Google thất bại.");
     } finally {
@@ -116,7 +138,7 @@ export default function AuthPage() {
     setPending(true);
     try {
       await signInWithFacebook();
-      router.push("/");
+      router.push(getRedirectTarget());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Đăng nhập Facebook thất bại.");
     } finally {
@@ -136,7 +158,7 @@ export default function AuthPage() {
     setPending(true);
     try {
       await signInWithUsernamePassword(loginUsername.trim(), loginPassword);
-      router.push("/");
+      router.push(getRedirectTarget());
     } catch (err) {
       setError(extractAuthErrorMessage(err, "Đăng nhập thất bại, thử lại sau"));
     } finally {
@@ -162,7 +184,7 @@ export default function AuthPage() {
         registerPassword,
         confirmPassword,
       );
-      router.push("/");
+      router.push(getRedirectTarget());
     } catch (err) {
       setError(extractAuthErrorMessage(err, "Đăng ký thất bại, thử lại sau"));
     } finally {

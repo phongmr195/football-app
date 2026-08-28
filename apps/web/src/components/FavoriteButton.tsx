@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useCallback } from "react";
 import { Star } from "lucide-react";
 import { Button } from "@football-app/ui";
@@ -54,12 +54,12 @@ export function FavoriteButton(props: FavoriteButtonProps) {
 
   if (!user) {
     return (
-      <Link href="/auth">
+      <AuthLink>
         <Button size="sm" variant="outline" className="gap-1.5">
           <Star className="h-4 w-4" aria-hidden="true" />
           Theo dõi
         </Button>
-      </Link>
+      </AuthLink>
     );
   }
 

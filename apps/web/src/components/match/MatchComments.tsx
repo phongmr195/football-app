@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { AtSign, MessageSquare, Send, Smile } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -243,9 +243,7 @@ export function MatchComments({ matchId }: { matchId: string }) {
 
       {authLoading ? null : !user ? (
         <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          <Link href="/auth" className="underline">
-            Đăng nhập
-          </Link>{" "}
+          <AuthLink className="underline">Đăng nhập</AuthLink>{" "}
           để bình luận.
         </p>
       ) : (

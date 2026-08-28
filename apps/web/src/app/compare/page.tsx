@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useState } from "react";
 import { AlertCircle, Scale, Sparkles } from "lucide-react";
 import { Badge, Button, Card, Container } from "@football-app/ui";
@@ -73,9 +73,9 @@ export default function ComparePage() {
           <p className="text-zinc-600 dark:text-zinc-400">
             Đăng nhập để so sánh 2 cầu thủ bằng AI.
           </p>
-          <Link href="/auth">
+          <AuthLink>
             <Button>Đăng nhập</Button>
-          </Link>
+          </AuthLink>
         </Card>
       ) : (
         <>

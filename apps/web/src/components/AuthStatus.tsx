@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useEffect, useRef, useState } from "react";
 import { Heart, History, LogOut } from "lucide-react";
 import { Button } from "@football-app/ui";
@@ -35,11 +36,11 @@ export function AuthStatus() {
 
   if (!user) {
     return (
-      <Link href="/auth">
+      <AuthLink>
         <Button size="sm" variant="outline">
           Đăng nhập
         </Button>
-      </Link>
+      </AuthLink>
     );
   }
 

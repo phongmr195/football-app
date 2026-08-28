@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useEffect, useRef, useState } from "react";
 import { Loader2, MessageCircle, Plus, Send } from "lucide-react";
 import { Button, Card, Container } from "@football-app/ui";
@@ -122,9 +122,9 @@ export default function ChatPage() {
       ) : !user ? (
         <Card className="flex flex-col items-center gap-4 py-10 text-center">
           <p className="text-zinc-600 dark:text-zinc-400">Đăng nhập để chat với AI về đội bóng/cầu thủ.</p>
-          <Link href="/auth">
+          <AuthLink>
             <Button>Đăng nhập</Button>
-          </Link>
+          </AuthLink>
         </Card>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-[220px_1fr]">
