@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, History } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -68,9 +69,9 @@ export function FavoritesDashboardSection() {
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Đăng nhập để theo dõi đội bóng yêu thích và nhận thông báo khi họ ghi bàn.
           </p>
-          <Link href="/auth">
+          <AuthLink>
             <Button>Đăng nhập</Button>
-          </Link>
+          </AuthLink>
         </CardContent>
       </Card>
     );

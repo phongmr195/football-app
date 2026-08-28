@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useEffect, useState } from "react";
 import { Bell, Heart, Shield, StarOff, User } from "lucide-react";
 import { Badge, Button, Card, Container } from "@football-app/ui";
@@ -140,9 +141,9 @@ export default function FavoritesPage() {
           <p className="text-zinc-600 dark:text-zinc-400">
             Đăng nhập để xem danh sách đội bóng và cầu thủ bạn đang theo dõi.
           </p>
-          <Link href="/auth">
+          <AuthLink>
             <Button>Đăng nhập</Button>
-          </Link>
+          </AuthLink>
         </Card>
       </Container>
     );

@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { AuthLink } from "@/components/AuthLink";
 import { useEffect, useState } from "react";
 import { History, Sparkles } from "lucide-react";
 import { Button, Card, Container } from "@football-app/ui";
@@ -56,9 +57,9 @@ export default function CompareHistoryPage() {
       ) : !user ? (
         <Card className="flex flex-col items-center gap-4 py-10 text-center">
           <p className="text-zinc-600 dark:text-zinc-400">Đăng nhập để xem lịch sử so sánh cầu thủ của bạn.</p>
-          <Link href="/auth">
+          <AuthLink>
             <Button>Đăng nhập</Button>
-          </Link>
+          </AuthLink>
         </Card>
       ) : error ? (
         <Card className="text-sm text-red-600 dark:text-red-400">{error}</Card>
