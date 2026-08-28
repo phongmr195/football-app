@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { AtSign, MessageSquare, Send, Smile } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +26,10 @@ const QUICK_EMOJIS = [
 
 function authorLabel(author: MatchCommentAuthor): string {
   return author.displayName ?? "Người dùng";
+}
+
+function authorInitial(author: MatchCommentAuthor): string {
+  return authorLabel(author).trim().charAt(0).toUpperCase() || "?";
 }
 
 function readMentionStorageKey(matchId: string): string {
@@ -73,19 +78,25 @@ function CommentRow({ comment, rowRef }: { comment: MatchComment; rowRef?: (el: 
   return (
     <li
       ref={rowRef}
-      className="flex flex-col gap-0.5 rounded-lg px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+      className="flex gap-2 rounded-lg px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-900"
     >
-      <div className="flex items-baseline gap-2">
-        <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-          {authorLabel(comment.author)}
-        </span>
-        <span className="text-xs text-zinc-400 dark:text-zinc-600">
-          {new Date(comment.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
-        </span>
+      <Avatar size="sm" className="mt-0.5">
+        {comment.author.avatarUrl ? <AvatarImage src={comment.author.avatarUrl} alt="" /> : null}
+        <AvatarFallback>{authorInitial(comment.author)}</AvatarFallback>
+      </Avatar>
+      <div className="flex flex-1 flex-col gap-0.5">
+        <div className="flex items-baseline gap-2">
+          <span className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            {authorLabel(comment.author)}
+          </span>
+          <span className="text-xs text-zinc-400 dark:text-zinc-600">
+            {new Date(comment.createdAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        </div>
+        <p className="text-sm text-zinc-700 dark:text-zinc-300">
+          <CommentContent content={comment.content} />
+        </p>
       </div>
-      <p className="text-sm text-zinc-700 dark:text-zinc-300">
-        <CommentContent content={comment.content} />
-      </p>
     </li>
   );
 }

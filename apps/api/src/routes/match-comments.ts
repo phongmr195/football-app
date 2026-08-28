@@ -10,8 +10,16 @@ import { publishComment, type MatchCommentAuthor, type MatchCommentBroadcast } f
 const matchIdParamSchema = z.object({ id: z.string() });
 const commentBodySchema = z.object({ content: z.string().trim().min(1).max(500) });
 
-const authorSelect = { id: true, username: true, profile: { select: { displayName: true } } } as const;
-type AuthorRow = { id: string; username: string | null; profile: { displayName: string | null } | null };
+const authorSelect = {
+  id: true,
+  username: true,
+  profile: { select: { displayName: true, avatarUrl: true } },
+} as const;
+type AuthorRow = {
+  id: string;
+  username: string | null;
+  profile: { displayName: string | null; avatarUrl: string | null } | null;
+};
 
 // @token — cho phép dài hơn username thật (3-20, xem auth.ts's usernameSchema) vì slug từ
 // displayName đầy đủ có thể dài hơn nhiều.
@@ -50,7 +58,12 @@ function mentionHandleOf(user: { username: string | null; displayName: string | 
 
 function toAuthor(user: AuthorRow): MatchCommentAuthor {
   const displayName = user.profile?.displayName ?? null;
-  return { id: user.id, displayName, mentionHandle: mentionHandleOf({ username: user.username, displayName }) };
+  return {
+    id: user.id,
+    displayName,
+    avatarUrl: user.profile?.avatarUrl ?? null,
+    mentionHandle: mentionHandleOf({ username: user.username, displayName }),
+  };
 }
 
 // Cùng pattern goal-notifier.ts/match-finished-notifier.ts (ghi Notification in-app TRƯỚC, luôn

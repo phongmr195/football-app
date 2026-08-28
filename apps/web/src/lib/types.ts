@@ -110,6 +110,7 @@ export interface AiMatchSummary {
 export interface MatchCommentAuthor {
   id: string;
   displayName: string | null;
+  avatarUrl: string | null;
   // @token dùng để tag user này (username hoặc slug từ displayName) — null nếu không tag được.
   mentionHandle: string | null;
 }

@@ -39,18 +39,22 @@ async function resolveOrCreateUserId(
   firebaseUid: string,
   email: string | undefined,
   name: string | undefined,
+  picture: string | undefined,
 ): Promise<string> {
   const existing = await prisma.user.findUnique({ where: { firebaseUid }, include: { profile: true } });
   if (existing) {
-    // Backfill UserProfile.displayName cho user đăng nhập Google/Facebook — trước giờ KHÔNG có
-    // gì ghi field này (chỉ set cho username/password qua auth.ts's /auth/register), nên mọi nơi
-    // đọc displayName (vd MatchComments.tsx) đều rơi về fallback chung chung. CHỈ set khi còn
-    // trống — không ghi đè nếu user đã tự đổi tên trong app sau này.
-    if (name && !existing.profile?.displayName) {
+    // Backfill UserProfile.displayName/avatarUrl cho user đăng nhập Google/Facebook — trước giờ
+    // KHÔNG có gì ghi 2 field này (chỉ displayName được set cho username/password qua auth.ts's
+    // /auth/register), nên mọi nơi đọc (vd MatchComments.tsx) đều rơi về fallback chung chung.
+    // CHỈ set khi còn trống — không ghi đè nếu user đã tự đổi trong app sau này.
+    const profileUpdate: { displayName?: string; avatarUrl?: string } = {};
+    if (name && !existing.profile?.displayName) profileUpdate.displayName = name;
+    if (picture && !existing.profile?.avatarUrl) profileUpdate.avatarUrl = picture;
+    if (Object.keys(profileUpdate).length > 0) {
       await prisma.userProfile.upsert({
         where: { userId: existing.id },
-        create: { userId: existing.id, displayName: name },
-        update: { displayName: name },
+        create: { userId: existing.id, ...profileUpdate },
+        update: profileUpdate,
       });
     }
     return existing.id;
@@ -60,7 +64,7 @@ async function resolveOrCreateUserId(
     data: {
       firebaseUid,
       email: email ?? null,
-      profile: name ? { create: { displayName: name } } : undefined,
+      profile: name || picture ? { create: { displayName: name, avatarUrl: picture } } : undefined,
     },
   });
   return created.id;
@@ -90,6 +94,7 @@ export const requireAuth: MiddlewareHandler = createMiddleware(async (c, next) =
     decoded.uid,
     decoded.email,
     typeof decoded.name === "string" ? decoded.name : undefined,
+    typeof decoded.picture === "string" ? decoded.picture : undefined,
   );
   c.set("userId", userId);
 
@@ -119,5 +124,6 @@ export async function tryResolveUserId(c: Context): Promise<string | undefined> 
     decoded.uid,
     decoded.email,
     typeof decoded.name === "string" ? decoded.name : undefined,
+    typeof decoded.picture === "string" ? decoded.picture : undefined,
   );
 }
